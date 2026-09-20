@@ -1,0 +1,37 @@
+/*
+Function: Environment.Get ( )
+Purpose: Capture the current execution environment (device, session, application, layout, transaction and
+record-open state) at the moment of calling.
+Returns: JSON object with keys: script, file, layout, window, windowMode, account, user, sessionIdentifier,
+applicationVersion, hostApplicationVersion, hostName, hostIPAddress, systemPlatform, systemVersion, device,
+persistentID, systemIPAddress, transactionOpen, recordOpenState, recordOpenCount.
+Parameters: none.
+Author: Bas van Genabeek
+Version: 1.0
+Updated: 2026-09-11
+Remarks: none.
+Changelog:
+- 1.0 (2026-09-11): Initial version.
+*/
+JSONSetElement ( "{}" ;
+  [ "script" ; Get ( ScriptName ) ; JSONString ] ;
+  [ "file" ; Get ( FileName ) ; JSONString ] ;
+  [ "layout" ; Get ( LayoutName ) ; JSONString ] ;
+  [ "window" ; Get ( WindowName ) ; JSONString ] ;
+  [ "windowMode" ; Get ( WindowMode ) ; JSONNumber ] ;
+  [ "account" ; Get ( AccountName ) ; JSONString ] ;
+  [ "user" ; Get ( UserName ) ; JSONString ] ;
+  [ "sessionIdentifier" ; Get ( SessionIdentifier ) ; JSONString ] ;
+  [ "applicationVersion" ; Get ( ApplicationVersion ) ; JSONString ] ;
+  [ "hostApplicationVersion" ; Get ( HostApplicationVersion ) ; JSONString ] ;
+  [ "hostName" ; Get ( HostName ) ; JSONString ] ;
+  [ "hostIPAddress" ; Get ( HostIPAddress ) ; JSONString ] ;
+  [ "systemPlatform" ; Get ( SystemPlatform ) ; JSONNumber ] ;
+  [ "systemVersion" ; Get ( SystemVersion ) ; JSONString ] ;
+  [ "device" ; Get ( Device ) ; JSONNumber ] ;
+  [ "persistentID" ; Get ( PersistentID ) ; JSONString ] ;
+  [ "systemIPAddress" ; Get ( SystemIPAddress ) ; JSONString ] ;
+  [ "transactionOpen" ; Get ( TransactionOpenState ) ; JSONBoolean ] ;
+  [ "recordOpenState" ; Get ( RecordOpenState ) ; JSONNumber ] ;
+  [ "recordOpenCount" ; Get ( RecordOpenCount ) ; JSONNumber ]
+)

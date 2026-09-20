@@ -1,5 +1,14 @@
 # Single-Pass Loop (Try/Catch Equivalent)
 
+## Project error-framework override
+
+When `PROJECT.md` activates the project error framework, use the single-pass
+loop structure in this article, but do not use its direct `Get ( LastError )`
+examples. Framework scripts capture native errors through `FMError.Set` and
+use `$_error` to determine their loop exits, as specified in
+`error-framework.md`. The examples below remain generic reference patterns for
+solutions without the framework.
+
 **NOTE:** Items marked with **(step)** are script steps. Items marked with **(function)** are calculation functions used inside expressions. This distinction matters: script steps become `<Step>` elements in fmxmlsnippet output, while functions appear inside `<Calculation><![CDATA[...]]></Calculation>` blocks.
 
 ## Why This Pattern Exists

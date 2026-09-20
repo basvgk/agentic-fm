@@ -213,9 +213,8 @@ Each knowledge document captures what an experienced FileMaker developer knows i
 | `found-sets.md`             | Found set attributes, actions on found sets, collecting field values, restoring found sets, snapshot links |
 | `single-pass-loop.md`       | Single-pass loop pattern for structured exit control                                                       |
 | `variables.md`              | Variable scoping, naming conventions, and lifetime considerations                                          |
-| `error-handling.md`         | Error capture patterns, transaction rollback, and server-side compatibility                                |
+| `error-framework.md`        | Optional project-specific error, response, logging, and call-chain tracing framework                       |
 | `script-parameters.md`      | Passing and parsing script parameters; JSON vs. positional patterns                                        |
-| `error-data-capture.md`     | Single-expression error data capture pattern — capturing error state in one step, not many                 |
 | `disambiguation.md`         | Commonly confused term pairs and non-negotiable structural rules                                           |
 | `dry-coding.md`             | DRY principle in FileMaker scripts — hoisting repeated values into variables                               |
 | `field-references.md`       | Field reference patterns — string-based vs. direct references, script steps vs. functions                  |

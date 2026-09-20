@@ -1,0 +1,69 @@
+/*
+Function: Error.Make ( code ; message ; userMessage ; context )
+Purpose: Build the complete, log-ready error object for the current script: the bare error (errorID, code,
+message, userMessage, context, fmError) plus recordContext, environment, trace, parameter and timestamps.
+Returns: JSON object, see the "Error-object" and "Logging" sections of the error handling spec.
+Parameters:
+code: stable, application-defined error code (string), e.g. "ORDER_STATUS_UPDATE_FAILED".
+message: developer/logging-facing description of the error (string).
+userMessage: text suitable for showing to an end user (string); empty when not applicable.
+context: JSON object with dynamic values relevant to understanding this specific error; empty object when
+none.
+Author: Bas van Genabeek
+Version: 1.1
+Updated: 2026-09-11
+Remarks: fmError/environment/recordContext/trace are fetched internally via FMError.Get, Environment.Get,
+RecordContext.Get and Trace.Get - never pass them in as parameters. The script parameter (Get (
+ScriptParameter )) is embedded as JSONRaw only when JSON.IsValid confirms it is valid JSON; otherwise it is
+embedded as an escaped JSONString, so non-JSON parameter text cannot corrupt the resulting JSON. Also sets
+$_error as a side effect.
+Changelog:
+- 1.1 (2026-09-11): Parameters renamed to camelCase without ~ prefix (~ is reserved for internal
+variables); internal ~code/~message/~userMessage/~context mirrors added.
+- 1.0 (2026-09-11): Initial version.
+*/
+Let (
+[
+
+  ~schemaVersion = 1;
+
+  ~code = code ;
+  ~message = message ;
+  ~userMessage = userMessage ;
+  ~context = context ;
+
+  ~contextJSON = If ( IsEmpty ( ~context ) ; "{}" ; ~context ) ;
+
+  ~fmErrorRaw = FMError.Get ;
+  ~fmError = If ( JSON.IsValid ( ~fmErrorRaw ) ; ~fmErrorRaw ; "{}" ) ;
+
+  ~errorObject =
+    JSONSetElement ( "{}" ;
+      [ "errorID" ; ShortId ( "" ) ; JSONString ] ;
+      [ "code" ; ~code ; JSONString ] ;
+      [ "message" ; ~message ; JSONString ] ;
+      [ "userMessage" ; ~userMessage ; JSONString ] ;
+      [ "context" ; ~contextJSON ; JSONObject ] ;
+      [ "fmError" ; ~fmError ; JSONObject ]
+    ) ;
+
+  ~traceRaw = Trace.Get ;
+  ~trace = If ( JSON.IsValid ( ~traceRaw ) ; ~traceRaw ; "{}" ) ;
+
+  ~parameter = Get ( ScriptParameter ) ;
+  ~parameterType = If ( JSON.IsValid ( ~parameter ) ; JSONRaw ; JSONString ) ;
+
+  $_error =
+    JSONSetElement ( "{}" ;
+      [ "schemaVersion" ; ~schemaVersion ; JSONNumber ] ;
+      [ "error" ; ~errorObject ; JSONObject ] ;
+      [ "recordContext" ; RecordContext.Get ; JSONObject ] ;
+      [ "environment" ; Environment.Get ; JSONObject ] ;
+      [ "trace" ; ~trace ; JSONObject ] ;
+      [ "parameter" ; ~parameter ; ~parameterType ] ;
+      [ "timestamp" ; Get ( CurrentTimestamp ) ; JSONString ] ;
+      [ "timestampUTCms" ; Get ( CurrentTimeUTCMilliseconds ) ; JSONNumber ]
+    )
+] ;
+  $_error
+)

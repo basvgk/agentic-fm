@@ -1,0 +1,25 @@
+/*
+Function: Response.Capture ( )
+Purpose: Read the result of the child script just called and store it for the current script.
+Returns: JSON object (Get ( ScriptResult )), or an empty object ("{}") when that result is empty or not
+valid JSON (e.g. the child crashed before reaching Response.Make).
+Parameters: none.
+Author: Bas van Genabeek
+Version: 1.0
+Updated: 2026-09-12
+Remarks: Sets $_child_result as a side effect; also returns it, so call with a throwaway volatile
+variable: Set Variable [ $r ; Response.Capture ]. Must be called immediately after the child's Perform
+Script/Perform Script on Server step, before any other subscript call (including a logging call) -
+Get ( ScriptResult ) is overwritten by the next Perform Script/Perform Script on Server, whichever script
+that belongs to.
+Changelog:
+- 1.0 (2026-09-12): Initial version.
+*/
+Let (
+[
+  ~result = Get ( ScriptResult ) ;
+
+  $_child_result = If ( JSON.IsValid ( ~result ) ; ~result ; "{}" )
+] ;
+  $_child_result
+)

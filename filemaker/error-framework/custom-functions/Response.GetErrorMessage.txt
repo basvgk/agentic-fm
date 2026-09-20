@@ -1,0 +1,13 @@
+/*
+Function: Response.GetErrorMessage ( )
+Purpose: Return the developer/logging message of the last received child response's error.
+Returns: String, or empty when there is no error.
+Parameters: none.
+Author: Bas van Genabeek
+Version: 1.0
+Updated: 2026-09-11
+Remarks: Reads Response.GetError internally.
+Changelog:
+- 1.0 (2026-09-11): Initial version.
+*/
+JSONGetElement ( Response.GetError ; "message" )

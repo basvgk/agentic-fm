@@ -1,0 +1,18 @@
+/*
+Function: Response.Get ( )
+Purpose: Return the last received child response.
+Returns: JSON object (the response envelope built by Response.Make), or an empty object ("{}") when
+$_child_result is empty or not valid JSON (e.g. the child call never ran, or the child crashed before
+reaching Response.Make).
+Parameters: none.
+Author: Bas van Genabeek
+Version: 1.0
+Updated: 2026-09-11
+Remarks: Used internally by Response.IsOK, Response.GetData, Response.GetError and the
+Response.GetError*-variants, so none of them need their own validity check or an explicit parameter. With
+an empty object as fallback, Response.IsOK safely reports false and GetData/GetError return an empty
+value, instead of an unpredictable result from an invalid JSONGetElement call.
+Changelog:
+- 1.0 (2026-09-11): Initial version.
+*/
+If ( JSON.IsValid ( $_child_result ) ; $_child_result ; "{}" )

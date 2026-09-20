@@ -1,0 +1,14 @@
+/*
+Function: Error.Get ( )
+Purpose: Return the log-ready error object of the currently running script.
+Returns: JSON object built by Error.Make, or empty when Error.Make has not run in this script.
+Parameters: none.
+Author: Bas van Genabeek
+Version: 1.0
+Updated: 2026-09-11
+Remarks: Reads $_error directly. Used internally by Response.Make so the developer never has to pass
+$_error in explicitly.
+Changelog:
+- 1.0 (2026-09-11): Initial version.
+*/
+$_error

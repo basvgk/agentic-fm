@@ -1,5 +1,12 @@
 # Script Parameters and Results
 
+## Project error-framework override
+
+When `PROJECT.md` activates the project error framework, child-script callers
+must use `Response.Capture` immediately after `Perform Script` rather than the
+direct `Get ( ScriptResult )` examples below. The framework response object is
+the child contract; native error state after the child call is irrelevant.
+
 **NOTE:** Items marked with **(step)** are script steps. Items marked with **(function)** are calculation functions used inside expressions. This distinction matters: script steps become `<Step>` elements in fmxmlsnippet output, while functions appear inside `<Calculation><![CDATA[...]]></Calculation>` blocks.
 
 ## One Parameter, One Result

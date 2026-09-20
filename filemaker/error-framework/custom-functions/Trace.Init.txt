@@ -1,0 +1,30 @@
+/*
+Function: Trace.Init ( )
+Purpose: Build or continue the trace object for the current script execution. Creates a new trace with a
+new traceID when called at the root (no valid "trace" key in the script parameter), or continues an
+existing trace (same traceID, own script name appended to scriptPath) when called as a child.
+Returns: JSON object { traceID: string, scriptPath: array of strings }. Also written to $_trace.
+Parameters: none.
+Author: Bas van Genabeek
+Version: 1.0
+Updated: 2026-09-11
+Remarks: Reads Get ( ScriptParameter ) directly, not $_params, so it does not depend on the order in which
+scriptvariables are set. Relies on JSON.IsValid to reject a missing, empty, or malformed incoming
+parameter/trace value, falling back to starting a new trace in that case.
+Changelog:
+- 1.0 (2026-09-11): Initial version.
+*/
+Let (
+[
+  ~params = Get ( ScriptParameter ) ;
+  ~incoming = JSONGetElement ( ~params ; "trace" ) ;
+  ~hasTrace = JSON.IsValid ( ~params ) and JSON.IsValid ( ~incoming ) ;
+  ~base =
+    If ( ~hasTrace ;
+      ~incoming ;
+      JSONSetElement ( "{}" ; [ "traceID" ; Get ( UUID ) ; JSONString ] )
+    ) ;
+  $_trace = JSONSetElement ( ~base ; [ "scriptPath[+]" ; Get ( ScriptName ) ; JSONString ] )
+] ;
+  $_trace
+)

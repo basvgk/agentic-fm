@@ -1,0 +1,14 @@
+/*
+Function: Response.GetError ( )
+Purpose: Return the error part of the last received child response.
+Returns: JSON object (see the "Error-object" section of the error handling spec), or empty when there is
+no error.
+Parameters: none.
+Author: Bas van Genabeek
+Version: 1.0
+Updated: 2026-09-11
+Remarks: Reads Response.Get ($_child_result) internally.
+Changelog:
+- 1.0 (2026-09-11): Initial version.
+*/
+JSONGetElement ( Response.Get ; "error" )

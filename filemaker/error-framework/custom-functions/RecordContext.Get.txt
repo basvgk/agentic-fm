@@ -1,0 +1,21 @@
+/*
+Function: RecordContext.Get ( )
+Purpose: Capture the current found set/record context at the moment of calling.
+Returns: JSON object with keys: tableOccurrence, foundCount, foundSetRecordIDs, activeRecordID,
+activeRecordNumber, activePortalRowNumber.
+Parameters: none.
+Author: Bas van Genabeek
+Version: 1.0
+Updated: 2026-09-11
+Remarks: foundSetRecordIDs is always included, regardless of found set size.
+Changelog:
+- 1.0 (2026-09-11): Initial version.
+*/
+JSONSetElement ( "{}" ;
+  [ "tableOccurrence" ; Get ( LayoutTableName ) ; JSONString ] ;
+  [ "foundCount" ; Get ( FoundCount ) ; JSONNumber ] ;
+  [ "foundSetRecordIDs" ; GetRecordIDsFromFoundSet ( 4 ) ; JSONRaw ] ;
+  [ "activeRecordID" ; Get ( RecordID ) ; JSONNumber ] ;
+  [ "activeRecordNumber" ; Get ( ActiveRecordNumber ) ; JSONNumber ] ;
+  [ "activePortalRowNumber" ; Get ( ActivePortalRowNumber ) ; JSONNumber ]
+)

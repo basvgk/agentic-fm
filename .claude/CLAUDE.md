@@ -118,6 +118,8 @@ Multiple sources of context are available about the FileMaker solution. Always s
 
 **When CONTEXT.json does not exist or is stale**, ask the developer to navigate to the relevant layout in FileMaker and run the **Push Context** script. This script prompts for a task description, calls the `Context()` custom function, and writes the result directly to `agent/CONTEXT.json`.
 
+**Generic framework-template exception:** A reusable parent or child script template that uses only the documented error-framework contracts and no solution-specific field, layout, value-list, or script reference does not require `CONTEXT.json`, an index, or exported custom-function source. Generate it directly with clearly named placeholder script references where needed. The framework contract document is sufficient; never require or inspect custom-function implementation code merely to compose a template.
+
 ## Index files (secondary)
 
 `agent/context/{solution}/*.index` files are pipe-delimited lookup tables covering the entire solution. Use these when CONTEXT.json does not contain the needed object. Each file has a header comment documenting the column format.
@@ -193,6 +195,7 @@ The developer always works in **human-readable (HR) script format**. The agent's
 1. Read `agent/CONTEXT.json` for the task description and all reference IDs (when present)
 2. Read `agent/docs/CODING_CONVENTIONS.md` — all generated FileMaker code must follow these conventions
 3. Scan `agent/docs/knowledge/MANIFEST.md` for keyword matches against the current task — read and apply matching documents
+   - When `PROJECT.md` declares an error framework, always read its `error-framework.md` document for every script, independent of keyword matching.
 4. For scripts: grep the step catalog for each step type used (see **Step catalog** below)
 5. Substitute the specific IDs/names/values from CONTEXT.json
 

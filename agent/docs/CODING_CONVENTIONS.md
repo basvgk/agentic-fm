@@ -294,6 +294,12 @@ User Interface/
 - Error capture (`Set Error Capture [ On ]`) should be paired with explicit error checking immediately after the risky step
 - Comment the expected script parameter format at the top of any script that accepts parameters
 
+### Project Error Framework
+
+When `PROJECT.md` declares an error framework, its `error-framework.md` knowledge document supersedes generic error-capture patterns for every solution script. Do not bypass that framework with direct `Get ( LastError )`, `Get ( LastErrorDetail )`, `Get ( LastErrorLocation )`, or `Get ( ScriptResult )` calls.
+
+Namespaced framework custom functions such as `FMError.Set`, `Error.Make`, `Trace.Init`, and `Response.Make` are a permitted exception to the TitleCamelCase custom-function naming convention. Use their documented side-effect and getter contracts; do not pass framework state variables as explicit parameters to a function that owns a getter.
+
 ---
 
 ## Empty Strings / Null Values

@@ -1,0 +1,13 @@
+/*
+Function: Response.GetData ( )
+Purpose: Return the data part of the last received child response.
+Returns: The child's data value (any JSON type), or empty when there is none.
+Parameters: none.
+Author: Bas van Genabeek
+Version: 1.0
+Updated: 2026-09-11
+Remarks: Reads Response.Get ($_child_result) internally.
+Changelog:
+- 1.0 (2026-09-11): Initial version.
+*/
+JSONGetElement ( Response.Get ; "data" )

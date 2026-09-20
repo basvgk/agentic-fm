@@ -1,0 +1,33 @@
+/*
+Function: Response.Make ( data )
+Purpose: Build the standard response envelope for the current script from its data and its own error.
+Returns: JSON object { schemaVersion: number, ok: boolean, data: any, error: object }.
+Parameters:
+data: the script's business result value; empty string when there is none.
+Author: Bas van Genabeek
+Version: 1.1
+Updated: 2026-09-11
+Remarks: Fetches the error internally via Error.Get ($_error) - never pass it in as a parameter. data is
+embedded as JSONRaw only when JSON.IsValid confirms it is valid JSON, otherwise as an escaped JSONString,
+so non-JSON business data cannot corrupt the resulting JSON.
+Changelog:
+- 1.1 (2026-09-11): Parameter renamed to camelCase without ~ prefix (~ is reserved for internal
+variables); internal ~data mirror added.
+- 1.0 (2026-09-11): Initial version.
+*/
+Let (
+[
+  ~data = data ;
+
+  ~error = Error.Get ;
+  ~hasError = JSON.IsValid ( ~error ) ;
+  ~dataType = If ( JSON.IsValid ( ~data ) ; JSONRaw ; JSONString ) ;
+  ~errorPart = If ( ~hasError ; JSONGetElement ( ~error ; "error" ) ; "{}" )
+] ;
+  JSONSetElement ( "{}" ;
+    [ "schemaVersion" ; 1 ; JSONNumber ] ;
+    [ "ok" ; not ~hasError ; JSONBoolean ] ;
+    [ "data" ; ~data ; ~dataType ] ;
+    [ "error" ; ~errorPart ; JSONObject ]
+  )
+)

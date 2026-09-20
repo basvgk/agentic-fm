@@ -1,5 +1,14 @@
 # Record Locking in Multi-User Environments
 
+## Project error-framework override
+
+When `PROJECT.md` activates the project error framework, use this article only
+for its locking semantics, retry decisions, and transaction guidance. Do not
+use any direct `Get ( LastError )` examples below. Capture every relevant
+native error with `FMError.Set`, inspect `FMError.GetCode`, and decide from the
+script's business context whether to create its own application error. The
+examples remain generic reference patterns for solutions without the framework.
+
 **NOTE:** Items marked with **(step)** are script steps. Items marked with **(function)** are calculation functions used inside expressions.
 
 ## The Locking Model

@@ -1,0 +1,29 @@
+/*
+Function: Param.Make ( payload )
+Purpose: Build the parameter for a child script call: the caller's business payload, with the current
+trace added automatically.
+Returns: JSON object (payload plus a "trace" key). Also written to $_child_params.
+Parameters:
+payload: JSON object with the business data for the child script; empty object when none or invalid JSON.
+Author: Bas van Genabeek
+Version: 1.1
+Updated: 2026-09-11
+Remarks: The developer never has to add the "trace" key manually. Falls back to an empty object for
+payload or the current trace when either is missing or not valid JSON, so a malformed payload cannot
+corrupt the resulting parameter. Also sets $_child_params as a side effect.
+Changelog:
+- 1.1 (2026-09-11): Parameter renamed to camelCase without ~ prefix (~ is reserved for internal
+variables); internal ~payload mirror added.
+- 1.0 (2026-09-11): Initial version.
+*/
+Let (
+[
+  ~payload = payload ;
+
+  ~traceRaw = Trace.Get ;
+  ~trace = If ( JSON.IsValid ( ~traceRaw ) ; ~traceRaw ; "{}" ) ;
+  ~payloadBase = If ( JSON.IsValid ( ~payload ) ; ~payload ; "{}" ) ;
+  $_child_params = JSONSetElement ( ~payloadBase ; [ "trace" ; ~trace ; JSONObject ] )
+] ;
+  $_child_params
+)
