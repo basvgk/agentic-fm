@@ -30,7 +30,7 @@ functions and logger exist when a solution export or context is available.
 FMError.Set, FMError.Get, FMError.GetCode, FMError.Clear
 Trace.Init, Trace.Get
 Environment.Get, RecordContext.Get
-Error.Make, Error.Get
+Error.Make, Error.Get, Error.GetID, Error.GetCode, Error.GetUserMessage
 Param.Make
 Response.Make, Response.Capture, Response.Get, Response.IsOK,
 Response.GetData, Response.GetError, Response.GetErrorCode,
@@ -54,8 +54,8 @@ getter. Do not assign or read `$_error`, `$_FMerror`, `$_trace`,
 | `FMError.Get`, `FMError.GetCode`, `FMError.Clear` | none | Return the native-error object, its code, or a cleared empty result. |
 | `Trace.Init`, `Trace.Get` | none | Start or continue trace from the script parameter, or return it. `Trace.Init` sets internal trace state. |
 | `Environment.Get`, `RecordContext.Get` | none | Return a current environment or record/found-set snapshot. |
-| `Error.Make` | code, message, userMessage, context object | Creates the log-ready error, sets internal error state, and returns it. Call as `$r`; read only through `Error.Get`. |
-| `Error.Get` | none | Returns the current script's complete log-ready error, or empty when none exists. |
+| `Error.Make` | code, message, userMessage, context object | Creates the log-ready error, sets internal error state, and returns it. Call as `$r`; read only through the `Error.Get*` accessors. |
+| `Error.Get`, `Error.GetID`, `Error.GetCode`, `Error.GetUserMessage` | none | Return the current script's complete log-ready error, its human-reportable ID, application code, or user-facing message; return an empty value when no error exists. |
 | `Param.Make` | business JSON payload | Returns child parameter with trace attached. Use directly as the child call parameter. |
 | `Response.Make` | business data | Returns the final response envelope using current internal error state. |
 | `Response.Capture` | none | Captures the child result, sets internal child-response state, and returns it. Call as `$r`. |
@@ -122,7 +122,7 @@ calls are internal implementation details of `FMError.Set`.
 
 If a native error is deliberately handled without creating an application
 error, clear it before later work using `Set Variable [ $r ; FMError.Clear ]`.
-Error 401 is always captured through `FMError.Set`; whether it becomes an
+Error 401 is also captured through `FMError.Set`; whether it becomes an
 application error in the response depends on the script's business context.
 
 ## Application errors and logging

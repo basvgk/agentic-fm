@@ -23,6 +23,9 @@ RecordContext.Get            Geeft de found set/record-context terug.
 Error.Make ( code ; message ; userMessage ; context )
                               Bouwt het volledige log-ready error-object; zet $_error.
 Error.Get                    Geeft $_error terug.
+Error.GetID                  Geeft de errorID van $_error terug (`Error.GetID.txt` + paste-ready XML).
+Error.GetCode                Geeft de application errorcode van $_error terug (`Error.GetCode.txt` + paste-ready XML).
+Error.GetUserMessage         Geeft de userMessage van $_error terug (`Error.GetUserMessage.txt` + paste-ready XML).
 
 Param.Make ( payload )       Bouwt het childparameter, incl. trace; zet $_child_params.
 

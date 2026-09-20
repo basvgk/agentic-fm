@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<fmxmlsnippet type="FMObjectList">
+  <CustomFunction id="0" functionArity="0" visible="True" parameters="" name="Error.GetCode">
+    <Calculation><![CDATA[JSONGetElement ( Error.Get ; "error.code" )]]></Calculation>
+  </CustomFunction>
+</fmxmlsnippet>

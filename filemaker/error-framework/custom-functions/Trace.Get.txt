@@ -1,14 +1,16 @@
 /*
 Function: Trace.Get ( )
 Purpose: Return the trace object of the currently running script.
-Returns: JSON object (see Trace.Init), or empty when Trace.Init has not run in this script.
+Returns: JSON object (see Trace.Init), or an empty object ("{}") when Trace.Init has not run or its
+result is invalid JSON.
 Parameters: none.
 Author: Bas van Genabeek
 Version: 1.0
 Updated: 2026-09-11
-Remarks: Reads $_trace directly. Only valid when called from within the same script execution that set it
-(a custom function call is evaluated in the calling script's own context, unlike a separate script call).
+Remarks: Reads $_trace internally and guards it so callers always receive valid JSON. Only valid when
+called from within the same script execution that set it (a custom function call is evaluated in the
+calling script's own context, unlike a separate script call).
 Changelog:
 - 1.0 (2026-09-11): Initial version.
 */
-$_trace
+If ( JSON.IsValid ( $_trace ) ; $_trace ; "{}" )

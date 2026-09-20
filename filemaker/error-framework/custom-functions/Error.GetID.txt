@@ -1,0 +1,14 @@
+/*
+Function: Error.GetID ( )
+Purpose: Return the human-reportable ID of the current script's error.
+Returns: String (errorID), or empty when Error.Make has not run or no error ID is available.
+Parameters: none.
+Author: Bas van Genabeek
+Version: 1.0
+Updated: 2026-09-20
+Remarks: Reads Error.Get internally, so the underlying $_error state is guarded as valid JSON before the
+error ID is read.
+Changelog:
+- 1.0 (2026-09-20): Initial version.
+*/
+JSONGetElement ( Error.Get ; "error.errorID" )
