@@ -1,0 +1,13 @@
+/*
+Function: FMError.Clear ( )
+Purpose: Clear the captured native FileMaker error object.
+Returns: 1.
+Parameters: none.
+Author: Bas van Genabeek
+Created: 2026-09-09
+*/
+Let (
+	$_FMError = "" ;
+
+	1
+)

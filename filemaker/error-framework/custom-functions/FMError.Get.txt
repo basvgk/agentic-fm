@@ -1,0 +1,9 @@
+/*
+Function: FMError.Get ( )
+Purpose: Return the full native FileMaker error JSON object captured by FMError.Set.
+Returns: The captured JSON object, or an empty object ("{}") when $_FMError is empty or invalid JSON.
+Parameters: none.
+Author: Bas van Genabeek
+Created: 2026-09-09
+*/
+If ( JSON.IsValid ( $_FMError ) ; $_FMError ; "{}" )

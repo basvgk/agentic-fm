@@ -5,7 +5,7 @@
 When `PROJECT.md` activates the project error framework, use this article only
 for its locking semantics, retry decisions, and transaction guidance. Do not
 use any direct `Get ( LastError )` examples below. Capture every relevant
-native error with `FMError.Set`, inspect `FMError.GetCode`, and decide from the
+native error with `FMError.Set`, inspect its return value directly or use `FMError.GetCode`, and decide from the
 script's business context whether to create its own application error. The
 examples remain generic reference patterns for solutions without the framework.
 

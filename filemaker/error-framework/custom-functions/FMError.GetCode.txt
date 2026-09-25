@@ -1,0 +1,15 @@
+/*
+Function: FMError.GetCode ( )
+Purpose: Return the native FileMaker error code from the JSON object captured by FMError.Set.
+Returns: The error code, or "" when no valid FMError JSON object exists.
+Parameters: none.
+Author: Bas van Genabeek
+Created: 2026-09-09
+Remarks: Uses FMError.Get so an empty or invalid $_FMError is handled consistently.
+*/
+Let ( [
+	~code = JSONGetElement ( FMError.Get ; "code" )
+] ;
+
+	If ( Left ( ~code ; 1 ) = "?" ; "" ; ~code )
+)

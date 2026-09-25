@@ -1,0 +1,32 @@
+/*
+Function: FMError.SetCompleteError ( errorCode ; message ; userMessage ; context )
+Purpose: Capture the native FileMaker error and, when it is non-zero, create the current script's complete
+application error through Error.Make.
+Returns: The native FileMaker error code.
+Parameters:
+errorCode: stable, application-defined error code (string).
+message: developer/logging-facing error description (string).
+userMessage: end-user-facing text; empty when not applicable.
+context: JSON object with values relevant to this error; empty object when none.
+Author: Bas van Genabeek
+Version: 1.0
+Updated: 2026-09-20
+Remarks: Sets $_FMError through FMError.Set and sets $_error through Error.Make when the native error code
+is non-zero.
+Changelog:
+- 1.0 (2026-09-20): Initial version.
+*/
+Let ( [
+	~errorCode = errorCode ;
+	~message = message ;
+	~userMessage = userMessage ;
+	~context = context ;
+	~fmError = FMError.Set ;
+	~error = If (
+		~fmError ;
+		Error.Make ( ~errorCode ; ~message ; ~userMessage ; ~context ) ;
+		""
+	)
+] ;
+	~fmError
+)

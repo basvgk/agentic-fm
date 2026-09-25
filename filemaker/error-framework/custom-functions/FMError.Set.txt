@@ -1,0 +1,36 @@
+/*
+Function: FMError.Set ( )
+Purpose: Creates the full native FileMaker error JSON object, including error code, detail, script line,
+and script step, and stores it in $_FMError.
+Returns: The native FileMaker error code captured from Get ( LastError ).
+Parameters: none.
+Author: Bas van Genabeek
+Version: 1.1
+Updated: 2026-09-25
+Remarks: Call immediately after an error-prone script step. The function captures Get ( LastError ),
+Get ( LastErrorDetail ), and Get ( LastErrorLocation ) before a later script step can replace them. Its
+return value permits direct use as a condition: If [ FMError.Set ≠ 0 ]. Use FMError.Get to read the
+captured JSON object or FMError.GetCode to read its code; do not read or assign $_FMError directly in
+framework scripts.
+Changelog:
+- 1.1 (2026-09-25): Store the native-error object in $_FMError and return its numeric code.
+*/
+Let (
+[
+\t~lastError = Get ( LastError ) ;
+\t~lastErrorDetail = Get ( LastErrorDetail ) ;
+\t~loc = Get ( LastErrorLocation ) ;
+\t~script = GetValue ( ~loc ; 1 ) ;
+\t~step = GetValue ( ~loc ; 2 ) ;
+\t~line = GetValue ( ~loc ; 3 ) ;
+
+\t$_FMError =
+\t\tJSONSetElement ( "" ;
+\t\t\t[ "code" ; ~lastError ; JSONNumber ] ;
+\t\t\t[ "detail" ; ~lastErrorDetail ; JSONString ] ;
+\t\t\t[ "step" ; ~step ; JSONString ] ;
+\t\t\t[ "line" ; ~line ; JSONNumber ]
+\t\t)
+] ;
+\t~lastError
+)

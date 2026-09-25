@@ -7,10 +7,11 @@ Updated/Remarks/Changelog) staat in het bijbehorende `.txt`-bestand. Zie
 ## Actueel (conform de spec)
 
 ```text
-FMError.Set                  Legt Get ( LastError )-info vast, zet en retourneert $_FMerror.
-FMError.Get                  Geeft $_FMerror terug.
-FMError.GetCode              Geeft de FileMaker errorcode terug.
-FMError.Clear                Wist $_FMerror.
+FMError.Set                  Legt Get ( LastError )-info vast, zet $_FMError en retourneert de errorcode.
+FMError.Get                  Geeft het JSON-object uit $_FMError terug.
+FMError.GetCode              Geeft de FileMaker-errorcode terug.
+FMError.Clear                Wist $_FMError.
+FMError.SetCompleteError     Legt de native error vast en maakt bij een fout een compleet $_error-object.
 ShortId ( lengthId )         Genereert een kort, leesbaar, willekeurig ID.
 JSON.IsValid ( json )        Is json niet-leeg en geldige JSON? (bestaat live, geen los .txt hier)
 

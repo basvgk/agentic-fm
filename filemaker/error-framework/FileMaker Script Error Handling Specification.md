@@ -31,7 +31,7 @@ Gebruik onderstaande namen consequent:
 ```text
 $_data
 $_error
-$_FMerror
+$_FMError
 $_context
 $_params
 $_trace
@@ -47,7 +47,7 @@ Betekenis:
 ```text
 $_data          Data voor de response.
 $_error         Eigen error-object van het huidige script.
-$_FMerror       Native FileMaker error-object.
+$_FMError       Native FileMaker error-object.
 $_context       Context voor Error.Make.
 $_params        Parameters waarmee het huidige script is aangeroepen.
 $_trace         Traceobject van de huidige scriptuitvoering. Zie sectie 4a.
@@ -64,7 +64,7 @@ $_paramPayload  Business-payloadwaarde van het huidige scriptparameter, gezet do
 
 # 3. FMError
 
-De bestaande `FMError.Set` CF retourneert:
+`FMError.Set` legt dit native FileMaker error-object vast:
 
 ```json
 {
@@ -84,13 +84,22 @@ line    Scriptregel waarop de fout ontstond.
 step    FileMaker scriptstep waarop de fout ontstond.
 ```
 
-De CF schrijft automatisch weg naar `$_FMerror` én retourneert de JSON als resultaat: gebruik als
-resultaatvariabele bij aanroep een volatiele `$r`. Geen andere informatie wordt aan FMError toegevoegd.
+De CF schrijft dit object automatisch weg naar `$_FMError` en retourneert de numerieke FileMaker-errorcode.
+Gebruik als resultaatvariabele bij aanroep een volatiele `$r`. Geen andere informatie wordt aan FMError
+toegevoegd. Omdat het resultaat de code is, mag de CF ook direct als conditie worden gebruikt:
+
+```filemaker
+If [ FMError.Set ≠ 0 ]
+	# Maak en log de eigen applicatiefout.
+End If
+```
 
 Additionele hulpfuncties:
-* FMError.Get: retourneert als resultaat de waarde uit `$_FMError`
-* FMError.ErrorCode: retourneert de filemaker error code
-* FMError.Clear: Verwijdert het FMError object
+* FMError.Get: retourneert als resultaat het JSON-object uit `$_FMError`.
+* FMError.GetCode: retourneert de FileMaker-errorcode.
+* FMError.Clear: verwijdert het FMError-object.
+* FMError.SetCompleteError: legt de native fout vast en maakt bij een niet-nul code met `Error.Make` ook
+  het complete `$_error`-object. De CF retourneert de native FileMaker-errorcode.
 
 ## Belangrijke regel
 
@@ -110,9 +119,8 @@ Of:
 
 ```filemaker
 Set Field [ ... ]
-Set Variable [ $r ; FMError.Set ]
 
-If [ JSONGetElement ( $_FMerror ; "code" ) ≠ 0 ]
+If [ FMError.Set ≠ 0 ]
 	...
 End If
 ```
@@ -429,10 +437,11 @@ De volledige implementatie (inclusief header conform AGENTS.md) staat in `custom
 ```text
 Bestaand
 --------
-FMError.Set                  Legt Get ( LastError )-info vast, zet en retourneert $_FMerror.
-FMError.Get                  Geeft $_FMerror terug.
-FMError.GetCode               Geeft de FileMaker errorcode terug.
-FMError.Clear                Wist $_FMerror.
+FMError.Set                  Legt Get ( LastError )-info vast, zet $_FMError en retourneert de errorcode.
+FMError.Get                  Geeft het JSON-object uit $_FMError terug.
+FMError.GetCode              Geeft de FileMaker-errorcode terug.
+FMError.Clear                Wist $_FMError.
+FMError.SetCompleteError     Legt de native fout vast en maakt bij een fout ook het complete $_error-object.
 ShortId ( lengthId )          Genereert een kort, leesbaar, willekeurig ID (custom-functions/ShortId.txt).
 JSON.IsValid ( json )         Bestaat al live. Waar/onwaar: is json geldige JSON.
 
@@ -535,13 +544,7 @@ Direct na de risicostap:
 
 ```filemaker
 Set Field [ Orders::Status ; $newStatus ]
-Set Variable [ $_FMerror ; FMError ]
-```
-
-Daarna beoordelen:
-
-```filemaker
-If [ JSONGetElement ( $_FMerror ; "code" ) ≠ 0 ]
+If [ FMError.Set ≠ 0 ]
 
 	Set Variable [ $_context ;
 		JSONSetElement ( "{}" ;
@@ -571,11 +574,11 @@ Exit Loop If [ not IsEmpty ( $_error ) ]
 
 `Error.Make` haalt `fmError` automatisch op via `FMError.Get` (sectie 8). Wanneer een FileMaker-fout
 bewust **niet** tot een eigen fout leidt (het script gaat door zonder `Error.Make` aan te roepen), wis
-`$_FMerror` alsnog expliciet — anders neemt een latere, ongerelateerde `Error.Make`-aanroep verderop in
+`$_FMError` alsnog expliciet — anders neemt een latere, ongerelateerde `Error.Make`-aanroep verderop in
 hetzelfde script deze per ongeluk mee:
 
 ```filemaker
-Set Variable [ $_FMerror ; FMError.Clear ]
+Set Variable [ $r ; FMError.Clear ]
 ```
 
 ---
@@ -728,7 +731,7 @@ Set Variable [ $_params ; Get ( ScriptParameter ) ]
 Set Variable [ $_trace ; Trace.Init ]
 Set Variable [ $_data ; "" ]
 Set Variable [ $_error ; "" ]
-Set Variable [ $_FMerror ; "" ]
+Set Variable [ $r ; FMError.Clear ]
 Set Variable [ $_context ; "{}" ]
 
 Loop
@@ -780,7 +783,7 @@ Wanneer een script wordt gemaakt of aangepast:
 8. Plaats relevante dynamische waarden in `context`.
 9. Capture FMError direct na iedere relevante FileMaker-scriptstep.
 10. Gebruik FMError alleen als technische onderliggende fout.
-11. Wis `$_FMerror` met `FMError.Clear` zodra een FileMaker-fout bewust genegeerd wordt (geen eigen fout
+11. Wis `$_FMError` met `FMError.Clear` zodra een FileMaker-fout bewust genegeerd wordt (geen eigen fout
     tot gevolg heeft), zodat een latere `Error.Make`-aanroep 'm niet per ongeluk overneemt.
 12. Log iedere door het huidige script gemaakte fout.
 13. Geef `$_error` ongewijzigd mee als parameter aan het logging-script.
@@ -790,7 +793,7 @@ Wanneer een script wordt gemaakt of aangepast:
 17. Toon `userMessage` niet automatisch.
 18. Laat cleanup nooit de oorspronkelijke `$_error` overschrijven.
 19. Gebruik één finale `Exit Script [ Response.Make ( $_data ) ]`.
-20. Geef `$_FMerror`, `$_error`, `$_trace` en `$_child_result` nooit als expliciete parameter door aan een
+20. Geef `$_FMError`, `$_error`, `$_trace` en `$_child_result` nooit als expliciete parameter door aan een
     CF die er al een eigen `Get`-functie voor heeft (`FMError.Get`, `Error.Get`, `Trace.Get`,
     `Response.Get`).
 21. Capture het resultaat van een child-aanroep direct erna met `Set Variable [ $r ; Response.Capture ]`,

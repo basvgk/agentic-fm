@@ -27,7 +27,7 @@ When integrating a template into a specific solution, verify that the required
 functions and logger exist when a solution export or context is available.
 
 ```text
-FMError.Set, FMError.Get, FMError.GetCode, FMError.Clear
+FMError.Set, FMError.Get, FMError.GetCode, FMError.Clear, FMError.SetCompleteError
 Trace.Init, Trace.Get
 Environment.Get, RecordContext.Get
 Error.Make, Error.Get, Error.GetID, Error.GetCode, Error.GetUserMessage
@@ -45,13 +45,14 @@ exception to the general custom-function naming convention.
 
 Framework variables are private implementation state. Trigger a side-effect
 function with disposable `$r`, then read its state only through its documented
-getter. Do not assign or read `$_error`, `$_FMerror`, `$_trace`,
+getter. Do not assign or read `$_error`, `$_FMError`, `$_trace`,
 `$_child_params`, or `$_child_result` directly.
 
 | Function | Input | Output and script contract |
 |---|---|---|
-| `FMError.Set` | none | Captures the immediately preceding native error, sets internal native-error state, and returns its object. Call as `$r`; inspect through `FMError.GetCode` or `FMError.Get`. |
+| `FMError.Set` | none | Captures the immediately preceding native error, sets `$_FMError`, and returns its numeric code. Use directly as `If [ FMError.Set ≠ 0 ]`, or call as `$r` and inspect through `FMError.GetCode` or `FMError.Get`. |
 | `FMError.Get`, `FMError.GetCode`, `FMError.Clear` | none | Return the native-error object, its code, or a cleared empty result. |
+| `FMError.SetCompleteError` | code, message, userMessage, context object | Captures the native error and, when its code is non-zero, creates the current script's complete error through `Error.Make`; returns the native code. |
 | `Trace.Init`, `Trace.Get` | none | Start or continue trace from the script parameter, or return it. `Trace.Init` sets internal trace state. |
 | `Environment.Get`, `RecordContext.Get` | none | Return a current environment or record/found-set snapshot. |
 | `Error.Make` | code, message, userMessage, context object | Creates the log-ready error, sets internal error state, and returns it. Call as `$r`; read only through the `Error.Get*` accessors. |
@@ -70,7 +71,7 @@ FileMaker; the underscore is a framework reservation, not a global scope.
 Scripts do not assign or read them directly.
 
 ```text
-$_data, $_error, $_FMerror, $_context, $_params, $_trace,
+$_data, $_error, $_FMError, $_context, $_params, $_trace,
 $_child_params, $_child_result, $_child_error, $_child_data, $_paramPayload
 ```
 
@@ -108,15 +109,14 @@ appear between the risky step and `FMError.Set`:
 
 ```text
 <error-prone step>
-Set Variable [ $r ; FMError.Set ]
-If [ FMError.GetCode ≠ 0 ]
+If [ FMError.Set ≠ 0 ]
   # Build this script's own error with Error.Make.
 End If
 ```
 
 `FMError.Set` captures the native error code, detail, location, line, and step
-in one expression, sets `$_FMerror`, and returns that same object. `$r` is a
-deliberately disposable result variable. Do not set `$_FMerror` from the
+in one expression, sets `$_FMError`, and returns the captured numeric code. `$r` is a
+deliberately disposable result variable. Do not set `$_FMError` from the
 function's return value. Framework scripts never call `Get ( LastError )`,
 `Get ( LastErrorDetail )`, or `Get ( LastErrorLocation )` directly; those
 calls are internal implementation details of `FMError.Set`.
