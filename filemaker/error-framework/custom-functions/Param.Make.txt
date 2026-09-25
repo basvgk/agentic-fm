@@ -1,29 +1,38 @@
 /*
 Function: Param.Make ( payload )
-Purpose: Build the parameter for a child script call: the caller's business payload, with the current
-trace added automatically.
-Returns: JSON object (payload plus a "trace" key). Also written to $_child_params.
+Purpose: Build the parameter envelope for a child script call, containing the caller's business payload
+and current trace as separate values.
+Returns: JSON object with "payload" and "trace" keys. The payload preserves its JSON type when valid JSON,
+or is stored as a JSON string when plain text. Also written to $_child_params.
 Parameters:
-payload: JSON object with the business data for the child script; empty object when none or invalid JSON.
+payload: JSON value or plain text with the business data for the child script.
 Author: Bas van Genabeek
-Version: 1.1
-Updated: 2026-09-11
-Remarks: The developer never has to add the "trace" key manually. Falls back to an empty object for
-payload or the current trace when either is missing or not valid JSON, so a malformed payload cannot
-corrupt the resulting parameter. Also sets $_child_params as a side effect.
+Version: 2.0
+Updated: 2026-09-25
+Remarks: The developer never has to add the "trace" key manually. The returned envelope is always
+{ "payload": ..., "trace": { ... } }, so business keys cannot collide with framework keys. Valid JSON
+payloads are embedded with their original JSON type; all other payloads are embedded as JSON strings. The
+trace falls back to an empty object when it is missing, invalid, or not an object. Also sets
+$_child_params as a side effect.
 Changelog:
+- 2.0 (2026-09-25): Wrapped the business payload in a separate "payload" key; preserves JSON payloads and
+accepts plain text.
 - 1.1 (2026-09-11): Parameter renamed to camelCase without ~ prefix (~ is reserved for internal
 variables); internal ~payload mirror added.
 - 1.0 (2026-09-11): Initial version.
 */
 Let (
 [
-  ~payload = payload ;
-
-  ~traceRaw = Trace.Get ;
-  ~trace = If ( JSON.IsValid ( ~traceRaw ) ; ~traceRaw ; "{}" ) ;
-  ~payloadBase = If ( JSON.IsValid ( ~payload ) ; ~payload ; "{}" ) ;
-  $_child_params = JSONSetElement ( ~payloadBase ; [ "trace" ; ~trace ; JSONObject ] )
+	~payload = payload ;
+	~traceRaw = Trace.Get ;
+	~trace = If ( JSONGetElementType ( ~traceRaw ; "" ) = JSONObject ; ~traceRaw ; "{}" ) ;
+	~payloadType = If ( JSON.IsValid ( ~payload ) ; JSONRaw ; JSONString ) ;
+	$_child_params =
+		JSONSetElement ( "{}" ;
+			[ "payload" ; ~payload ; ~payloadType ] ;
+			[ "trace" ; ~trace ; JSONObject ]
+		)
 ] ;
-  $_child_params
+
+	$_child_params
 )

@@ -1,0 +1,30 @@
+/*
+Function: Param.Payload ( )
+Purpose: Return the developer-defined business payload from the current script parameter envelope.
+Returns: The value from the "payload" key, preserving its JSON type or plain-text value; returns empty when
+the parameter is invalid or the payload is missing. Also written to $_paramPayload.
+Parameters: none.
+Author: Bas van Genabeek
+Version: 1.0
+Updated: 2026-09-25
+Remarks: Use after Param.Make has prepared a child script parameter. Reads Get ( ScriptParameter ) directly,
+so it does not depend on a script variable being initialized first. The payload may be a JSON object, array,
+number, boolean, null, or plain text. Framework metadata such as "trace" is intentionally excluded.
+Changelog:
+- 1.0 (2026-09-25): Initial version.
+*/
+Let (
+[
+	~params = Get ( ScriptParameter ) ;
+	~paramsClean = If ( JSON.IsValid ( ~params ) ; ~params ; "{}" ) ;
+	~payloadType = JSONGetElementType ( ~paramsClean ; "payload" ) ;
+	$_paramPayload =
+		If (
+			~payloadType ≠ 0 ;
+			JSONGetElement ( ~paramsClean ; "payload" ) ;
+			""
+		)
+] ;
+
+	$_paramPayload
+)

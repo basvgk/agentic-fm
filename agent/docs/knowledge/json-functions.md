@@ -59,6 +59,22 @@ Alternatively, compare against `0` explicitly if that reads more clearly:
 If [ JSONGetElementType ( $input ; "layout" ) = 0 ]
 ```
 
+## Empty values versus JSON false and zero
+
+In FileMaker, `IsEmpty ( value )` is false for the numeric value `0` and the
+boolean value `False`; both are present values. Do not use a truthiness test
+when a JSON response may legitimately contain `0` or `False`.
+
+```filemaker
+// Correct: 0 and False are retained as non-empty child-response data
+If [ not IsEmpty ( Response.GetData ) ]
+	// Attach the data to the log.
+End If
+```
+
+Use `JSONGetElementType ( json ; key )` when the distinction between a missing
+key (`0`) and a present, empty JSON string (`JSONString`) matters.
+
 ### Do NOT use
 
 ```
