@@ -39,6 +39,7 @@ $_child_params
 $_child_result
 $_child_error
 $_child_data
+$_paramPayload
 ```
 
 Betekenis:
@@ -54,6 +55,7 @@ $_child_params  Parameters voor een child script.
 $_child_result  Volledige response van een child script.
 $_child_error   Error-object uit een child response.
 $_child_data    Data-object uit een child response.
+$_paramPayload  Business-payloadwaarde van het huidige scriptparameter, gezet door Param.Payload.
 ```
 
 `$_` is gereserveerd voor framework-/script-controlvariabelen.
@@ -268,8 +270,9 @@ scriptPath  Scriptnamen in aanroepvolgorde, root eerst. Een script dat zichzelf 
 ```
 
 Binnen het scriptparameter (het JSON dat `Param.Make` bouwt, sectie 8) staat dit object onder de key
-`"trace"`. Business-parameters gebruiken deze key niet, en de developer typt 'm zelf nooit — dat doen
-`Trace.Init` en `Param.Make`.
+`"trace"`; de business-data staat afzonderlijk onder `"payload"`. Die payload mag geldige JSON of platte
+tekst zijn. De developer typt de `"trace"`-key nooit zelf — dat doen `Trace.Init` en `Param.Make`. Een
+child-script leest zijn business-data uitsluitend via `Param.Payload`.
 
 `trace` is uitvoeringscontext, geen onderdeel van de fout zelf: het zit niet in het response-error-object
 (hierboven) en gaat niet mee naar de parent via `Response.GetError`. Het staat wel in het log-object
@@ -313,6 +316,9 @@ Binnen het scriptparameter (het JSON dat `Param.Make` bouwt, sectie 8) staat dit
 		"orderID": "ORD-1001",
 		"targetStatus": "Approved"
 	},
+	"childResponseData": {
+		"...": "alleen aanwezig wanneer de meest recente child response non-empty data heeft"
+	},
 	"timestamp": "10-09-2026 21:22:31",
 	"timestampUTCms": 63903669751432
 }
@@ -328,6 +334,8 @@ environment     Execution environment op het moment van de fout. Zie sectie 7.
 trace           Traceobject van de huidige scriptuitvoering. Zie sectie 4a. Leeg object (`{}`) wanneer
                 Trace.Init niet is aangeroepen.
 parameter       Het scriptparameter waarmee het huidige script is aangeroepen ($_params).
+childResponseData Non-empty data uit de meest recente captured child response. Alleen aanwezig in het
+                log-object; niet in `error` en niet in de response naar een hogere parent. Zie sectie 12.
 timestamp       Normale FileMaker timestamp.
 timestampUTCms  Get ( CurrentTimeUTCMilliseconds ) — absoluut UTC-gebaseerd millisecondetal sinds 1-1-0001.
 ```
@@ -448,8 +456,10 @@ Error.Get                     Geeft $_error terug.
 
 Param (sectie 4a)
 ------------------
-Param.Make ( payload )        Bouwt het childparameter uit de business-payload, met trace erin. Zet
-                              $_child_params.
+Param.Make ( payload )        Bouwt het childparameter als `{ "payload": ..., "trace": { ... } }`;
+                              payload kan geldige JSON of platte tekst zijn. Zet $_child_params.
+Param.Payload                 Geeft de business-payloadwaarde van het huidige scriptparameter terug;
+                              zet $_paramPayload.
 
 Response (sectie 9)
 --------------------
@@ -588,7 +598,14 @@ Perform Script [ "Orders_UpdateStatus" ; Parameter: $_child_params ]
 Set Variable [ $r ; Response.Capture ]
 ```
 
-`Param.Make` (sectie 8) voegt de trace (sectie 4a) automatisch toe aan het childparameter.
+`Param.Make` (sectie 8) bouwt het childparameter als envelope met afzonderlijke `payload`- en
+`trace`-waarden. De payload kan geldige JSON of platte tekst zijn. Een child-script leest de business-data
+met `Param.Payload`, bijvoorbeeld:
+
+```filemaker
+Set Variable [ $payload ; Param.Payload ]
+Set Variable [ $orderID ; JSONGetElement ( $payload ; "orderID" ) ]
+```
 
 Gebruik hier altijd `Response.Capture`, nooit rechtstreeks `Get ( ScriptResult )`: die stap moet als
 eerste na de child-aanroep worden uitgevoerd, vóórdat een volgend subscript (bijvoorbeeld een
@@ -627,12 +644,17 @@ End If
 Exit Loop If [ not IsEmpty ( $_error ) ]
 ```
 
-`Response.IsOK` en `Response.GetErrorCode` nemen geen parameter: ze lezen `$_child_result` intern via
-`Response.Get` (sectie 8). Dit blijft correct zolang dit de eerstvolgende check is na de child-aanroep
-hierboven — er is nog geen tweede child-aanroep tussendoor geweest die `$_child_result` overschrijft.
+`Response.IsOK`, `Response.GetErrorCode` en `Response.GetData` nemen geen parameter: ze lezen
+`$_child_result` intern via `Response.Get` (sectie 8). Dit blijft correct zolang dit de eerstvolgende check
+is na de child-aanroep hierboven — er is nog geen tweede child-aanroep tussendoor geweest die
+`$_child_result` overschrijft. `Error.Make` leest diezelfde captured response automatisch en voegt de data,
+wanneer die non-empty is, als `childResponseData` toe aan zijn log-object.
 
 De parent gebruikt de child error om zijn eigen fout te bepalen; de volledige child error wordt niet
-opgenomen als `cause`. `childErrorCode` in `context` is nuttig maar niet verplicht.
+opgenomen als `cause`. `childErrorCode` in `context` kan naar een hogere parent terugkeren. Daarentegen
+voegt `Error.Make` non-empty `childResponseData` automatisch alleen aan het log-object toe, zonder de
+volledige child response of nested error mee te nemen. Objecten en arrays worden als JSONRaw opgenomen;
+alle overige waarden worden als JSONString opgenomen.
 
 Bij succes:
 
@@ -667,6 +689,7 @@ trace
 parameter
 timestamp
 timestampUTCms
+childResponseData (alleen bij non-empty data van de meest recente captured child response)
 ```
 
 De logging-call mag de oorspronkelijke `$_error` nooit vervangen.
@@ -762,7 +785,7 @@ Wanneer een script wordt gemaakt of aangepast:
 12. Log iedere door het huidige script gemaakte fout.
 13. Geef `$_error` ongewijzigd mee als parameter aan het logging-script.
 14. Propagate geen geneste `cause`-objecten.
-15. Bouw een childparameter altijd met `Param.Make`, nooit handmatig met de key `"trace"`.
+15. Bouw een childparameter altijd met `Param.Make`, nooit handmatig met de keys `"payload"` of `"trace"`.
 16. Een parent maakt op basis van een child error zijn eigen fout.
 17. Toon `userMessage` niet automatisch.
 18. Laat cleanup nooit de oorspronkelijke `$_error` overschrijven.
@@ -772,3 +795,6 @@ Wanneer een script wordt gemaakt of aangepast:
     `Response.Get`).
 21. Capture het resultaat van een child-aanroep direct erna met `Set Variable [ $r ; Response.Capture ]`,
     nooit rechtstreeks met `Get ( ScriptResult )`.
+22. Lees business-data uit een door `Param.Make` gebouwd scriptparameter alleen via `Param.Payload`.
+23. `Error.Make` voegt non-empty `Response.GetData` automatisch als log-only `childResponseData` toe;
+    plaats dit niet handmatig in context of in een nested error.

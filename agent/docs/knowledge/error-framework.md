@@ -31,7 +31,7 @@ FMError.Set, FMError.Get, FMError.GetCode, FMError.Clear
 Trace.Init, Trace.Get
 Environment.Get, RecordContext.Get
 Error.Make, Error.Get, Error.GetID, Error.GetCode, Error.GetUserMessage
-Param.Make
+Param.Make, Param.Payload
 Response.Make, Response.Capture, Response.Get, Response.IsOK,
 Response.GetData, Response.GetError, Response.GetErrorCode,
 Response.GetErrorMessage, Response.GetErrorUserMessage
@@ -56,7 +56,8 @@ getter. Do not assign or read `$_error`, `$_FMerror`, `$_trace`,
 | `Environment.Get`, `RecordContext.Get` | none | Return a current environment or record/found-set snapshot. |
 | `Error.Make` | code, message, userMessage, context object | Creates the log-ready error, sets internal error state, and returns it. Call as `$r`; read only through the `Error.Get*` accessors. |
 | `Error.Get`, `Error.GetID`, `Error.GetCode`, `Error.GetUserMessage` | none | Return the current script's complete log-ready error, its human-reportable ID, application code, or user-facing message; return an empty value when no error exists. |
-| `Param.Make` | business JSON payload | Returns child parameter with trace attached. Use directly as the child call parameter. |
+| `Param.Make` | business JSON value or plain text | Returns a child-parameter envelope with separate `payload` and `trace` values; valid JSON retains its type and plain text is preserved. Use directly as the child call parameter. |
+| `Param.Payload` | none | Returns the current script parameter's business `payload` value, preserving JSON or plain text; returns empty when unavailable. |
 | `Response.Make` | business data | Returns the final response envelope using current internal error state. |
 | `Response.Capture` | none | Captures the child result, sets internal child-response state, and returns it. Call as `$r`. |
 | `Response.Get`, `Response.IsOK`, `Response.GetData`, `Response.GetError*` | none | Read captured child response, success state, data, or stable child-error values. |
@@ -70,7 +71,7 @@ Scripts do not assign or read them directly.
 
 ```text
 $_data, $_error, $_FMerror, $_context, $_params, $_trace,
-$_child_params, $_child_result, $_child_error, $_child_data
+$_child_params, $_child_result, $_child_error, $_child_data, $_paramPayload
 ```
 
 ## Required script flow
@@ -137,7 +138,10 @@ Perform Script on Server [ "SYS_LogError" ; Parameter: Error.Get ]
 
 `Error.Make` builds the log-ready object, assigns a per-error `errorID`, and
 obtains the native error, environment, record context, trace, incoming
-parameter, and timestamps internally. `message` is developer-facing;
+parameter, and timestamps internally. When the most recently captured child
+response has non-empty `data`, it automatically adds `childResponseData` at the
+root of the log-only object. Objects and arrays are embedded as `JSONRaw`; all
+other values are embedded as `JSONString`. `message` is developer-facing;
 `userMessage` is optional and must never cause a dialog automatically.
 
 Do not mutate framework error state before logging and do not put a nested
@@ -146,9 +150,11 @@ current script's internal error state.
 
 ## Child scripts and trace propagation
 
-Build a child parameter only through `Param.Make ( payload )`; it adds the
-current trace. Call `Response.Capture` immediately after every child script
-call, before any other script call:
+Build a child parameter only through `Param.Make ( payload )`; it returns an
+envelope with a distinct `payload` value and current `trace` object. The payload
+may be valid JSON or plain text. A child reads its business input only through
+`Param.Payload`. Call `Response.Capture` immediately
+after every child script call, before any other script call:
 
 ```text
 Perform Script [ child script ; Parameter: Param.Make ( <business JSON payload> ) ]
@@ -159,7 +165,10 @@ End If
 ```
 
 The parent reads `Response.GetErrorCode` or related accessors to decide its
-own error. A child returns its application error through its response; native
+own error. `Error.Make` automatically places non-empty `Response.GetData` in
+the log-only root field `childResponseData`, irrespective of the response's
+`ok` value. It is not part of `error.context` and is not returned to a higher
+parent. A child returns its application error through its response; native
 error state after `Perform Script` is irrelevant and must never be captured.
 On success, assign `Response.GetData` to a normal local variable when it is
 needed.
@@ -176,7 +185,8 @@ Every final result is produced by `Response.Make ( $data )`:
 For an error, `ok` is false and `error` contains only the stable response
 error: `errorID`, `code`, `message`, `userMessage`, `context`, and `fmError`.
 The complete logger object additionally contains record context, environment,
-trace, parameter, and timestamps.
+trace, parameter, timestamps, and (when the most recent captured child response
+has non-empty data) the log-only `childResponseData` field.
 
 One root execution receives a UUID `traceID`; every child retains it and
 appends its current script name to `scriptPath`. `errorID` is unique per error
