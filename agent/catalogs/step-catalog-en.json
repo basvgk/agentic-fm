@@ -8062,16 +8062,18 @@
         "xmlElement": "Calculation",
         "type": "calculation",
         "hrLabel": "Next value",
-        "required": true
+        "required": true,
+        "hrSlot": 1
       },
       {
         "xmlElement": "Field",
         "type": "field",
         "hrLabel": "Field",
-        "required": true
+        "required": true,
+        "hrSlot": 0
       }
     ],
-    "hrSignature": "[ <Next value> ; <field> ]",
+    "hrSignature": "[ <field> ; <Next value> ]",
     "blockPair": null,
     "status": "complete",
     "helpUrl": "https://help.claris.com/en/pro-help/content/set-next-serial-value.html"
