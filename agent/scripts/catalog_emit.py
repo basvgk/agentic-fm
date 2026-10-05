@@ -50,6 +50,7 @@ from typing import Any, Protocol
 from catalog_grammar import (
     CatalogEntry,
     StepParam,
+    _group_quote_value,
     candidate_hr_labels,
     governing_discriminator_for,
     hr_param_order,
@@ -705,6 +706,49 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
             resolved[pi] = True
             pos += 1
 
+    # hrPositionalKey repeatGroup: FileMaker prints each non-empty entry's
+    # positional field bare after the step's own bare params (Show Custom Dialog
+    # `[ "T" ; "M" ; $a ; Invoices::Number ]`), so the bare tokens left after
+    # pass 2 are those entries, in order -- capped at repeatCount, and only a
+    # token that can BE a target (a `$variable` or a `Table::Field` reference);
+    # anything else stays unconsumed and is reported dropped. Mirrors the
+    # reference converter.
+    for pi, param in enumerate(entry.params):
+        key = _raw_str(param.raw, "hrPositionalKey")
+        if param.type != "repeatGroup" or not key or resolved[pi]:
+            continue
+        pos_field = next((f for f in _raw_arr(param.raw, "fields") if _raw_str(f, "key") == key), None)
+        if pos_field is None:
+            continue
+        kind = _raw_str(pos_field, "kind")
+        cap = int(param.raw.get("repeatCount", 0) or 0)
+
+        def fits(tok: str) -> bool:
+            if kind not in ("fieldOrVariable", "field"):
+                return True
+            if not tok or tok[0] == '"':
+                return False
+            if kind == "fieldOrVariable" and tok[0] == "$":
+                return True
+            return "::" in tok
+
+        parts: list[str] = []
+        for i in range(len(hr_params)):
+            if consumed[i]:
+                continue
+            tok = _trim(hr_params[i])
+            if not tok:
+                continue
+            if cap > 0 and len(parts) >= cap:
+                break
+            if not fits(tok):
+                break
+            consumed[i] = True
+            parts.append(key + "=" + _group_quote_value(tok))
+        if parts:
+            values[pi] = " | ".join(parts)
+            resolved[pi] = True
+
     return values
 
 
@@ -950,9 +994,16 @@ def _emit_group_element(
 
 
 def _emit_repeat_group(param: StepParam, hr_value: str, resolver: IdResolver) -> str:
+    # hrDefault: no token means FileMaker's default content (its HR line omits
+    # it); repeatCount: FileMaker always serializes that many entries, padded.
+    if not _trim(hr_value):
+        hr_value = _raw_str(param.raw, "hrDefault")
     if not _trim(hr_value):
         return ""
     entries = _split_on_delim(hr_value, " | ")
+    cap = int(param.raw.get("repeatCount", 0) or 0)
+    while cap > 0 and len(entries) < cap:
+        entries.append("")
     out = "    <" + param.xml_element + ">\n"
     for e in entries:
         out += (

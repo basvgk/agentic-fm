@@ -747,6 +747,57 @@ def _render_repeat_group(container: ET.Element, param: StepParam) -> str:
     return " | ".join(entries)
 
 
+def _group_unquote(v: str) -> str:
+    if len(v) < 2 or v[0] != '"' or v[-1] != '"':
+        return v
+    return v[1:-1].replace('""', '"')
+
+
+def _render_repeat_group_positional(container: ET.Element, param: StepParam) -> str | None:
+    """``hrPositionalKey``: FileMaker's own form for a repeatGroup -- one BARE
+    token per non-empty entry (that entry's positional field), joined ' ; '
+    (Show Custom Dialog ``... ; $a ; Invoices::Number``). ``None`` when that form
+    would lose information (another entry field off its default, an empty entry
+    before a filled one, or an entry count re-emit would not reproduce), so the
+    caller keeps the labeled body form. Mirrors the reference converter."""
+    key = param.raw.get("hrPositionalKey", "")
+    fields = param.raw.get("fields", [])
+    pos = next((f for f in fields if f.get("key") == key), None)
+    if pos is None:
+        return None
+    tokens: list[str] = []
+    count = 0
+    saw_empty = False
+    for e in container.findall(param.raw.get("entryElement", "")):
+        count += 1
+        for f in fields:
+            if f is pos:
+                continue
+            got = _render_group_element(e, [f])
+            dflt = (f.get("key", "") + "=" + _group_quote_value(f.get("defaultValue", "") or "")
+                    if f.get("kind") == "attr" else "")
+            if got != dflt:
+                return None
+        body = _render_group_element(e, [pos])
+        prefix = key + "="
+        v = _group_unquote(body[len(prefix):]) if body.startswith(prefix) else ""
+        if not v.strip():
+            saw_empty = True
+            continue
+        if saw_empty:
+            return None
+        tokens.append(v)
+    if count == 0:
+        return ""
+    if not tokens:
+        return None
+    rc = int(param.raw.get("repeatCount", 0) or 0)
+    expected = max(rc, len(tokens)) if rc > 0 else len(tokens)
+    if count != expected:
+        return None
+    return " ; ".join(tokens)
+
+
 def _render_field_list(container: ET.Element, param: StepParam) -> str:
     entry_el = param.raw.get("entryElement", "")
     entry_attr = param.raw.get("entryAttr", "")
@@ -894,8 +945,16 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
             val = " ; ".join(parts)
     elif ptype == "repeatGroup":
         container = base.find(param.xml_element)
-        if container is not None:
+        positional = None
+        if container is not None and param.raw.get("hrPositionalKey"):
+            positional = _render_repeat_group_positional(container, param)
+        if positional is not None:
+            val = positional  # FileMaker's own bare form (lossless here)
+        elif container is not None:
             inner = _render_repeat_group(container, param)
+            # FileMaker's default content prints no token; emit restores it.
+            if param.raw.get("hrDefault") and inner == param.raw.get("hrDefault"):
+                inner = ""
             if inner:
                 val = inner if not label else (label + ": " + inner)
     elif ptype == "fieldList":

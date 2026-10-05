@@ -217,6 +217,13 @@ function isQuotedLoneVariable(v: string): [boolean, string] {
 // ---------------------------------------------------------------------------
 // Group-value quoting (attr / text kinds) — mirrors the XML→HR side.
 // ---------------------------------------------------------------------------
+function groupQuoteValue(v: string): string {
+  if (!v) return v;
+  const ws = ' \t\n\r';
+  const needs = ws.includes(v[0]) || ws.includes(v[v.length - 1]) || v.includes(',') || v.includes('"');
+  return needs ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+
 function groupUnquoteValue(v: string): string {
   if (v.length < 2 || v[0] !== '"' || v[v.length - 1] !== '"') return v;
   let out = '';
@@ -602,6 +609,43 @@ function matchParamValues(entry: GrammarEntry, hrParams: string[]): string[] {
     }
   }
 
+  // hrPositionalKey repeatGroup: FileMaker prints each non-empty entry's
+  // positional field bare after the step's own bare params (Show Custom Dialog
+  // `[ "T" ; "M" ; $a ; Invoices::Number ]`), so the bare tokens left after pass 2
+  // are those entries, in order -- capped at repeatCount, and only a token that
+  // can BE a target (a `$variable` or a `Table::Field` reference); anything else
+  // stays unconsumed and is reported dropped. Mirrors the reference converter.
+  for (let pi = 0; pi < entry.params.length; pi++) {
+    const param = entry.params[pi];
+    const key = rawStr(param.raw, 'hrPositionalKey');
+    if (param.type !== 'repeatGroup' || !key || resolved[pi]) continue;
+    const posField = rawArr(param.raw, 'fields').find((f) => rawStr(f, 'key') === key);
+    if (!posField) continue;
+    const kind = rawStr(posField, 'kind');
+    const cap = Number(param.raw.repeatCount ?? 0) || 0;
+    const fits = (tok: string): boolean => {
+      if (kind !== 'fieldOrVariable' && kind !== 'field') return true;
+      if (!tok || tok[0] === '"') return false;
+      if (kind === 'fieldOrVariable' && tok[0] === '$') return true;
+      return tok.includes('::');
+    };
+    const parts: string[] = [];
+    for (let i = 0; i < hrParams.length; i++) {
+      if (consumed[i]) continue;
+      const tok = trim(hrParams[i]);
+      if (!tok) continue;
+      if (cap > 0 && parts.length >= cap) break;
+      if (!fits(tok)) break;
+      consumed[i] = true;
+      parts.push(key + '=' + groupQuoteValue(tok));
+    }
+    if (parts.length > 0) {
+      values[pi] = parts.join(' | ');
+      gotToken[pi] = true;
+      resolved[pi] = true;
+    }
+  }
+
   // P7.2 governed-visibility ENUM: a `visibleWhen` gate names a sibling enum and
   // the values of it under which this param is shown. FileMaker renders a gate
   // value that reveals a companion as the COMPANION ALONE, with no token of its
@@ -816,8 +860,13 @@ function emitGroupElement(
 }
 
 function emitRepeatGroup(param: GrammarParam, hrValue: string, resolver: IdResolver): string {
+  // hrDefault: no token means FileMaker's default content (its HR line omits it);
+  // repeatCount: FileMaker always serializes that many entries, padded.
+  if (!trim(hrValue)) hrValue = rawStr(param.raw, 'hrDefault');
   if (!trim(hrValue)) return '';
   const entries = splitOnDelim(hrValue, ' | ');
+  const cap = Number(param.raw.repeatCount ?? 0) || 0;
+  while (cap > 0 && entries.length < cap) entries.push('');
   let out = `    <${param.xmlElement}>\n`;
   for (const e of entries) {
     out += emitGroupElement(

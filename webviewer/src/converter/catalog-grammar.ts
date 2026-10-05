@@ -531,6 +531,52 @@ function renderRepeatGroup(container: Element, param: GrammarParam): string {
   return entries.join(' | ');
 }
 
+function groupUnquote(v: string): string {
+  if (v.length < 2 || v[0] !== '"' || v[v.length - 1] !== '"') return v;
+  return v.slice(1, -1).replace(/""/g, '"');
+}
+
+/**
+ * `hrPositionalKey`: FileMaker's own form for a repeatGroup -- one BARE token per
+ * non-empty entry (that entry's positional field), joined ' ; ' (Show Custom
+ * Dialog `... ; $a ; Invoices::Number`). `null` when that form would lose
+ * information (another entry field off its default, an empty entry before a
+ * filled one, or an entry count re-emit would not reproduce), so the caller keeps
+ * the labeled body form. Mirrors the reference converter.
+ */
+function renderRepeatGroupPositional(container: Element, param: GrammarParam): string | null {
+  const key = (param.raw.hrPositionalKey as string) ?? '';
+  const fields = (param.raw.fields as Record<string, unknown>[]) ?? [];
+  const pos = fields.find((f) => f.key === key);
+  if (!pos) return null;
+  const tokens: string[] = [];
+  let count = 0;
+  let sawEmpty = false;
+  for (const e of findChildren(container, (param.raw.entryElement as string) ?? '')) {
+    count++;
+    for (const f of fields) {
+      if (f === pos) continue;
+      const got = renderGroupElement(e, [f]);
+      const dflt = f.kind === 'attr'
+        ? ((f.key as string) ?? '') + '=' + groupQuoteValue((f.defaultValue as string) ?? '')
+        : '';
+      if (got !== dflt) return null;
+    }
+    const body = renderGroupElement(e, [pos]);
+    const prefix = key + '=';
+    const v = body.startsWith(prefix) ? groupUnquote(body.slice(prefix.length)) : '';
+    if (!v.trim()) { sawEmpty = true; continue; }
+    if (sawEmpty) return null;
+    tokens.push(v);
+  }
+  if (count === 0) return '';
+  if (tokens.length === 0) return null;
+  const rc = Number(param.raw.repeatCount ?? 0) || 0;
+  const expected = rc > 0 ? Math.max(rc, tokens.length) : tokens.length;
+  if (count !== expected) return null;
+  return tokens.join(' ; ');
+}
+
 function renderFieldList(container: Element, param: GrammarParam): string {
   const entryEl = (param.raw.entryElement as string) ?? '';
   const entryAttr = (param.raw.entryAttr as string) ?? '';
@@ -682,8 +728,15 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
     }
   } else if (ptype === 'repeatGroup') {
     const container = findChild(base, param.xmlElement);
-    if (container !== null) {
-      const inner = renderRepeatGroup(container, param);
+    const positional = container !== null && param.raw.hrPositionalKey
+      ? renderRepeatGroupPositional(container, param) : null;
+    if (positional !== null) {
+      val = positional; // FileMaker's own bare form (lossless here)
+    } else if (container !== null) {
+      let inner = renderRepeatGroup(container, param);
+      // FileMaker's default content prints no token; emit restores it.
+      const dflt = (param.raw.hrDefault as string) ?? '';
+      if (dflt && inner === dflt) inner = '';
       if (inner) val = !label ? inner : label + ': ' + inner;
     }
   } else if (ptype === 'fieldList') {

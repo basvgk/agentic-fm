@@ -8393,6 +8393,7 @@
         "type": "namedCalc",
         "hrLabel": "Title",
         "wrapperElement": "Title",
+        "hrSlot": 0,
         "required": true,
         "hrBare": true,
         "note": "FileMaker prints Title bare/positional in HR (`[ \"Title\" ; \"Message\" ; Height: … ]`), so hrBare renders it without a label and accepts it positionally."
@@ -8402,6 +8403,7 @@
         "type": "namedCalc",
         "hrLabel": "Message",
         "wrapperElement": "Message",
+        "hrSlot": 1,
         "required": true,
         "hrBare": true,
         "note": "FileMaker prints Message bare/positional in HR (second positional token), so hrBare renders it without a label and accepts it positionally."
@@ -8411,6 +8413,7 @@
         "type": "namedCalc",
         "hrLabel": "Height",
         "wrapperElement": "Height",
+        "hrSlot": 3,
         "required": false,
         "note": "Custom dialog position/size — FileMaker 26+ only; optional namedCalc omits when unset so older versions round-trip."
       },
@@ -8419,6 +8422,7 @@
         "type": "namedCalc",
         "hrLabel": "Width",
         "wrapperElement": "Width",
+        "hrSlot": 4,
         "required": false,
         "note": "FM26+ only; optional."
       },
@@ -8427,6 +8431,7 @@
         "type": "namedCalc",
         "hrLabel": "Top",
         "wrapperElement": "DistanceFromTop",
+        "hrSlot": 5,
         "required": false,
         "note": "FM26+ only; optional."
       },
@@ -8435,6 +8440,7 @@
         "type": "namedCalc",
         "hrLabel": "Left",
         "wrapperElement": "DistanceFromLeft",
+        "hrSlot": 6,
         "required": false,
         "note": "FM26+ only; optional."
       },
@@ -8444,11 +8450,14 @@
         "hrLabel": "Buttons",
         "entryElement": "Button",
         "required": false,
+        "hrSlot": 7,
+        "repeatCount": 3,
+        "hrDefault": "commit=True, label=\"OK\" | commit=False, label=\"Cancel\" | commit=False",
         "fields": [
           { "key": "commit", "kind": "attr", "xmlAttr": "CommitState", "defaultValue": "False" },
           { "key": "label", "kind": "calc" }
         ],
-        "note": "repeatGroup: up to 3 <Button CommitState><Calculation>label</Calculation></Button>. HR entries joined by ' | '."
+        "note": "repeatGroup: up to 3 <Button CommitState><Calculation>label</Calculation></Button>. HR entries joined by ' | '. FileMaker never prints buttons in HR and always serializes three (repeatCount). hrDefault is FileMaker's default OK (commits) / Cancel: the token is omitted when the buttons equal it and emitted when the HR has none, so FileMaker's own line `[ \"T\" ; \"M\" ; $x ]` yields a dialog whose OK still commits its input (verified live FM 26.0.2)."
       },
       {
         "xmlElement": "InputFields",
@@ -8456,15 +8465,18 @@
         "hrLabel": "Input Fields",
         "entryElement": "InputField",
         "required": false,
+        "hrSlot": 2,
+        "repeatCount": 3,
+        "hrPositionalKey": "field",
         "fields": [
           { "key": "password", "kind": "attr", "xmlAttr": "UsePasswordCharacter", "defaultValue": "False" },
           { "key": "field", "kind": "fieldOrVariable" },
           { "key": "label", "kind": "calc", "childElement": "Label" }
         ],
-        "note": "repeatGroup: up to 3 <InputField UsePasswordCharacter><Field/ or $var><Label><Calculation></InputField>. field = Table::Field ref or $variable; FM always serializes a <Field>."
+        "note": "repeatGroup: up to 3 <InputField UsePasswordCharacter><Field/ or $var><Label><Calculation></InputField>. field = Table::Field ref or $variable; FM always serializes a <Field> and always three entries (repeatCount). hrPositionalKey: FileMaker prints each non-empty entry's target bare after Message and before Height (`[ \"T\" ; \"M\" ; $a ; Invoices::Number ; Height: 100 ]`, verified live FM 26.0.2 for 0-3 inputs, field and variable targets, repetitions); render uses that form when lossless and the labeled `Input Fields:` body otherwise (password, label, or an empty entry before a filled one, which FileMaker's line cannot show)."
       }
     ],
-    "hrSignature": "[ \"title\" ; \"message\" ]",
+    "hrSignature": "[ \"title\" ; \"message\" ; <input target> ; … ]",
     "blockPair": null,
     "status": "complete",
     "helpUrl": "https://help.claris.com/en/pro-help/content/show-custom-dialog.html",
