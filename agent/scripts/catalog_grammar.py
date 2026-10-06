@@ -1135,40 +1135,118 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
     return val
 
 
-def render_discriminator_group(
+# --- empty positional slots (HR render) ----------------------------------------
+# The HR->XML parser hands bare tokens to bare-rendering params by POSITION, so a
+# bare param whose value is empty must still hold its slot whenever a later
+# positional token is rendered -- otherwise that token slides into the empty
+# param's slot (Set Next Serial Value with no field rendered ``[ 100 ]`` and read
+# back as ``<Field name="100"/>`` with an empty calculation). A trailing empty
+# slot is still dropped. Mirrors the reference converter.
+
+
+def renders_bare_in_hr(param: StepParam) -> bool:
+    """Whether a param renders bare (positional) in HR -- the pass-2 eligibility test."""
+    if param.hr_bare:  # per-param opt-in: FileMaker prints it bare
+        return True
+    if not param.hr_label:
+        return True
+    # Per-param opt-in (inverse of hr_bare): a calc/field/script FileMaker renders
+    # WITH its label is matched by that label, never positionally.
+    if param.hr_labeled:
+        return False
+    if param.type in ("calc", "field", "script"):
+        return True
+    if param.type == "layout":
+        return not param.hr_label
+    if param.type in ("text", "name") and not param.parent_element:
+        return True
+    return param.type == "calculation" and not param.omit_when_empty
+
+
+def reads_positionally(entry: CatalogEntry, param: StepParam) -> bool:
+    """Whether the HR parser reads ``param`` by position: pass-2 eligibility minus
+    every param pass 1 resolves without a positional token."""
+    if param.hr_hidden or param.type in ("complex", "bitmaskGroup"):
+        return False
+    if param.flag_style or param.type == "flagElement":
+        return False
+    if is_driven_discriminator(entry, param) or is_governing_discriminator(param):
+        return False
+    return renders_bare_in_hr(param)
+
+
+def empty_holds_slot(entry: CatalogEntry, param: StepParam) -> bool:
+    """Whether an EMPTY value of ``param`` renders as an empty slot when a later
+    positional token follows. A closed-vocabulary enum is excluded: the parser only
+    hands it a token naming one of its values, so an empty token would not fit."""
+    if not reads_positionally(entry, param):
+        return False
+    return not (param.type == "enum" and param.enum_values)
+
+
+# A rendered token: (text, positional, holds_slot).
+HrToken = tuple[str, bool, bool]
+
+
+def _param_token(entry: CatalogEntry, param: StepParam, val: str) -> HrToken:
+    positional = reads_positionally(entry, param)
+    if param.type == "repeatGroup" and param.raw.get("hrPositionalKey") and val:
+        label = param.hr_label or ""
+        positional = not label or not val.lower().startswith((label + ":").lower())
+    return (val, positional, empty_holds_slot(entry, param))
+
+
+def render_discriminator_group_tokens(
     entry: CatalogEntry, step: ET.Element, param: StepParam
-) -> str:
-    """Render a governing discriminator's HR fragment. Port of RenderDiscriminatorGroup."""
+) -> list[HrToken]:
+    """A governing discriminator's HR tokens. Port of RenderDiscriminatorGroupTokens."""
     value = read_enum_raw_value(step, param, entry.element_aliases) or (param.default_value or "")
     branch = param.discriminator_values.get(value)
     if branch is None:
         mapped = param.hr_enum_values.get(value) or value
         label = param.hr_label or ""
-        return mapped if not label else (label + ": " + mapped)
+        # Unlabeled, pass 1 cannot claim it, so the parser reads it by position.
+        return [(mapped, True, False)] if not label else [(label + ": " + mapped, False, False)]
     if branch.hr_token:
-        return branch.hr_token
-    parts: list[str] = []
+        return [(branch.hr_token, False, False)]
+    parts: list[HrToken] = []
     if branch.labeled and param.hr_label:
         mapped = param.hr_enum_values.get(value) or value
-        parts.append(param.hr_label + ": " + mapped)
+        parts.append((param.hr_label + ": " + mapped, False, False))
+    # A revealed companion is positional like any bare param, so it keeps its
+    # empty slot (the caller drops it unless a later positional follows).
     for elem in branch.reveal:
         for c in entry.params:
             if param_key(c) != elem:
                 continue
-            v = compute_param_hr(entry, step, c)
-            if v:
-                parts.append(v)
+            parts.append(_param_token(entry, c, compute_param_hr(entry, step, c)))
             break
-    return " ; ".join(parts)
+    return parts
 
 
 def render_step_hr(entry: CatalogEntry, step: ET.Element) -> str:
     """Render a full step to its HR bracket line, as the reference does.
 
     Returns ``entry.name`` alone when no param contributes a token, else
-    ``Name [ tok ; tok ; … ]``. Does not handle control-flow steps.
+    ``Name [ tok ; tok ; … ]``. An empty positional slot followed by a later
+    positional token renders as an empty token (``[  ; 100 ]``). Does not handle
+    control-flow steps.
     """
     parts: list[str] = []
+    pending_empty = 0
+
+    def add(tok: HrToken) -> None:
+        nonlocal pending_empty
+        text, positional, holds_slot = tok
+        if not text:
+            if holds_slot:
+                pending_empty += 1
+            return
+        if positional:
+            parts.extend([""] * pending_empty)
+            pending_empty = 0
+        parts.append(text)
+
     for pi in hr_param_order(entry):
         param = entry.params[pi]
         if param.hr_hidden:
@@ -1177,13 +1255,11 @@ def render_step_hr(entry: CatalogEntry, step: ET.Element) -> str:
             continue
         if not param_visible(entry, step, param):
             continue
-        val = (
-            render_discriminator_group(entry, step, param)
-            if is_governing_discriminator(param)
-            else compute_param_hr(entry, step, param)
-        )
-        if val:
-            parts.append(val)
+        if is_governing_discriminator(param):
+            for tok in render_discriminator_group_tokens(entry, step, param):
+                add(tok)
+        else:
+            add(_param_token(entry, param, compute_param_hr(entry, step, param)))
     if not parts:
         return entry.name
     return entry.name + " [ " + " ; ".join(parts) + " ]"

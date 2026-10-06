@@ -900,48 +900,131 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
   return val;
 }
 
-/** Render a governing discriminator's HR fragment. Port of RenderDiscriminatorGroup. */
-function renderDiscriminatorGroup(entry: GrammarEntry, step: Element, param: GrammarParam): string {
+// ---------------------------------------------------------------------------
+// Empty positional slots (HR render). The HR→XML parser hands bare tokens to
+// bare-rendering params by POSITION, so a bare param whose value is empty must
+// still hold its slot whenever a later positional token is rendered — otherwise
+// that token slides into the empty param's slot (Set Next Serial Value with no
+// field rendered `[ 100 ]` and read back as `<Field name="100"/>` with an empty
+// calculation). A trailing empty slot is still dropped. Mirrors the reference.
+// ---------------------------------------------------------------------------
+
+/** Whether a param renders bare (positional) in HR — the pass-2 eligibility test. */
+export function rendersBareInHr(param: GrammarParam): boolean {
+  if (param.hrBare) return true; // per-param opt-in: FileMaker prints it bare
+  if (!param.hrLabel) return true;
+  // Inverse of hrBare: a calc/field/script FileMaker renders WITH its label is
+  // matched by that label, never positionally.
+  if (param.hrLabeled) return false;
+  if (param.type === 'calc' || param.type === 'field' || param.type === 'script') return true;
+  if (param.type === 'layout') return !param.hrLabel;
+  if ((param.type === 'text' || param.type === 'name') && !param.parentElement) return true;
+  if (param.type === 'calculation' && !param.omitWhenEmpty) return true;
+  return false;
+}
+
+/**
+ * Whether the HR parser reads `param` by position: pass-2 eligibility minus every
+ * param pass 1 resolves without a positional token.
+ */
+function readsPositionally(entry: GrammarEntry, param: GrammarParam): boolean {
+  if (param.hrHidden || param.type === 'complex' || param.type === 'bitmaskGroup') return false;
+  if (param.flagStyle || param.type === 'flagElement') return false;
+  if (isDrivenDiscriminator(entry, param) || isGoverningDiscriminator(param)) return false;
+  return rendersBareInHr(param);
+}
+
+/**
+ * Whether an EMPTY value of `param` renders as an empty slot when a later
+ * positional token follows. A closed-vocabulary enum is excluded: the parser only
+ * hands it a token naming one of its values, so an empty token would not fit.
+ */
+function emptyHoldsSlot(entry: GrammarEntry, param: GrammarParam): boolean {
+  if (!readsPositionally(entry, param)) return false;
+  const enumValues = (param.raw.enumValues as string[] | undefined) ?? [];
+  return !(param.type === 'enum' && enumValues.length > 0);
+}
+
+/** A rendered token, tagged with whether the parser reads it by position. */
+interface HrToken {
+  text: string;
+  positional: boolean;
+  holdsSlot: boolean;
+}
+
+function paramToken(entry: GrammarEntry, param: GrammarParam, val: string): HrToken {
+  let positional = readsPositionally(entry, param);
+  if (param.type === 'repeatGroup' && param.raw.hrPositionalKey && val) {
+    const label = param.hrLabel || '';
+    positional = !label || !val.toLowerCase().startsWith((label + ':').toLowerCase());
+  }
+  return { text: val, positional, holdsSlot: emptyHoldsSlot(entry, param) };
+}
+
+/** A governing discriminator's HR tokens. Port of RenderDiscriminatorGroupTokens. */
+function renderDiscriminatorGroupTokens(
+  entry: GrammarEntry,
+  step: Element,
+  param: GrammarParam,
+): HrToken[] {
   const value = readEnumRawValue(step, param, entry.elementAliases) || (param.defaultValue || '');
   const branch = param.discriminatorValues[value];
   if (branch === undefined) {
     const mapped = param.hrEnumValues[value] || value;
     const label = param.hrLabel || '';
-    return !label ? mapped : label + ': ' + mapped;
+    // Unlabeled, pass 1 cannot claim it, so the parser reads it by position.
+    return !label
+      ? [{ text: mapped, positional: true, holdsSlot: false }]
+      : [{ text: label + ': ' + mapped, positional: false, holdsSlot: false }];
   }
-  if (branch.hrToken) return branch.hrToken;
-  const parts: string[] = [];
+  if (branch.hrToken) return [{ text: branch.hrToken, positional: false, holdsSlot: false }];
+  const parts: HrToken[] = [];
   if (branch.labeled && param.hrLabel) {
     const mapped = param.hrEnumValues[value] || value;
-    parts.push(param.hrLabel + ': ' + mapped);
+    parts.push({ text: param.hrLabel + ': ' + mapped, positional: false, holdsSlot: false });
   }
+  // A revealed companion is positional like any bare param, so it keeps its empty
+  // slot (the caller drops it unless a later positional follows).
   for (const elem of branch.reveal) {
     for (const c of entry.params) {
       if (paramKey(c) !== elem) continue;
-      const v = computeParamHr(entry, step, c);
-      if (v) parts.push(v);
+      parts.push(paramToken(entry, c, computeParamHr(entry, step, c)));
       break;
     }
   }
-  return parts.join(' ; ');
+  return parts;
 }
 
 /**
  * Render a full step to its HR bracket line, as the reference does.
  * Returns `entry.name` alone when no param contributes a token, else
- * `Name [ tok ; tok ; … ]`. Does not handle control-flow steps.
+ * `Name [ tok ; tok ; … ]`. An empty positional slot followed by a later
+ * positional token renders as an empty token (`[  ; 100 ]`). Does not handle
+ * control-flow steps.
  */
 export function renderStepHr(entry: GrammarEntry, step: Element): string {
   const parts: string[] = [];
+  let pendingEmpty = 0;
+  const add = (tok: HrToken): void => {
+    if (!tok.text) {
+      if (tok.holdsSlot) pendingEmpty++;
+      return;
+    }
+    if (tok.positional) {
+      for (; pendingEmpty > 0; pendingEmpty--) parts.push('');
+    }
+    parts.push(tok.text);
+  };
   for (const pi of hrParamOrder(entry)) {
     const param = entry.params[pi];
     if (param.hrHidden) continue;
     if (governingDiscriminatorFor(entry, param)) continue;
     if (!paramVisible(entry, step, param)) continue;
-    const val = isGoverningDiscriminator(param)
-      ? renderDiscriminatorGroup(entry, step, param)
-      : computeParamHr(entry, step, param);
-    if (val) parts.push(val);
+    if (isGoverningDiscriminator(param)) {
+      for (const tok of renderDiscriminatorGroupTokens(entry, step, param)) add(tok);
+    } else {
+      add(paramToken(entry, param, computeParamHr(entry, step, param)));
+    }
   }
   if (parts.length === 0) return entry.name;
   return entry.name + ' [ ' + parts.join(' ; ') + ' ]';

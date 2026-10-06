@@ -292,8 +292,8 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"40\" name=\"Relookup Field Contents\">\n    <NoInteract state=\"True\"/>\n    <Field table=\"\" id=\"0\" name=\"\"/>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Replace Field Contents.xml": {
-    "hr": "Replace Field Contents [ With dialog: Off ; \"value\" ]",
-    "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"91\" name=\"Replace Field Contents\">\n    <NoInteract state=\"True\"/>\n    <Restore state=\"False\"/>\n    <Field table=\"\" id=\"0\" name=\"&quot;value&quot;\"/>\n    <With value=\"None\"/>\n    <Calculation><![CDATA[]]></Calculation>\n    <SerialNumbers PerformAutoEnter=\"False\" UpdateEntryOptions=\"False\" increment=\"0\" InitialValue=\"\" UseEntryOptions=\"False\"/>\n  </Step>\n</fmxmlsnippet>"
+    "hr": "Replace Field Contents [ With dialog: Off ;  ; \"value\" ]",
+    "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"91\" name=\"Replace Field Contents\">\n    <NoInteract state=\"True\"/>\n    <Restore state=\"False\"/>\n    <Field table=\"\" id=\"0\" name=\"\"/>\n    <With value=\"Calculation\"/>\n    <Calculation><![CDATA[\"value\"]]></Calculation>\n    <SerialNumbers PerformAutoEnter=\"False\" UpdateEntryOptions=\"False\" increment=\"0\" InitialValue=\"\" UseEntryOptions=\"False\"/>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Set Field By Name.xml": {
     "hr": "Set Field By Name",
@@ -304,8 +304,8 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"76\" name=\"Set Field\">\n    <Calculation><![CDATA[]]></Calculation>\n    <Field table=\"\" id=\"0\" name=\"\"/>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Set Next Serial Value.xml": {
-    "hr": "Set Next Serial Value [ 100 ]",
-    "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"116\" name=\"Set Next Serial Value\">\n    <Calculation><![CDATA[]]></Calculation>\n    <Field table=\"\" id=\"0\" name=\"100\"/>\n  </Step>\n</fmxmlsnippet>"
+    "hr": "Set Next Serial Value [  ; 100 ]",
+    "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"116\" name=\"Set Next Serial Value\">\n    <Calculation><![CDATA[100]]></Calculation>\n    <Field table=\"\" id=\"0\" name=\"\"/>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Close Data File.xml": {
     "hr": "Close Data File [ File ID: $fileID ]",

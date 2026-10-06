@@ -57,6 +57,7 @@ from catalog_grammar import (
     is_driven_discriminator,
     is_governing_discriminator,
     param_key,
+    renders_bare_in_hr,
     value_reveals_companion,
 )
 
@@ -469,25 +470,6 @@ def _resolve_bool_state(param: StepParam, hr_value: str) -> str:
     return state
 
 
-def _renders_bare_in_hr(param: StepParam) -> bool:
-    """Whether a param renders bare (positional) in HR — the pass-2 eligibility test."""
-    if param.hr_bare:  # per-param opt-in: FileMaker prints it bare
-        return True
-    if not param.hr_label:
-        return True
-    # Per-param opt-in (inverse of hr_bare): a calc/field/script FileMaker renders
-    # WITH its label is matched by that label, never positionally.
-    if param.hr_labeled:
-        return False
-    if param.type in ("calc", "field", "script"):
-        return True
-    if param.type == "layout":
-        return not param.hr_label
-    if param.type in ("text", "name") and not param.parent_element:
-        return True
-    return param.type == "calculation" and not param.omit_when_empty
-
-
 # ---------------------------------------------------------------------------
 # Layout token (self-describing) → LayoutDestination value + <Layout> child XML
 # ---------------------------------------------------------------------------
@@ -593,6 +575,9 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
     values = [""] * len(entry.params)
     resolved = [False] * len(entry.params)
     consumed = [False] * len(hr_params)
+    # Which params claimed an HR token, by label or by position -- distinct from
+    # "has a non-empty value": an empty slot is still evidence for the P7.2 derive.
+    got_token = [False] * len(entry.params)
 
     for pi, param in enumerate(entry.params):
         if param.hr_hidden:
@@ -667,6 +652,7 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
                 if _ci_equals(_trim(hr_params[i]), param.hr_label):
                     consumed[i] = True
                     values[pi] = "True"
+                    got_token[pi] = True
                     break
             continue
 
@@ -680,6 +666,7 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
                     if _starts_with_ci(t, prefix):
                         consumed[i] = True
                         values[pi] = _trim(t[len(prefix) :])
+                        got_token[pi] = True
                         resolved[pi] = True
                         break
                 if resolved[pi]:
@@ -690,7 +677,7 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
     for pi in hr_param_order(entry):
         if resolved[pi]:
             continue
-        if not _renders_bare_in_hr(entry.params[pi]):
+        if not renders_bare_in_hr(entry.params[pi]):
             continue
         gov = governing_discriminator_for(entry, entry.params[pi])
         if gov is not None:
@@ -703,6 +690,7 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
         if pos < len(hr_params):
             consumed[pos] = True
             values[pi] = _trim(hr_params[pos])
+            got_token[pi] = True
             resolved[pi] = True
             pos += 1
 
@@ -747,7 +735,40 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
             parts.append(key + "=" + _group_quote_value(tok))
         if parts:
             values[pi] = " | ".join(parts)
+            got_token[pi] = True
             resolved[pi] = True
+
+    # P7.2 governed-visibility ENUM: a ``visibleWhen`` gate names a sibling enum
+    # and the values of it under which this param is shown. FileMaker renders a
+    # gate value that reveals a companion as the COMPANION ALONE, with no token of
+    # its own, so the gate cannot be read back from the HR -- it falls through to
+    # its catalog default instead, and FileMaker obeys the default and discards
+    # the companion. Derive it from the gated params that claimed a token ("a
+    # token was present", not "the value was non-empty": an empty slot is still
+    # evidence). Refused when two gate values would explain the same companions
+    # equally well. Mirrors the reference converter.
+    for gi, gate in enumerate(entry.params):
+        if gate.type != "enum" or values[gi] != "":
+            continue
+        gate_key = param_key(gate)
+        chosen = ""
+        ambiguous = False
+        for qi, gated in enumerate(entry.params):
+            if ambiguous:
+                break
+            vw = gated.visible_when
+            if vw is None or vw.param != gate_key or not vw.values:
+                continue
+            if not got_token[qi]:
+                continue
+            for v in vw.values:
+                if chosen == "":
+                    chosen = v
+                elif chosen != v:
+                    ambiguous = True
+                    break
+        if not ambiguous and chosen:
+            values[gi] = chosen
 
     return values
 
