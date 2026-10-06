@@ -8,10 +8,9 @@ function names, and HTML/XML entities where literal operators belong.
 import re
 
 from ..engine import rule, LintRule
+from ..literals import has_unclosed_literal, mask_string_literals
 from ..types import Diagnostic, Severity
 
-
-_STRIP_STRINGS_RE = re.compile(r'"[^"]*"')
 
 # Steps where bracket content is literal text, not a FM calculation.
 # These must be skipped by rules that analyze calculation expressions.
@@ -25,7 +24,7 @@ NON_CALC_STEPS = {
 
 
 def _strip_strings(text):
-    return _STRIP_STRINGS_RE.sub('""', text)
+    return mask_string_literals(text)
 
 
 def _is_calc_step(ln):
@@ -49,11 +48,7 @@ class UnclosedString(LintRule):
     tier = 1
 
     def _has_unclosed(self, text):
-        count = 0
-        for ch in text:
-            if ch == '"':
-                count += 1
-        return count % 2 != 0
+        return has_unclosed_literal(text)
 
     def check_xml(self, parse_result, catalog, context, config):
         if not parse_result.ok:
