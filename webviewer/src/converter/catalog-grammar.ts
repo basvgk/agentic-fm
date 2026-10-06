@@ -461,6 +461,20 @@ export function hrParamOrder(entry: GrammarEntry): number[] {
   });
 }
 
+/**
+ * Append FileMaker's `[N]` repetition subscript to a field/variable ref.
+ *
+ * FileMaker serializes a repetition as `repetition="N"` on the `<Field>`
+ * (`<Field table="T" id="1" repetition="2" name="F"/>`, or
+ * `<Field repetition="2">$var</Field>`) and writes the attribute only for N > 1;
+ * its Script Workspace line shows `T::F[2]` / `$var[2]`. Repetition 1 is the
+ * default and carries no subscript.
+ */
+function withRepetitionSuffix(ref: string, fld: Element): string {
+  const rep = parseInt(fld.getAttribute('repetition') ?? '', 10);
+  return ref && rep > 1 ? ref + '[' + rep + ']' : ref;
+}
+
 // ---------------------------------------------------------------------------
 // Group / repeat / list renderers
 // ---------------------------------------------------------------------------
@@ -489,7 +503,7 @@ function renderGroupElement(node: Element, fields: Record<string, unknown>[]): s
       if (fld !== null) {
         const table = fld.getAttribute('table') ?? '';
         const name = fld.getAttribute('name') ?? '';
-        if (name) parts.push(key + '=' + (!table ? name : table + '::' + name));
+        if (name) parts.push(key + '=' + withRepetitionSuffix(!table ? name : table + '::' + name, fld));
       }
     } else if (kind === 'script') {
       const sc = findChild(node, (f.element as string) ?? '');
@@ -502,13 +516,13 @@ function renderGroupElement(node: Element, fields: Record<string, unknown>[]): s
       if (fld !== null) {
         const text = elemText(fld).trim();
         if (text) {
-          parts.push(key + '=' + groupQuoteValue(text));
+          parts.push(key + '=' + groupQuoteValue(withRepetitionSuffix(text, fld)));
         } else {
           const table = fld.getAttribute('table') ?? '';
           const name = fld.getAttribute('name') ?? '';
           if (name) {
             const ref = !table ? name : table + '::' + name;
-            parts.push(key + '=' + groupQuoteValue(ref));
+            parts.push(key + '=' + groupQuoteValue(withRepetitionSuffix(ref, fld)));
           }
         }
       }
@@ -811,6 +825,7 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
       if (text && text[0] === '$') val = text;
       else if (name) val = !table ? name : table + '::' + name;
       else if (text) val = text;
+      val = withRepetitionSuffix(val, fieldNode);
       if (val && label) val = label + ': ' + val;
     }
   } else if (ptype === 'flagElement') {
@@ -831,7 +846,7 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
     if (fieldNode !== null) {
       const table = fieldNode.getAttribute('table') ?? '';
       const name = fieldNode.getAttribute('name') ?? '';
-      val = !table ? name : table + '::' + name;
+      val = withRepetitionSuffix(!table ? name : table + '::' + name, fieldNode);
       // hrLabeled: label the field where FileMaker does (inverse of bare).
       if (val && param.hrLabeled && label) val = label + ': ' + val;
     }

@@ -323,6 +323,59 @@ def _is_variable(s: str) -> bool:
     return len(t) > 0 and t[0] == "$"
 
 
+def _parse_field_repetition(ref: str) -> tuple[str, int]:
+    """Split a trailing ``[N]`` repetition subscript off a field/variable ref.
+
+    ``Invoices::Notes[2]`` -> (``Invoices::Notes``, 2); ``$rep[3]`` -> (``$rep``, 3).
+    Only a positive integer subscript at the very end counts, with something
+    before it; anything else (no subscript, ``[]``, ``[0]``, ``[$i]``) returns the
+    ref unchanged and 0. FileMaker repetitions are 1-based.
+    """
+    if len(ref) < 3 or ref[-1] != "]":
+        return ref, 0
+    open_idx = ref.rfind("[")
+    if open_idx <= 0 or open_idx + 1 == len(ref) - 1:
+        return ref, 0
+    digits = ref[open_idx + 1 : -1]
+    if not digits.isascii() or not digits.isdigit() or len(digits) > 7:
+        return ref, 0
+    rep = int(digits)
+    if rep < 1 or rep > 1000000:
+        return ref, 0
+    return ref[:open_idx], rep
+
+
+def _repetition_attr(rep: int) -> str:
+    """FileMaker's ``repetition="N"`` attribute, written only for N > 1."""
+    return ' repetition="' + str(rep) + '"' if rep > 1 else ""
+
+
+def _field_ref_xml(resolver: "IdResolver", ref: str, extra_attrs: str = "") -> str:
+    """``<Field table id [repetition] name/>`` for a ``Table::Field[N]`` ref, in
+    FileMaker's attribute order. The subscript is stripped before name resolution."""
+    bare, rep = _parse_field_repetition(_trim(ref))
+    table, fid, fname = resolver.resolve_field(bare)
+    return (
+        "<Field"
+        + extra_attrs
+        + ' table="'
+        + esc_xml(table)
+        + '" id="'
+        + str(fid)
+        + '"'
+        + _repetition_attr(rep)
+        + ' name="'
+        + esc_xml(fname)
+        + '"/>'
+    )
+
+
+def _variable_field_xml(var: str, extra_attrs: str = "") -> str:
+    """``<Field [repetition]>$var</Field>`` for a ``$var[N]`` target."""
+    bare, rep = _parse_field_repetition(_trim(var))
+    return "<Field" + extra_attrs + _repetition_attr(rep) + ">" + esc_xml(bare) + "</Field>"
+
+
 def _is_quoted_lone_variable(v: str) -> tuple[bool, str]:
     """True when ``v`` (trimmed, one layer of matching quotes stripped) is a single
     variable token; returns the bare variable as the tuple's second element."""
@@ -891,27 +944,15 @@ def _emit_field_or_variable(
         else ""
     )
     if _is_variable(hr_value):
-        trimmed = _trim(hr_value)
         out = ""
         if not preceded_by_text_element:
             out += "    <Text/>\n"
-        out += "    <Field" + type_attr_str + ">" + esc_xml(trimmed) + "</Field>"
+        out += "    " + _variable_field_xml(hr_value, type_attr_str)
         return out
     out = ""
     if _raw_bool(param.raw, "textMarker") and not preceded_by_text_element:
         out += "    <Text/>\n"
-    table, fid, fname = resolver.resolve_field(hr_value)
-    out += (
-        '    <Field'
-        + type_attr_str
-        + ' table="'
-        + esc_xml(table)
-        + '" id="'
-        + str(fid)
-        + '" name="'
-        + esc_xml(fname)
-        + '"/>'
-    )
+    out += "    " + _field_ref_xml(resolver, hr_value, type_attr_str)
     return out
 
 
@@ -954,17 +995,7 @@ def _emit_group_element(
                     children += ci + "</" + child_element + ">\n"
         elif kind == "field":
             if present:
-                table, fid, fname = resolver.resolve_field(it)
-                children += (
-                    ci
-                    + '<Field table="'
-                    + esc_xml(table)
-                    + '" id="'
-                    + str(fid)
-                    + '" name="'
-                    + esc_xml(fname)
-                    + '"/>\n'
-                )
+                children += ci + _field_ref_xml(resolver, it) + "\n"
         elif kind == "script":
             if present:
                 sid, sname = resolver.resolve_script(_group_unquote_value(it))
@@ -981,19 +1012,9 @@ def _emit_group_element(
         elif kind == "fieldOrVariable":
             v = _group_unquote_value(it) if present else ""
             if v and _is_variable(v):
-                children += ci + "<Field>" + esc_xml(_trim(v)) + "</Field>\n"
+                children += ci + _variable_field_xml(v) + "\n"
             elif v:
-                table, fid, fname = resolver.resolve_field(v)
-                children += (
-                    ci
-                    + '<Field table="'
-                    + esc_xml(table)
-                    + '" id="'
-                    + str(fid)
-                    + '" name="'
-                    + esc_xml(fname)
-                    + '"/>\n'
-                )
+                children += ci + _field_ref_xml(resolver, v) + "\n"
             else:
                 children += ci + '<Field table="" id="0" name=""/>\n'
         elif kind == "group":
@@ -1415,8 +1436,7 @@ def convert_step_with_catalog(
                 piece = "    <" + param.xml_element + "/>"
         elif param.type == "field":
             if not param.omit_when_empty or _trim(hr_value):
-                table, fid, fname = resolver.resolve_field(hr_value)
-                piece = '    <Field table="' + esc_xml(table) + '" id="' + str(fid) + '" name="' + esc_xml(fname) + '"/>'
+                piece = "    " + _field_ref_xml(resolver, hr_value)
         elif param.type == "tableRef":
             if not _trim(hr_value):
                 # A present-driven, gated table (Fine-Tune Model's training

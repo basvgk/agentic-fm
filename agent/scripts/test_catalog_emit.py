@@ -334,3 +334,156 @@ def test_same_file_perform_script_unaffected_by_from_file_grammar():
     # No `from file:` clause => no FileReference; the <Script> is emitted as usual.
     assert "<FileReference" not in out
     assert "<Script " in out
+
+
+# ---------------------------------------------------------------------------
+# Field / variable repetitions — `[N]` in HR, `repetition="N"` in XML.
+#
+# FileMaker writes a repetition as an attribute on the <Field> element, after
+# `id` and before `name` for a field reference (`<Field table="T" id="31"
+# repetition="2" name="F"/>`) and on the bare element for a variable
+# (`<Field repetition="2">$rep</Field>`), only for N > 1: repetition 1 is
+# written as no attribute at all and renders with no subscript. Its Script
+# Workspace line shows `T::F[2]` / `$rep[2]`. This holds for step-level field
+# and fieldOrVariable params and for the same kinds inside repeatGroup /
+# attrGroup entries (Show Custom Dialog inputs, Insert from Device's barcode
+# scan source). Shapes captured from FileMaker Pro 26.0.2.
+# ---------------------------------------------------------------------------
+_SCD_HEAD = (
+    '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="87" name="Show Custom Dialog">'
+    '<Title><Calculation><![CDATA["T"]]></Calculation></Title>'
+    '<Message><Calculation><![CDATA[""]]></Calculation></Message>'
+    '<Buttons><Button CommitState="True"><Calculation><![CDATA["OK"]]></Calculation></Button>'
+    '<Button CommitState="False"><Calculation><![CDATA["Cancel"]]></Calculation></Button>'
+    '<Button CommitState="False"></Button></Buttons><InputFields>'
+    '<InputField UsePasswordCharacter="False">'
+)
+_SCD_TAIL = (
+    '</InputField><InputField UsePasswordCharacter="False"><Field table="" id="0" name=""></Field></InputField>'
+    '<InputField UsePasswordCharacter="False"><Field table="" id="0" name=""></Field></InputField>'
+    "</InputFields></Step></fmxmlsnippet>"
+)
+
+
+def _hr_of(xml: str) -> str:
+    from snippet_to_hr import snippet_to_hr
+
+    return "\n".join(snippet_to_hr(xml)).strip()
+
+
+def test_repetition_renders_as_subscript_in_group_entries():
+    """XML -> HR: a repeatGroup / attrGroup entry keeps FileMaker's `[N]`."""
+    assert _hr_of(_SCD_HEAD + '<Field repetition="2">$rep</Field>' + _SCD_TAIL) == (
+        'Show Custom Dialog [ "T" ; "" ; $rep[2] ]')
+    assert _hr_of(
+        _SCD_HEAD + '<Field table="Invoices" id="31" repetition="2" name="Description"></Field>'
+        + _SCD_TAIL) == 'Show Custom Dialog [ "T" ; "" ; Invoices::Description[2] ]'
+    device = _hr_of(
+        '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="161" name="Insert from Device">'
+        '<InsertFrom value="Barcode"/><Text/><Field>$out</Field><DeviceOptions>'
+        '<ScanFrom type="Field"><Field table="Invoices" id="31" repetition="2" name="Description"></Field>'
+        '</ScanFrom><Barcodes types="4194303"/></DeviceOptions></Step></fmxmlsnippet>')
+    assert "source=Invoices::Description[2]" in device
+
+
+def test_repetition_renders_as_subscript_at_step_level():
+    """XML -> HR: step-level field and fieldOrVariable params keep `[N]`."""
+    assert _hr_of(
+        '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="76" name="Set Field">'
+        '<Calculation><![CDATA[1]]></Calculation>'
+        '<Field table="Invoices" id="31" repetition="2" name="Description"/></Step></fmxmlsnippet>'
+    ) == "Set Field [ Invoices::Description[2] ; 1 ]"
+    assert "Target: $rep[2]" in _hr_of(
+        '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="61" name="Insert Text">'
+        '<SelectAll state="True"/><Text>x</Text><Field repetition="2">$rep</Field></Step></fmxmlsnippet>')
+
+
+def test_repetition_one_has_no_subscript():
+    """FileMaker never writes repetition="1"; a stray one still renders bare."""
+    assert _hr_of(_SCD_HEAD + '<Field repetition="1">$rep</Field>' + _SCD_TAIL) == (
+        'Show Custom Dialog [ "T" ; "" ; $rep ]')
+
+
+def test_repetition_subscript_emits_attribute_in_group_entries():
+    """HR -> XML: the subscript leaves the name and becomes repetition="N"."""
+    by_name, _ = _load()
+    out = _emit_hr(by_name, 'Show Custom Dialog [ "T" ; "" ; $rep[2] ]')
+    assert '<Field repetition="2">$rep</Field>' in out
+    out = _emit_hr(by_name, 'Show Custom Dialog [ "T" ; "" ; Invoices::Description[2] ]')
+    assert '<Field table="Invoices" id="0" repetition="2" name="Description"/>' in out
+    out = _emit_hr(
+        by_name,
+        "Insert from Device [ Type: Barcode ; Target: $out ; Device: "
+        "ScanFrom=(type=Field, source=Invoices::Description[2]), Barcodes=(types=4194303) ]")
+    assert '<Field table="Invoices" id="0" repetition="2" name="Description"/>' in out
+
+
+def test_repetition_subscript_emits_attribute_at_step_level():
+    by_name, _ = _load()
+    out = _emit_hr(by_name, "Set Field [ Invoices::Description[2] ; 1 ]")
+    assert '<Field table="Invoices" id="0" repetition="2" name="Description"/>' in out
+    out = _emit_hr(by_name, 'Insert Text [ Select ; Target: $rep[2] ; "x" ]')
+    assert '<Field repetition="2">$rep</Field>' in out
+    out = _emit_hr(by_name, "Insert Calculated Result [ Select ; Target: Invoices::Description[2] ; 1 ]")
+    assert '<Field table="Invoices" id="0" repetition="2" name="Description"/>' in out
+
+
+def test_repetition_one_and_non_numeric_subscripts():
+    """`[1]` is the default (no attribute); a non-literal subscript is not a repetition."""
+    by_name, _ = _load()
+    out = _emit_hr(by_name, "Set Field [ Invoices::Description[1] ; 1 ]")
+    assert '<Field table="Invoices" id="0" name="Description"/>' in out
+    out = _emit_hr(by_name, 'Show Custom Dialog [ "T" ; "" ; $rep[1] ]')
+    assert "<Field>$rep</Field>" in out
+    for ref in ("$rep[0]", "$rep[]", "$rep[$i]"):
+        out = _emit_hr(by_name, 'Insert Text [ Select ; Target: ' + ref + ' ; "x" ]')
+        assert "repetition=" not in out, ref
+
+
+def _saxml_target(inner: str) -> str:
+    return (
+        '<Step index="0" id="76" name="Set Field" enable="True"><UUID>X</UUID><ParameterValues membercount="2">'
+        '<Parameter type="FieldReference">' + inner + '</Parameter>'
+        '<Parameter type="Calculation"><Calculation datatype="1" position="0"><Calculation>'
+        "<Text><![CDATA[1]]></Text></Calculation></Calculation></Parameter></ParameterValues></Step>"
+    )
+
+
+def _saxml_rep(text: str) -> str:
+    return ('<repetition><Calculation datatype="1" position="10"><Calculation>'
+            "<Text><![CDATA[" + text + "]]></Text></Calculation></Calculation></repetition>")
+
+
+def test_saxml_reference_repetition_becomes_attribute():
+    """SaXML -> XML: every SaXML field/variable reference carries a <repetition>
+    calc; a literal N > 1 becomes repetition="N", 1 becomes nothing."""
+    import xml.etree.ElementTree as ET
+
+    from saxml_read import read_saxml_step
+
+    by_name, _ = _load()
+    entry = by_name["Set Field"]
+    tor = '<TableOccurrenceReference id="1" name="Invoices" UUID="T"/>'
+    for text, want in (("2", ' repetition="2"'), ("1", "")):
+        step = ET.fromstring(_saxml_target(
+            '<FieldReference id="31" name="Description" UUID="F">' + _saxml_rep(text) + tor
+            + "</FieldReference>"))
+        disabled, values, resolver = read_saxml_step(entry, step)
+        out = convert_step_with_catalog(entry, disabled, values, resolver)
+        assert '<Field table="Invoices" id="31"' + want + ' name="Description"/>' in out, text
+
+
+def test_saxml_calculated_repetition_is_refused_not_dropped():
+    """A computed repetition has no fmxmlsnippet form: refuse it loudly."""
+    import xml.etree.ElementTree as ET
+
+    import pytest
+
+    from saxml_read import UnsupportedSaXML, read_saxml_step
+
+    by_name, _ = _load()
+    step = ET.fromstring(_saxml_target(
+        '<FieldReference id="31" name="Description" UUID="F">' + _saxml_rep("$i")
+        + '<TableOccurrenceReference id="1" name="Invoices" UUID="T"/></FieldReference>'))
+    with pytest.raises(UnsupportedSaXML):
+        read_saxml_step(by_name["Set Field"], step)

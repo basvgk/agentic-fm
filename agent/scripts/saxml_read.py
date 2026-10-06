@@ -190,6 +190,40 @@ def _field_ref_token(fr: ET.Element) -> str:
     return name if not table else table + "::" + name
 
 
+def _repetition_suffix(ref_el: ET.Element) -> str:
+    """The ``[N]`` HR subscript for a ``<FieldReference>`` / ``<Variable>`` target.
+
+    SaXML gives every field and variable reference a ``<repetition>`` calc; the
+    fmxmlsnippet form carries it as ``repetition="N"`` and only for a literal
+    N > 1, so ``1`` (the default) yields no subscript. A computed repetition
+    (``$i``) has no fmxmlsnippet spelling here and is refused rather than dropped.
+    """
+    rep = ref_el.find("repetition")
+    if rep is None:
+        return ""
+    text = _calc_of(rep.find("Calculation")).strip()
+    if text in ("", "1"):
+        return ""
+    if text.isascii() and text.isdigit() and int(text) > 1:
+        return "[" + str(int(text)) + "]"
+    raise UnsupportedSaXML(
+        "calculated repetition %r on %s %r has no fmxmlsnippet form"
+        % (text, ref_el.tag, ref_el.get("name") or ref_el.get("value") or "")
+    )
+
+
+def _target_token(ref_el: ET.Element) -> str:
+    """A field/variable TARGET reference -> its HR token with any ``[N]`` subscript
+    (``Table::Field[2]`` / ``$var[2]``) — the form the emit's field and
+    fieldOrVariable params parse back into ``repetition="N"``. Field references
+    elsewhere (sort / field lists) keep the bare ``_field_ref_token``."""
+    if ref_el.tag == "Variable":
+        tok = ref_el.get("value", "")
+    else:
+        tok = _field_ref_token(ref_el)
+    return tok + _repetition_suffix(ref_el) if tok else ""
+
+
 def _layout_token_from_lrc(lrc: ET.Element) -> str:
     """A ``<LayoutReferenceContainer value="N">`` → the emit's layout HR token.
 
@@ -751,16 +785,16 @@ def _extract_simple(
             fr = sp.find("FieldReference")
             if fr is not None:
                 consumed[i] = True
-                return _field_ref_token(fr)
+                return _target_token(fr)
             if sp.get("type") == "Target":
                 v = sp.find("Variable")
                 if v is not None:
                     consumed[i] = True
-                    return v.get("value", "")
+                    return _target_token(v)
                 fr = sp.find("FieldReference")
                 if fr is not None:
                     consumed[i] = True
-                    return _field_ref_token(fr)
+                    return _target_token(fr)
         return ""
 
     if ptype == "fieldOrVariable":
@@ -771,15 +805,15 @@ def _extract_simple(
                 v = sp.find("Variable")
                 if v is not None:
                     consumed[i] = True
-                    return v.get("value", "")
+                    return _target_token(v)
                 fr = sp.find("FieldReference")
                 if fr is not None:
                     consumed[i] = True
-                    return _field_ref_token(fr)
+                    return _target_token(fr)
             fr = sp.find("FieldReference")
             if fr is not None:
                 consumed[i] = True
-                return _field_ref_token(fr)
+                return _target_token(fr)
         return ""
 
     if ptype == "script":
@@ -1227,10 +1261,10 @@ def _input_field_token(fp: ET.Element) -> str:
     if tgt is not None:
         var = tgt.find("Variable")
         if var is not None:
-            fld = var.get("value", "")
+            fld = _target_token(var)
         else:
             fr = tgt.find("FieldReference")
-            fld = _field_ref_token(fr) if fr is not None else ""
+            fld = _target_token(fr) if fr is not None else ""
         if fld:
             parts.append("field=" + fld)
     lbl = None

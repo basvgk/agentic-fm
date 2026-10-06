@@ -490,6 +490,24 @@ def _child_text(parent: ET.Element | None, name: str) -> str:
     return c.text if (c is not None and c.text) else ""
 
 
+def _with_repetition_suffix(ref: str, fld: ET.Element) -> str:
+    """Append FileMaker's ``[N]`` repetition subscript to a field/variable ref.
+
+    FileMaker serializes a repetition as ``repetition="N"`` on the ``<Field>``
+    (``<Field table="T" id="1" repetition="2" name="F"/>``, or
+    ``<Field repetition="2">$var</Field>``) and writes the attribute only for
+    N > 1; its Script Workspace line shows ``T::F[2]`` / ``$var[2]``. Repetition 1
+    is the default and carries no subscript.
+    """
+    try:
+        rep = int(fld.get("repetition", "0") or "0")
+    except ValueError:
+        rep = 0
+    if ref and rep > 1:
+        return ref + "[" + str(rep) + "]"
+    return ref
+
+
 def _child_attr(parent: ET.Element | None, name: str, attr: str) -> str:
     if parent is None:
         return ""
@@ -710,7 +728,8 @@ def _render_group_element(node: ET.Element, fields: list[dict]) -> str:
                 table = fld.get("table", "")
                 name = fld.get("name", "")
                 if name:
-                    parts.append(key + "=" + (name if not table else table + "::" + name))
+                    parts.append(key + "=" + _with_repetition_suffix(
+                        name if not table else table + "::" + name, fld))
         elif kind == "script":
             sc = node.find(f.get("element", ""))
             if sc is not None:
@@ -722,13 +741,15 @@ def _render_group_element(node: ET.Element, fields: list[dict]) -> str:
             if fld is not None:
                 text = (fld.text or "").strip()
                 if text:
-                    parts.append(key + "=" + _group_quote_value(text))
+                    parts.append(key + "=" + _group_quote_value(_with_repetition_suffix(text, fld)))
                 else:
                     table = fld.get("table", "")
                     name = fld.get("name", "")
                     if name:
                         ref = name if not table else table + "::" + name
-                        parts.append(key + "=" + _group_quote_value(ref))
+                        parts.append(
+                            key + "=" + _group_quote_value(_with_repetition_suffix(ref, fld))
+                        )
         elif kind == "group":
             sub = node.find(f.get("element", ""))
             if sub is not None:
@@ -1034,6 +1055,7 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
                 val = name if not table else table + "::" + name
             elif text:
                 val = text
+            val = _with_repetition_suffix(val, field_node)
             if val and label:
                 val = label + ": " + val
     elif ptype == "flagElement":
@@ -1057,7 +1079,7 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
         if field_node is not None:
             table = field_node.get("table", "")
             name = field_node.get("name", "")
-            val = name if not table else table + "::" + name
+            val = _with_repetition_suffix(name if not table else table + "::" + name, field_node)
             # hr_labeled: label the field where FileMaker does (inverse of bare).
             if val and param.hr_labeled and label:
                 val = label + ": " + val

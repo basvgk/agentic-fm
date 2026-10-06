@@ -117,3 +117,100 @@ describe('cross-file Perform Script (fromFileElement grammar)', () => {
     expect(out).toContain('<Script ');
   });
 });
+
+// Field / variable repetitions: `[N]` in HR, `repetition="N"` in XML. FileMaker
+// writes the attribute after `id` and before `name` on a field reference and on
+// the bare <Field> of a variable, only for N > 1 (repetition 1 is no attribute
+// and no subscript). Holds for step-level field / fieldOrVariable params and for
+// the same kinds inside group entries (Show Custom Dialog inputs, Insert from
+// Device's scan source). Shapes captured from FileMaker Pro 26.0.2; mirrors the
+// Python agent/scripts/test_catalog_emit.py cases of the same name.
+describe('field / variable repetitions', () => {
+  const scd = (field: string) =>
+    '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="87" name="Show Custom Dialog">'
+    + '<Title><Calculation><![CDATA["T"]]></Calculation></Title>'
+    + '<Message><Calculation><![CDATA[""]]></Calculation></Message>'
+    + '<Buttons><Button CommitState="True"><Calculation><![CDATA["OK"]]></Calculation></Button>'
+    + '<Button CommitState="False"><Calculation><![CDATA["Cancel"]]></Calculation></Button>'
+    + '<Button CommitState="False"></Button></Buttons><InputFields>'
+    + `<InputField UsePasswordCharacter="False">${field}</InputField>`
+    + '<InputField UsePasswordCharacter="False"><Field table="" id="0" name=""></Field></InputField>'
+    + '<InputField UsePasswordCharacter="False"><Field table="" id="0" name=""></Field></InputField>'
+    + '</InputFields></Step></fmxmlsnippet>';
+
+  it('renders a group entry repetition as a subscript', () => {
+    expect(xmlToHr(scd('<Field repetition="2">$rep</Field>')).trim()).toBe(
+      'Show Custom Dialog [ "T" ; "" ; $rep[2] ]',
+    );
+    expect(
+      xmlToHr(scd('<Field table="Invoices" id="31" repetition="2" name="Description"></Field>')).trim(),
+    ).toBe('Show Custom Dialog [ "T" ; "" ; Invoices::Description[2] ]');
+    expect(
+      xmlToHr(
+        '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="161" name="Insert from Device">'
+        + '<InsertFrom value="Barcode"/><Text/><Field>$out</Field><DeviceOptions>'
+        + '<ScanFrom type="Field"><Field table="Invoices" id="31" repetition="2" name="Description"></Field>'
+        + '</ScanFrom><Barcodes types="4194303"/></DeviceOptions></Step></fmxmlsnippet>',
+      ),
+    ).toContain('source=Invoices::Description[2]');
+  });
+
+  it('renders a step-level repetition as a subscript', () => {
+    expect(
+      xmlToHr(
+        '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="76" name="Set Field">'
+        + '<Calculation><![CDATA[1]]></Calculation>'
+        + '<Field table="Invoices" id="31" repetition="2" name="Description"/></Step></fmxmlsnippet>',
+      ).trim(),
+    ).toBe('Set Field [ Invoices::Description[2] ; 1 ]');
+    expect(
+      xmlToHr(
+        '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="61" name="Insert Text">'
+        + '<SelectAll state="True"/><Text>x</Text><Field repetition="2">$rep</Field></Step></fmxmlsnippet>',
+      ),
+    ).toContain('Target: $rep[2]');
+  });
+
+  it('gives repetition 1 no subscript', () => {
+    expect(xmlToHr(scd('<Field repetition="1">$rep</Field>')).trim()).toBe(
+      'Show Custom Dialog [ "T" ; "" ; $rep ]',
+    );
+  });
+
+  it('emits a group entry subscript as the repetition attribute', () => {
+    expect(hrToXml('Show Custom Dialog [ "T" ; "" ; $rep[2] ]').xml).toContain(
+      '<Field repetition="2">$rep</Field>',
+    );
+    expect(hrToXml('Show Custom Dialog [ "T" ; "" ; Invoices::Description[2] ]').xml).toContain(
+      '<Field table="Invoices" id="0" repetition="2" name="Description"/>',
+    );
+    expect(
+      hrToXml(
+        'Insert from Device [ Type: Barcode ; Target: $out ; Device: '
+        + 'ScanFrom=(type=Field, source=Invoices::Description[2]), Barcodes=(types=4194303) ]',
+      ).xml,
+    ).toContain('<Field table="Invoices" id="0" repetition="2" name="Description"/>');
+  });
+
+  it('emits a step-level subscript as the repetition attribute', () => {
+    expect(hrToXml('Set Field [ Invoices::Description[2] ; 1 ]').xml).toContain(
+      '<Field table="Invoices" id="0" repetition="2" name="Description"/>',
+    );
+    expect(hrToXml('Insert Text [ Select ; Target: $rep[2] ; "x" ]').xml).toContain(
+      '<Field repetition="2">$rep</Field>',
+    );
+    expect(
+      hrToXml('Insert Calculated Result [ Select ; Target: Invoices::Description[2] ; 1 ]').xml,
+    ).toContain('<Field table="Invoices" id="0" repetition="2" name="Description"/>');
+  });
+
+  it('treats [1] as the default and a non-literal subscript as no repetition', () => {
+    expect(hrToXml('Set Field [ Invoices::Description[1] ; 1 ]').xml).toContain(
+      '<Field table="Invoices" id="0" name="Description"/>',
+    );
+    expect(hrToXml('Show Custom Dialog [ "T" ; "" ; $rep[1] ]').xml).toContain('<Field>$rep</Field>');
+    for (const ref of ['$rep[0]', '$rep[]', '$rep[$i]']) {
+      expect(hrToXml(`Insert Text [ Select ; Target: ${ref} ; "x" ]`).xml).not.toContain('repetition=');
+    }
+  });
+});

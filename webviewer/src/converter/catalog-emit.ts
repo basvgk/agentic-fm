@@ -196,6 +196,46 @@ function isVariable(s: string): boolean {
 }
 
 /**
+ * Split a trailing `[N]` repetition subscript off a field/variable ref.
+ *
+ * `Invoices::Notes[2]` -> [`Invoices::Notes`, 2]; `$rep[3]` -> [`$rep`, 3].
+ * Only a positive integer subscript at the very end counts, with something
+ * before it; anything else (no subscript, `[]`, `[0]`, `[$i]`) returns the ref
+ * unchanged and 0. FileMaker repetitions are 1-based.
+ */
+function parseFieldRepetition(ref: string): [string, number] {
+  if (ref.length < 3 || ref[ref.length - 1] !== ']') return [ref, 0];
+  const open = ref.lastIndexOf('[');
+  if (open <= 0 || open + 1 === ref.length - 1) return [ref, 0];
+  const digits = ref.slice(open + 1, -1);
+  if (!/^[0-9]{1,7}$/.test(digits)) return [ref, 0];
+  const rep = parseInt(digits, 10);
+  if (rep < 1 || rep > 1000000) return [ref, 0];
+  return [ref.slice(0, open), rep];
+}
+
+/** FileMaker's `repetition="N"` attribute, written only for N > 1. */
+function repetitionAttr(rep: number): string {
+  return rep > 1 ? ` repetition="${rep}"` : '';
+}
+
+/**
+ * `<Field table id [repetition] name/>` for a `Table::Field[N]` ref, in
+ * FileMaker's attribute order. The subscript is stripped before name resolution.
+ */
+function fieldRefXml(resolver: IdResolver, ref: string, extraAttrs = ''): string {
+  const [bare, rep] = parseFieldRepetition(trim(ref));
+  const rf = resolver.resolveField(bare);
+  return `<Field${extraAttrs} table="${escXml(rf.table)}" id="${rf.fieldId}"${repetitionAttr(rep)} name="${escXml(rf.fieldName)}"/>`;
+}
+
+/** `<Field [repetition]>$var</Field>` for a `$var[N]` target. */
+function variableFieldXml(v: string, extraAttrs = ''): string {
+  const [bare, rep] = parseFieldRepetition(trim(v));
+  return `<Field${extraAttrs}${repetitionAttr(rep)}>${escXml(bare)}</Field>`;
+}
+
+/**
  * True when `s`, after trimming and stripping one layer of matching quotes
  * (straight "…" or smart “…”), is a single variable token; returns the bare
  * variable via the tuple's second element.
@@ -761,16 +801,14 @@ function emitFieldOrVariable(
     ? ` ${typeAttr}="${escXml(rawStr(param.raw, 'typeValue'))}"`
     : '';
   if (isVariable(hrValue)) {
-    const trimmed = trim(hrValue);
     let out = '';
     if (!precededByTextElement) out += '    <Text/>\n';
-    out += `    <Field${typeAttrStr}>${escXml(trimmed)}</Field>`;
+    out += '    ' + variableFieldXml(hrValue, typeAttrStr);
     return out;
   }
   let out = '';
   if (rawBool(param.raw, 'textMarker') && !precededByTextElement) out += '    <Text/>\n';
-  const resolved = resolver.resolveField(hrValue);
-  out += `    <Field${typeAttrStr} table="${escXml(resolved.table)}" id="${resolved.fieldId}" name="${escXml(resolved.fieldName)}"/>`;
+  out += '    ' + fieldRefXml(resolver, hrValue, typeAttrStr);
   return out;
 }
 
@@ -813,10 +851,7 @@ function emitGroupElement(
         }
       }
     } else if (kind === 'field') {
-      if (present) {
-        const rf = resolver.resolveField(it!);
-        children += `${ci}<Field table="${escXml(rf.table)}" id="${rf.fieldId}" name="${escXml(rf.fieldName)}"/>\n`;
-      }
+      if (present) children += `${ci}${fieldRefXml(resolver, it!)}\n`;
     } else if (kind === 'script') {
       if (present) {
         const rs = resolver.resolveScript(groupUnquoteValue(it!));
@@ -825,10 +860,9 @@ function emitGroupElement(
     } else if (kind === 'fieldOrVariable') {
       const v = present ? groupUnquoteValue(it!) : '';
       if (v && isVariable(v)) {
-        children += `${ci}<Field>${escXml(trim(v))}</Field>\n`;
+        children += `${ci}${variableFieldXml(v)}\n`;
       } else if (v) {
-        const rf = resolver.resolveField(v);
-        children += `${ci}<Field table="${escXml(rf.table)}" id="${rf.fieldId}" name="${escXml(rf.fieldName)}"/>\n`;
+        children += `${ci}${fieldRefXml(resolver, v)}\n`;
       } else {
         children += `${ci}<Field table="" id="0" name=""/>\n`;
       }
@@ -1200,10 +1234,7 @@ export function convertStepWithCatalog(
     } else if (param.type === 'flagElement') {
       if (hrValue !== '') piece = `    <${param.xmlElement}/>`;
     } else if (param.type === 'field') {
-      if (!param.omitWhenEmpty || trim(hrValue)) {
-        const resolved = resolver.resolveField(hrValue);
-        piece = `    <Field table="${escXml(resolved.table)}" id="${resolved.fieldId}" name="${escXml(resolved.fieldName)}"/>`;
-      }
+      if (!param.omitWhenEmpty || trim(hrValue)) piece = '    ' + fieldRefXml(resolver, hrValue);
     } else if (param.type === 'tableRef') {
       if (!trim(hrValue)) {
         // A present-driven, gated table (Fine-Tune Model's training <Table>,
