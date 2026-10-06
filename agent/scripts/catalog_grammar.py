@@ -29,6 +29,8 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Any, Union
 
+from calc_literal import CALC_QUOTES, is_calc_escape, skip_calc_literal
+
 # ---------------------------------------------------------------------------
 # Parameter type vocabulary
 # ---------------------------------------------------------------------------
@@ -570,19 +572,53 @@ def _join_with_comma(items: list[str]) -> str:
     return ", ".join(items)
 
 
+# --- group-value quoting (attr / text kinds) --------------------------------
+# A group body (``k1=v1, k2=v2`` / ``entry | entry``) is split back by splitters
+# that step over calculation text literals (``calc_literal``), so a quoted value is
+# written as one: an embedded ``"`` is doubled, an embedded ``“``/``”`` (itself a
+# delimiter) and any backslash that would otherwise escape the next character, or
+# the closing quote, are backslash-escaped. A value needs quoting when it carries
+# a top-level comma, any of the three delimiters, or leading/trailing whitespace
+# (Execute SQL's tab ``FieldDelimiter``). ``calc`` children are never quoted: a
+# well-formed calculation is already literal/paren-nested.
 def _needs_group_quote(v: str) -> bool:
     if not v:
         return False
     ws = " \t\n\r"
     if v[0] in ws or v[-1] in ws:
         return True
-    return "," in v or '"' in v
+    return "," in v or any(c in CALC_QUOTES for c in v)
 
 
 def _group_quote_value(v: str) -> str:
     if not _needs_group_quote(v):
         return v
-    return '"' + v.replace('"', '""') + '"'
+    out = ['"']
+    last = len(v) - 1
+    for i, c in enumerate(v):
+        if c == '"':
+            out.append('""')
+        elif c in CALC_QUOTES:  # “ or ”
+            out.append("\\" + c)
+        elif c == "\\" and (i == last or is_calc_escape(v, i)):
+            out.append("\\\\")
+        else:
+            out.append(c)
+    out.append('"')
+    return "".join(out)
+
+
+def _group_unquote_value(v: str) -> str:
+    """Read back a ``_group_quote_value`` token: one well-formed calculation literal
+    spanning the whole token is decoded (doubled delimiters and backslash escapes
+    resolved); any other ``"``-wrapped token keeps the historical reading (strip the
+    outer quotes, undouble ``""``); anything else is returned as is."""
+    if len(v) < 2 or v[0] != '"' or v[-1] != '"':
+        return v
+    end, closed, decoded = skip_calc_literal(v, 0)
+    if closed and end == len(v):
+        return decoded
+    return v[1:-1].replace('""', '"')
 
 
 # --- discriminator / visibility predicates (mirror the reference) -----------
@@ -768,12 +804,6 @@ def _render_repeat_group(container: ET.Element, param: StepParam) -> str:
     return " | ".join(entries)
 
 
-def _group_unquote(v: str) -> str:
-    if len(v) < 2 or v[0] != '"' or v[-1] != '"':
-        return v
-    return v[1:-1].replace('""', '"')
-
-
 def _render_repeat_group_positional(container: ET.Element, param: StepParam) -> str | None:
     """``hrPositionalKey``: FileMaker's own form for a repeatGroup -- one BARE
     token per non-empty entry (that entry's positional field), joined ' ; '
@@ -801,7 +831,7 @@ def _render_repeat_group_positional(container: ET.Element, param: StepParam) -> 
                 return None
         body = _render_group_element(e, [pos])
         prefix = key + "="
-        v = _group_unquote(body[len(prefix):]) if body.startswith(prefix) else ""
+        v = _group_unquote_value(body[len(prefix):]) if body.startswith(prefix) else ""
         if not v.strip():
             saw_empty = True
             continue

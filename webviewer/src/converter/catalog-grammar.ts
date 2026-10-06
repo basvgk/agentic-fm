@@ -22,6 +22,7 @@
  */
 
 import type { StepCatalogEntry } from './catalog-types';
+import { isCalcQuote, isCalcEscape, skipCalcLiteral } from './calc-literal';
 
 // ---------------------------------------------------------------------------
 // DOM helpers — ElementTree `.find` / `.findall` / `.text` semantics over a
@@ -138,16 +139,48 @@ function joinWithComma(items: string[]): string {
   return items.join(', ');
 }
 
+// Group-value quoting (attr / text kinds). A group body (`k1=v1, k2=v2` /
+// `entry | entry`) is split back by splitters that step over calculation text
+// literals (calc-literal.ts), so a quoted value is written as one: an embedded
+// `"` is doubled, an embedded `“`/`”` (itself a delimiter) and any backslash that
+// would otherwise escape the next character, or the closing quote, are
+// backslash-escaped. A value needs quoting when it carries a top-level comma, any
+// of the three delimiters, or leading/trailing whitespace (Execute SQL's tab
+// `FieldDelimiter`). `calc` children are never quoted: a well-formed calculation
+// is already literal/paren-nested.
 function needsGroupQuote(v: string): boolean {
   if (!v) return false;
   const ws = ' \t\n\r';
   if (ws.includes(v[0]) || ws.includes(v[v.length - 1])) return true;
-  return v.includes(',') || v.includes('"');
+  if (v.includes(',')) return true;
+  for (const c of v) if (isCalcQuote(c)) return true;
+  return false;
 }
 
-function groupQuoteValue(v: string): string {
+export function groupQuoteValue(v: string): string {
   if (!needsGroupQuote(v)) return v;
-  return '"' + v.replace(/"/g, '""') + '"';
+  let out = '"';
+  for (let i = 0; i < v.length; i++) {
+    const c = v[i];
+    if (c === '"') out += '""';
+    else if (isCalcQuote(c)) out += '\\' + c; // “ or ”
+    else if (c === '\\' && (i === v.length - 1 || isCalcEscape(v, i))) out += '\\\\';
+    else out += c;
+  }
+  return out + '"';
+}
+
+/**
+ * Read back a groupQuoteValue token: one well-formed calculation literal spanning
+ * the whole token is decoded (doubled delimiters and backslash escapes resolved);
+ * any other `"`-wrapped token keeps the historical reading (strip the outer
+ * quotes, undouble `""`); anything else is returned as is.
+ */
+export function groupUnquoteValue(v: string): string {
+  if (v.length < 2 || v[0] !== '"' || v[v.length - 1] !== '"') return v;
+  const lit = skipCalcLiteral(v, 0);
+  if (lit.closed && lit.end === v.length) return lit.decoded;
+  return v.slice(1, -1).replace(/""/g, '"');
 }
 
 // ---------------------------------------------------------------------------
@@ -545,11 +578,6 @@ function renderRepeatGroup(container: Element, param: GrammarParam): string {
   return entries.join(' | ');
 }
 
-function groupUnquote(v: string): string {
-  if (v.length < 2 || v[0] !== '"' || v[v.length - 1] !== '"') return v;
-  return v.slice(1, -1).replace(/""/g, '"');
-}
-
 /**
  * `hrPositionalKey`: FileMaker's own form for a repeatGroup -- one BARE token per
  * non-empty entry (that entry's positional field), joined ' ; ' (Show Custom
@@ -578,7 +606,7 @@ function renderRepeatGroupPositional(container: Element, param: GrammarParam): s
     }
     const body = renderGroupElement(e, [pos]);
     const prefix = key + '=';
-    const v = body.startsWith(prefix) ? groupUnquote(body.slice(prefix.length)) : '';
+    const v = body.startsWith(prefix) ? groupUnquoteValue(body.slice(prefix.length)) : '';
     if (!v.trim()) { sawEmpty = true; continue; }
     if (sawEmpty) return null;
     tokens.push(v);

@@ -47,10 +47,12 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from calc_literal import calc_literal_span_at
 from catalog_grammar import (
     CatalogEntry,
     StepParam,
     _group_quote_value,
+    _group_unquote_value,
     candidate_hr_labels,
     governing_discriminator_for,
     hr_param_order,
@@ -160,32 +162,27 @@ def cdata(s: str) -> str:
 
 
 def _split_top_level_commas(s: str) -> list[str]:
-    """Split on top-level commas, respecting paren/bracket/brace depth + quotes."""
+    """Split on top-level commas, respecting paren/bracket/brace depth + text literals.
+
+    Used by the parametersList grammar and the attrGroup/repeatGroup body parser,
+    whose quoted values are written as calculation literals (``_group_quote_value``).
+    A literal is stepped over whole with the calculation literal grammar
+    (``calc_literal``), so a comma inside ``"a\\", b"`` or ``“c, d”`` is content.
+    """
     out: list[str] = []
     if not s:
         return out
     cur = ""
     paren = bracket = brace = 0
-    in_quote = False
     i = 0
     n = len(s)
     while i < n:
+        lit = calc_literal_span_at(s, i)
+        if lit:
+            cur += s[i : i + lit]
+            i += lit
+            continue
         c = s[i]
-        if in_quote:
-            cur += c
-            if c == '"':
-                if i + 1 < n and s[i + 1] == '"':
-                    cur += '"'
-                    i += 1
-                else:
-                    in_quote = False
-            i += 1
-            continue
-        if c == '"':
-            in_quote = True
-            cur += c
-            i += 1
-            continue
         if c == "(":
             paren += 1
         elif c == ")":
@@ -215,8 +212,15 @@ def _split_top_level_commas(s: str) -> list[str]:
     return out
 
 
-def _split_on_delim(s: str, delim: str) -> list[str]:
-    """Split ``s`` on every top-level occurrence of multi-char ``delim`` (quote-aware)."""
+def _split_on_delim(s: str, delim: str, calc_literals: bool) -> list[str]:
+    """Split ``s`` on every top-level occurrence of multi-char ``delim``.
+
+    A delimiter inside a quoted region is kept. With ``calc_literals`` the region is a
+    calculation text literal (the repeatGroup entries, whose values are calculations
+    or ``_group_quote_value``-quoted text); without it a straight ``"`` toggles a
+    find-request phrase (the findRequests rows and criteria: find text is not a
+    calculation, and ``"`` is FileMaker's match-phrase operator there).
+    """
     out: list[str] = []
     if not delim:
         out.append(s)
@@ -227,7 +231,12 @@ def _split_on_delim(s: str, delim: str) -> list[str]:
     dn = len(delim)
     n = len(s)
     while i + dn <= n:
-        if s[i] == '"':
+        if calc_literals:
+            lit = calc_literal_span_at(s, i)
+            if lit:
+                i += lit
+                continue
+        elif s[i] == '"':
             in_quote = not in_quote
             i += 1
             continue
@@ -246,32 +255,24 @@ def _split_on_delim(s: str, delim: str) -> list[str]:
 
 
 def _split_list_entries(s: str) -> list[str]:
-    """Split a fieldList body on top-level commas, PRESERVING empty entries."""
+    """Split a fieldList body on top-level commas, PRESERVING empty entries.
+
+    Text literals are stepped over whole, as in ``_split_top_level_commas``.
+    """
     out: list[str] = []
     if not _trim(s):
         return out
     cur = ""
     paren = bracket = brace = 0
-    in_quote = False
     i = 0
     n = len(s)
     while i < n:
+        lit = calc_literal_span_at(s, i)
+        if lit:
+            cur += s[i : i + lit]
+            i += lit
+            continue
         c = s[i]
-        if in_quote:
-            cur += c
-            if c == '"':
-                if i + 1 < n and s[i + 1] == '"':
-                    cur += '"'
-                    i += 1
-                else:
-                    in_quote = False
-            i += 1
-            continue
-        if c == '"':
-            in_quote = True
-            cur += c
-            i += 1
-            continue
         if c == "(":
             paren += 1
         elif c == ")":
@@ -392,22 +393,6 @@ def _is_quoted_lone_variable(v: str) -> tuple[bool, str]:
     if any(ch in " \t\"" for ch in t):
         return False, ""
     return True, t
-
-
-def _group_unquote_value(v: str) -> str:
-    if len(v) < 2 or v[0] != '"' or v[-1] != '"':
-        return v
-    out = ""
-    last = len(v) - 1
-    i = 1
-    while i < last:
-        if v[i] == '"' and i + 1 < last and v[i + 1] == '"':
-            out += '"'
-            i += 2
-        else:
-            out += v[i]
-            i += 1
-    return out
 
 
 def _parse_group_kv(body: str) -> dict[str, str]:
@@ -879,7 +864,7 @@ def _emit_find_requests(hr_value: str, resolver: IdResolver) -> str:
     v = _trim(hr_value)
     if not v:
         return ""
-    rows = _split_on_delim(v, " | ")
+    rows = _split_on_delim(v, " | ", calc_literals=False)
     if not rows:
         return ""
     out = "    <Query>\n"
@@ -892,7 +877,7 @@ def _emit_find_requests(hr_value: str, resolver: IdResolver) -> str:
         elif _starts_with_ci(r, "Include "):
             r = _trim(r[8:])
         out += '      <RequestRow operation="' + op + '">\n'
-        crits = _split_on_delim(r, " & ")
+        crits = _split_on_delim(r, " & ", calc_literals=False)
         if not crits:
             crits = [""]
         for crit in crits:
@@ -1042,7 +1027,7 @@ def _emit_repeat_group(param: StepParam, hr_value: str, resolver: IdResolver) ->
         hr_value = _raw_str(param.raw, "hrDefault")
     if not _trim(hr_value):
         return ""
-    entries = _split_on_delim(hr_value, " | ")
+    entries = _split_on_delim(hr_value, " | ", calc_literals=True)
     cap = int(param.raw.get("repeatCount", 0) or 0)
     while cap > 0 and len(entries) < cap:
         entries.append("")

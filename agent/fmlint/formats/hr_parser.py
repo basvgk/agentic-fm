@@ -7,7 +7,13 @@ Parses HR format lines like:
   If [ condition ]
 """
 
+from ..literals import is_double_delimiter
 from ..types import ParsedHRLine
+
+# Every scanner below tracks calculation text literals with the shared grammar in
+# ``..literals``: ``"``, ``“`` and ``”`` are one interchangeable delimiter and a
+# delimiter after an odd backslash run is content, so a ``;``, ``[`` or ``]``
+# inside ``"a\" ; b"`` or ``“c ; d”`` is literal text, not structure.
 
 
 def parse_hr(text: str) -> list:
@@ -38,8 +44,8 @@ def _merge_multiline(lines: list) -> list:
         else:
             accumulator += "\n" + line
 
-        for ch in line:
-            if ch == '"':
+        for j, ch in enumerate(line):
+            if is_double_delimiter(line, j):
                 in_quote = not in_quote
                 continue
             if in_quote:
@@ -109,10 +115,10 @@ def _parse_line(raw: str, line_number: int) -> ParsedHRLine:
 
 
 def _find_top_level_bracket(text: str) -> int:
-    """Find the first top-level '[' not inside quotes."""
+    """Find the first top-level '[' not inside a text literal."""
     in_quote = False
     for i, ch in enumerate(text):
-        if ch == '"':
+        if is_double_delimiter(text, i):
             in_quote = not in_quote
         if not in_quote and ch == "[":
             return i
@@ -125,7 +131,7 @@ def _find_matching_bracket(text: str, open_idx: int) -> int:
     in_quote = False
     for i in range(open_idx, len(text)):
         ch = text[i]
-        if ch == '"':
+        if is_double_delimiter(text, i):
             in_quote = not in_quote
         if in_quote:
             continue
@@ -139,15 +145,15 @@ def _find_matching_bracket(text: str, open_idx: int) -> int:
 
 
 def _split_params(content: str) -> list:
-    """Split bracket content by semicolons, respecting quotes and nesting."""
+    """Split bracket content by semicolons, respecting text literals and nesting."""
     params = []
     current = ""
     in_quote = False
     paren_depth = 0
     bracket_depth = 0
 
-    for ch in content:
-        if ch == '"':
+    for i, ch in enumerate(content):
+        if is_double_delimiter(content, i):
             in_quote = not in_quote
             current += ch
             continue

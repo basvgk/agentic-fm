@@ -7,7 +7,14 @@
  *   Set Variable [ $name ; expression ]
  *   If [ condition ]
  *   Go to Layout [ "LayoutName" ]
+ *
+ * Every scanner below tracks calculation text literals with the shared grammar
+ * in calc-literal.ts: `"`, `“` and `”` are one interchangeable delimiter and a
+ * delimiter after an odd backslash run is content, so a `;`, `[` or `]` inside
+ * `"a\" ; b"` or `“c ; d”` is literal text, not structure.
  */
+
+import { isUnescapedCalcQuote } from './calc-literal';
 
 export interface ParsedLine {
   /** Original line text */
@@ -137,7 +144,7 @@ function mergeMultilineStatements(lines: string[]): MergedLine[] {
     // Scan this line for bracket depth changes
     for (let j = 0; j < line.length; j++) {
       const ch = line[j];
-      if (ch === '"') {
+      if (isUnescapedCalcQuote(line, j)) {
         inQuote = !inQuote;
         continue;
       }
@@ -165,12 +172,12 @@ function mergeMultilineStatements(lines: string[]): MergedLine[] {
 
 /**
  * Find the first top-level '[' that starts the parameter list.
- * Skips brackets inside quotes.
+ * Skips brackets inside text literals.
  */
 function findTopLevelBracket(text: string): number {
   let inQuote = false;
   for (let i = 0; i < text.length; i++) {
-    if (text[i] === '"') inQuote = !inQuote;
+    if (isUnescapedCalcQuote(text, i)) inQuote = !inQuote;
     if (!inQuote && text[i] === '[') return i;
   }
   return -1;
@@ -178,13 +185,13 @@ function findTopLevelBracket(text: string): number {
 
 /**
  * Find the matching closing ']' for an opening '['.
- * Handles nested brackets and quoted strings.
+ * Handles nested brackets and text literals.
  */
 function findMatchingBracket(text: string, openIdx: number): number {
   let depth = 0;
   let inQuote = false;
   for (let i = openIdx; i < text.length; i++) {
-    if (text[i] === '"') inQuote = !inQuote;
+    if (isUnescapedCalcQuote(text, i)) inQuote = !inQuote;
     if (inQuote) continue;
     if (text[i] === '[') depth++;
     if (text[i] === ']') {
@@ -197,7 +204,7 @@ function findMatchingBracket(text: string, openIdx: number): number {
 
 /**
  * Split bracket content by semicolons, respecting:
- * - Quoted strings
+ * - Text literals (calc-literal.ts)
  * - Nested parentheses (for function calls)
  * - Nested brackets
  */
@@ -211,7 +218,7 @@ function splitParams(content: string): string[] {
   for (let i = 0; i < content.length; i++) {
     const ch = content[i];
 
-    if (ch === '"') {
+    if (isUnescapedCalcQuote(content, i)) {
       inQuote = !inQuote;
       current += ch;
       continue;

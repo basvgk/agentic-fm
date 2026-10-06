@@ -23,6 +23,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { hrToXml, loadCatalog } from '@/converter/hr-to-xml';
 import { xmlToHr } from '@/converter/xml-to-hr';
+import { parseLine } from '@/converter/parser';
 import type { StepCatalogEntry } from '@/converter/catalog-types';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -211,6 +212,107 @@ describe('field / variable repetitions', () => {
     expect(hrToXml('Show Custom Dialog [ "T" ; "" ; $rep[1] ]').xml).toContain('<Field>$rep</Field>');
     for (const ref of ['$rep[0]', '$rep[]', '$rep[$i]']) {
       expect(hrToXml(`Insert Text [ Select ; Target: ${ref} ; "x" ]`).xml).not.toContain('repetition=');
+    }
+  });
+});
+
+// The parametersList / attrGroup / repeatGroup / fieldList splitters, the HR line
+// parser and the group-value quoting all read a text literal with the
+// calculation literal grammar (calc-literal.ts): ", “ and ” are interchangeable
+// delimiters, a backslash escapes any of them, and a doubled delimiter is
+// content. Measured in FileMaker Pro 26.0.2, which also stores a pasted doubled
+// quote as \" and a pasted curly-delimited literal with straight quotes, so
+// FileMaker's own copy-back is full of \" that a doubled-quote-only splitter cuts
+// in half. Mirrors agent/scripts/test_catalog_emit.py.
+describe('calculation text literals inside split values', () => {
+  const PJS = 'Perform JavaScript in Web Viewer [ Object Name: "wv" ; Function Name: "f" ; Parameters: ';
+  const snip = (step: string) => `<fmxmlsnippet type="FMObjectList">${step}</fmxmlsnippet>`;
+
+  it('splits Parameters honouring the backslash escape and curly delimiters', () => {
+    const out = hrToXml(PJS + '"a\\", b", “c, d”, "e" ]').xml;
+    expect(out).toContain('<Parameters Count="3">');
+    expect(out).toContain('CDATA["a\\", b"]');
+    expect(out).toContain('CDATA[“c, d”]');
+    expect(out).toContain('CDATA["e"]');
+  });
+
+  it('splits Parameters by the literal grammar table', () => {
+    const cases: [string, number][] = [
+      ['"a""b, c"', 1], // doubled escape
+      ['"a\\\\", b', 2], // \\ then a closing quote
+      ['"x“ & Upper ( "y, z" ) & ”z"', 1], // mixed families pair freely
+      ['"a\\nb, c", $d', 2], // \ before n is content
+      ['‘a, b’', 2], // curly single quotes are not delimiters
+    ];
+    for (const [params, count] of cases) {
+      expect(hrToXml(PJS + params + ' ]').xml, params).toContain(`<Parameters Count="${count}">`);
+    }
+  });
+
+  it('keeps a ; or ] inside a literal in its param', () => {
+    const out = hrToXml('Show Custom Dialog [ "T\\" ; x ] y" ; “M ; ] z” ]').xml;
+    expect(out).toContain('<Calculation><![CDATA["T\\" ; x ] y"]]>');
+    expect(out).toContain('<Calculation><![CDATA[“M ; ] z”]]>');
+    expect(parseLine('Show Custom Dialog [ "T\\" ; x ] y" ; “M ; ] z” ]', 1).params).toEqual([
+      '"T\\" ; x ] y"',
+      '“M ; ] z”',
+    ]);
+  });
+
+  it("round-trips FileMaker's copy-back with an escaped quote", () => {
+    const hr = xmlToHr(snip(
+      '<Step enable="True" id="175" name="Perform JavaScript in Web Viewer">'
+      + '<ObjectName><Calculation><![CDATA["wv"]]></Calculation></ObjectName>'
+      + '<FunctionName><Calculation><![CDATA["f"]]></Calculation></FunctionName>'
+      + '<Parameters Count="3">'
+      + '<P><Calculation><![CDATA["a\\", b"]]></Calculation></P>'
+      + '<P><Calculation><![CDATA["c, d"]]></Calculation></P>'
+      + '<P><Calculation><![CDATA["e"]]></Calculation></P>'
+      + '</Parameters></Step>'));
+    expect(hr).toContain('Parameters: "a\\", b", "c, d", "e"');
+    const back = hrToXml(hr).xml;
+    expect(back).toContain('<Parameters Count="3">');
+    expect(back).toContain('CDATA["a\\", b"]');
+    expect(back).toContain('CDATA["c, d"]');
+  });
+
+  it('round-trips button labels holding escaped and curly quotes', () => {
+    const hr = xmlToHr(snip(
+      '<Step enable="True" id="87" name="Show Custom Dialog">'
+      + '<Title><Calculation><![CDATA["T"]]></Calculation></Title>'
+      + '<Message><Calculation><![CDATA["M"]]></Calculation></Message>'
+      + '<Buttons><Button CommitState="True"><Calculation><![CDATA["O\\", K"]]></Calculation></Button>'
+      + '<Button CommitState="False"><Calculation><![CDATA[“x | y”]]></Calculation></Button>'
+      + '<Button CommitState="False"><Calculation><![CDATA["Z"]]></Calculation></Button></Buttons>'
+      + '</Step>'));
+    expect(hr).toContain(
+      'Buttons: commit=True, label="O\\", K" | commit=False, label=“x | y” | commit=False, label="Z"');
+    const back = hrToXml(hr).xml;
+    expect(back).toContain('<Button CommitState="True">');
+    expect(back).toContain('<![CDATA["O\\", K"]]>');
+    expect(back).toContain('<![CDATA[“x | y”]]>');
+    expect(back).toContain('<![CDATA["Z"]]>');
+  });
+
+  it('round-trips quoted group text holding curly quotes and backslashes', () => {
+    // Execute SQL's literal query is a quoted group text value: the encoder must
+    // write a calculation literal the splitters read back intact.
+    const sqls = [
+      "SELECT 'a “b', c FROM t", // curly + comma
+      'SELECT ”x“ FROM t', // curly alone forces quoting
+      "SELECT 'C:\\' , \"q\" FROM t", // backslash before a quote
+      "SELECT a FROM t WHERE p = 'C:\\dir\\', b", // ordinary backslashes + comma
+      "SELECT a, b FROM t WHERE x = 'end\\'", // trailing backslash
+    ];
+    for (const sql of sqls) {
+      const q = sql.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+      const hr = xmlToHr(snip(
+        '<Step enable="True" id="117" name="Execute SQL"><NoInteract state="True"/>'
+        + '<Profile QueryType="Query" flags="0" password="" UserName="" dsn="" FieldDelimiter=","'
+        + ' IsPredefined="-1" FieldNameRow="0" DataType="ODBC"><Query>' + q + '</Query></Profile></Step>'));
+      const back = hrToXml(hr).xml;
+      expect(back, sql).toContain(`<Query>${q}</Query>`);
+      expect(back, sql).toContain('FieldDelimiter=","');
     }
   });
 });

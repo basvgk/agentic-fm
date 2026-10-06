@@ -22,6 +22,7 @@ import json
 import os
 import re
 
+from calc_literal import is_unescaped_calc_quote
 from catalog_emit import (
     EmptyResolver,
     convert_step_with_catalog,
@@ -58,10 +59,12 @@ FM26_AI_SKIP = {
 
 
 # --- minimal HR line parser (port of parser.ts parseLine + splitParams) ---------
+# Text literals follow the calculation literal grammar (calc_literal.py), exactly as
+# parser.ts does: every unescaped ", “ or ” toggles in/out of a literal.
 def _find_top_level_bracket(text: str) -> int:
     in_quote = False
     for i, c in enumerate(text):
-        if c == '"':
+        if is_unescaped_calc_quote(text, i):
             in_quote = not in_quote
         if not in_quote and c == "[":
             return i
@@ -73,7 +76,7 @@ def _find_matching_bracket(text: str, open_idx: int) -> int:
     in_quote = False
     for i in range(open_idx, len(text)):
         c = text[i]
-        if c == '"':
+        if is_unescaped_calc_quote(text, i):
             in_quote = not in_quote
         if in_quote:
             continue
@@ -91,8 +94,8 @@ def _split_params(content: str) -> list[str]:
     cur = ""
     in_quote = False
     paren = bracket = 0
-    for c in content:
-        if c == '"':
+    for i, c in enumerate(content):
+        if is_unescaped_calc_quote(content, i):
             in_quote = not in_quote
             cur += c
             continue
@@ -487,3 +490,135 @@ def test_saxml_calculated_repetition_is_refused_not_dropped():
         + '<TableOccurrenceReference id="1" name="Invoices" UUID="T"/></FieldReference>'))
     with pytest.raises(UnsupportedSaXML):
         read_saxml_step(by_name["Set Field"], step)
+
+
+# ---------------------------------------------------------------------------
+# Calculation text literals inside split values.
+#
+# The parametersList / attrGroup / repeatGroup / fieldList splitters, the HR line
+# parser and the group-value quoting all read a text literal with the calculation
+# literal grammar (calc_literal.py): ", “ and ” are interchangeable delimiters, a
+# backslash escapes any of them, and a doubled delimiter is content. Measured in
+# FileMaker Pro 26.0.2, which also stores a pasted doubled quote as \" and a pasted
+# curly-delimited literal with straight quotes, so FileMaker's own copy-back is full
+# of \" that a doubled-quote-only splitter cuts in half.
+#
+# Mirrors webviewer/test/catalog-emit.engine.test.ts ("calculation text literals").
+# ---------------------------------------------------------------------------
+_LQ, _RQ = "\u201c", "\u201d"
+_PJS = 'Perform JavaScript in Web Viewer [ Object Name: "wv" ; Function Name: "f" ; Parameters: '
+
+
+def _xml_hr(step_xml: str) -> str:
+    from snippet_to_hr import snippet_to_hr
+
+    return "\n".join(snippet_to_hr('<fmxmlsnippet type="FMObjectList">' + step_xml + "</fmxmlsnippet>"))
+
+
+def test_parameters_split_honours_backslash_escape_and_curly_delimiters():
+    by_name, _ = _load()
+    out = _emit_hr(by_name, _PJS + '"a\\", b", ' + _LQ + "c, d" + _RQ + ', "e" ]')
+    assert '<Parameters Count="3">' in out
+    assert 'CDATA["a\\", b"]' in out
+    assert "CDATA[" + _LQ + "c, d" + _RQ + "]" in out
+    assert 'CDATA["e"]' in out
+
+
+def test_parameters_split_follows_the_literal_grammar_table():
+    by_name, _ = _load()
+    cases = [
+        ('"a""b, c"', 1),                                         # doubled escape
+        ('"a\\\\", b', 2),                                        # \\ then a closing quote
+        ('"x' + _LQ + ' & Upper ( "y, z" ) & ' + _RQ + 'z"', 1),  # mixed families pair
+        ('"a\\nb, c", $d', 2),                                    # \ before n is content
+        ("\u2018a, b\u2019", 2),                                  # ‘ ’ are not delimiters
+    ]
+    for params, count in cases:
+        out = _emit_hr(by_name, _PJS + params + " ]")
+        assert f'<Parameters Count="{count}">' in out, params
+
+
+def test_semicolon_and_bracket_inside_literals_stay_in_their_param():
+    by_name, _ = _load()
+    out = _emit_hr(by_name, 'Show Custom Dialog [ "T\\" ; x ] y" ; ' + _LQ + "M ; ] z" + _RQ + " ]")
+    assert '<Title>\n      <Calculation><![CDATA["T\\" ; x ] y"]]>' in out
+    assert "<Message>\n      <Calculation><![CDATA[" + _LQ + "M ; ] z" + _RQ + "]]>" in out
+
+
+def test_filemaker_copy_back_with_escaped_quote_round_trips():
+    by_name, _ = _load()
+    # FileMaker 26.0.2's own copy-back of the three-parameter step.
+    step = (
+        '<Step enable="True" id="175" name="Perform JavaScript in Web Viewer">'
+        '<ObjectName><Calculation><![CDATA["wv"]]></Calculation></ObjectName>'
+        '<FunctionName><Calculation><![CDATA["f"]]></Calculation></FunctionName>'
+        '<Parameters Count="3">'
+        '<P><Calculation><![CDATA["a\\", b"]]></Calculation></P>'
+        '<P><Calculation><![CDATA["c, d"]]></Calculation></P>'
+        '<P><Calculation><![CDATA["e"]]></Calculation></P>'
+        "</Parameters></Step>"
+    )
+    hr = _xml_hr(step)
+    assert 'Parameters: "a\\", b", "c, d", "e"' in hr
+    back = _emit_hr(by_name, hr)
+    assert '<Parameters Count="3">' in back
+    assert 'CDATA["a\\", b"]' in back
+    assert 'CDATA["c, d"]' in back
+
+
+def test_button_labels_with_escaped_and_curly_quotes_round_trip():
+    by_name, _ = _load()
+    step = (
+        '<Step enable="True" id="87" name="Show Custom Dialog">'
+        '<Title><Calculation><![CDATA["T"]]></Calculation></Title>'
+        '<Message><Calculation><![CDATA["M"]]></Calculation></Message>'
+        '<Buttons><Button CommitState="True"><Calculation><![CDATA["O\\", K"]]></Calculation></Button>'
+        '<Button CommitState="False"><Calculation><![CDATA[' + _LQ + "x | y" + _RQ + "]]></Calculation></Button>"
+        '<Button CommitState="False"><Calculation><![CDATA["Z"]]></Calculation></Button></Buttons>'
+        "</Step>"
+    )
+    hr = _xml_hr(step)
+    assert ('Buttons: commit=True, label="O\\", K" | commit=False, label=' + _LQ + "x | y" + _RQ
+            + ' | commit=False, label="Z"') in hr
+    back = _emit_hr(by_name, hr)
+    assert '<Button CommitState="True">' in back
+    assert '<![CDATA["O\\", K"]]>' in back
+    assert "<![CDATA[" + _LQ + "x | y" + _RQ + "]]>" in back
+    assert '<![CDATA["Z"]]>' in back
+
+
+def test_quoted_group_text_with_curly_quotes_and_backslashes_round_trips():
+    """Execute SQL's literal query is a quoted group text value: the encoder must
+    write a calculation literal the splitters read back intact."""
+    by_name, _ = _load()
+    sqls = [
+        "SELECT 'a " + _LQ + "b', c FROM t",       # curly + comma
+        "SELECT " + _RQ + "x" + _LQ + " FROM t",   # curly alone forces quoting
+        "SELECT 'C:\\' , \"q\" FROM t",           # backslash before a quote
+        "SELECT a FROM t WHERE p = 'C:\\dir\\', b",  # ordinary backslashes + comma
+        "SELECT a, b FROM t WHERE x = 'end\\'",   # trailing backslash
+    ]
+    for sql in sqls:
+        q = esc_xml(sql)
+        step = (
+            '<Step enable="True" id="117" name="Execute SQL"><NoInteract state="True"/>'
+            '<Profile QueryType="Query" flags="0" password="" UserName="" dsn="" FieldDelimiter=","'
+            ' IsPredefined="-1" FieldNameRow="0" DataType="ODBC"><Query>' + q + "</Query></Profile></Step>"
+        )
+        back = _emit_hr(by_name, _xml_hr(step))
+        assert "<Query>" + q + "</Query>" in back, sql
+        assert 'FieldDelimiter=","' in back, sql
+
+
+def test_hr_param_splitter_honours_the_literal_grammar():
+    """The FMLint HR parser splits step params with the same grammar."""
+    import sys
+
+    repo = os.path.dirname(os.path.dirname(_HERE))
+    if repo not in sys.path:
+        sys.path.insert(0, repo)
+    from agent.fmlint.formats.hr_parser import parse_hr
+
+    line = parse_hr('Show Custom Dialog [ "T\\" ; x ] y" ; ' + _LQ + "M ; ] z" + _RQ + " ]")[0]
+    assert line.step_name == "Show Custom Dialog"
+    assert line.params == ['"T\\" ; x ] y"', _LQ + "M ; ] z" + _RQ]

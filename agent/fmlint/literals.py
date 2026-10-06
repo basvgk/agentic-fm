@@ -40,6 +40,15 @@ def _is_escaped(text, idx):
     return run % 2 == 1
 
 
+def is_double_delimiter(text, idx):
+    """True when ``text[idx]`` is an unescaped ``"``, ``“`` or ``”``.
+
+    The three pair freely, so in a toggle-style scanner every such character flips
+    in or out of a double-quoted literal (a doubled ``""`` toggles twice).
+    """
+    return text[idx] in _DOUBLE_DELIMS and not _is_escaped(text, idx)
+
+
 def _scan(text):
     """Return (masked_text, final_state) for *text*."""
     out = []

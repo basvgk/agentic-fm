@@ -20,6 +20,7 @@
 import type { ParsedLine } from './parser';
 import type { IdResolver } from './id-resolver';
 import { cdata, escXml } from './step-registry';
+import { calcLiteralSpanAt } from './calc-literal';
 import {
   type GrammarEntry,
   type GrammarParam,
@@ -31,6 +32,8 @@ import {
   candidateHrLabels,
   hrParamOrder,
   rendersBareInHr,
+  groupQuoteValue,
+  groupUnquoteValue,
 } from './catalog-grammar';
 
 // ---------------------------------------------------------------------------
@@ -74,24 +77,22 @@ function escXmlAttr(s: string): string {
   return r;
 }
 
-/** Split on top-level commas, respecting paren/bracket/brace depth + quotes. */
+/**
+ * Split on top-level commas, respecting paren/bracket/brace depth + text literals.
+ * Used by the parametersList grammar and the attrGroup/repeatGroup body parser,
+ * whose quoted values are written as calculation literals (groupQuoteValue). A
+ * literal is stepped over whole with the calculation literal grammar
+ * (calc-literal.ts), so a comma inside `"a\", b"` or `“c, d”` is content.
+ */
 function splitTopLevelCommas(s: string): string[] {
   const out: string[] = [];
   if (!s) return out;
   let cur = '';
   let paren = 0, bracket = 0, brace = 0;
-  let inQuote = false;
   for (let i = 0; i < s.length; i++) {
+    const lit = calcLiteralSpanAt(s, i);
+    if (lit) { cur += s.slice(i, i + lit); i += lit - 1; continue; }
     const c = s[i];
-    if (inQuote) {
-      cur += c;
-      if (c === '"') {
-        if (i + 1 < s.length && s[i + 1] === '"') { cur += '"'; i++; }
-        else inQuote = false;
-      }
-      continue;
-    }
-    if (c === '"') { inQuote = true; cur += c; continue; }
     if (c === '(') paren++;
     else if (c === ')') { if (paren > 0) paren--; }
     else if (c === '[') bracket++;
@@ -111,15 +112,25 @@ function splitTopLevelCommas(s: string): string[] {
   return out;
 }
 
-/** Split `s` on every top-level occurrence of multi-char `delim` (quote-aware). */
-function splitOnDelim(s: string, delim: string): string[] {
+/**
+ * Split `s` on every top-level occurrence of multi-char `delim`, keeping a
+ * delimiter inside a quoted region. With `calcLiterals` the region is a
+ * calculation text literal (the repeatGroup entries, whose values are
+ * calculations or groupQuoteValue-quoted text); without it a straight `"`
+ * toggles a find-request phrase (the findRequests rows and criteria: find text
+ * is not a calculation, and `"` is FileMaker's match-phrase operator there).
+ */
+function splitOnDelim(s: string, delim: string, calcLiterals: boolean): string[] {
   const out: string[] = [];
   if (!delim) { out.push(s); return out; }
   let start = 0;
   let inQuote = false;
   let i = 0;
   while (i + delim.length <= s.length) {
-    if (s[i] === '"') { inQuote = !inQuote; i++; continue; }
+    if (calcLiterals) {
+      const lit = calcLiteralSpanAt(s, i);
+      if (lit) { i += lit; continue; }
+    } else if (s[i] === '"') { inQuote = !inQuote; i++; continue; }
     if (!inQuote && s.slice(i, i + delim.length) === delim) {
       const piece = trim(s.slice(start, i));
       if (piece) out.push(piece);
@@ -134,24 +145,19 @@ function splitOnDelim(s: string, delim: string): string[] {
   return out;
 }
 
-/** Split a fieldList body on top-level commas, PRESERVING empty entries. */
+/**
+ * Split a fieldList body on top-level commas, PRESERVING empty entries. Text
+ * literals are stepped over whole, as in splitTopLevelCommas.
+ */
 function splitListEntries(s: string): string[] {
   const out: string[] = [];
   if (!trim(s)) return out;
   let cur = '';
   let paren = 0, bracket = 0, brace = 0;
-  let inQuote = false;
   for (let i = 0; i < s.length; i++) {
+    const lit = calcLiteralSpanAt(s, i);
+    if (lit) { cur += s.slice(i, i + lit); i += lit - 1; continue; }
     const c = s[i];
-    if (inQuote) {
-      cur += c;
-      if (c === '"') {
-        if (i + 1 < s.length && s[i + 1] === '"') { cur += '"'; i++; }
-        else inQuote = false;
-      }
-      continue;
-    }
-    if (c === '"') { inQuote = true; cur += c; continue; }
     if (c === '(') paren++;
     else if (c === ')') { if (paren > 0) paren--; }
     else if (c === '[') bracket++;
@@ -253,27 +259,6 @@ function isQuotedLoneVariable(v: string): [boolean, string] {
   if (!t || t[0] !== '$') return [false, ''];
   if (/[ \t"]/.test(t)) return [false, ''];
   return [true, t];
-}
-
-// ---------------------------------------------------------------------------
-// Group-value quoting (attr / text kinds) — mirrors the XML→HR side.
-// ---------------------------------------------------------------------------
-function groupQuoteValue(v: string): string {
-  if (!v) return v;
-  const ws = ' \t\n\r';
-  const needs = ws.includes(v[0]) || ws.includes(v[v.length - 1]) || v.includes(',') || v.includes('"');
-  return needs ? '"' + v.replace(/"/g, '""') + '"' : v;
-}
-
-function groupUnquoteValue(v: string): string {
-  if (v.length < 2 || v[0] !== '"' || v[v.length - 1] !== '"') return v;
-  let out = '';
-  const last = v.length - 1;
-  for (let i = 1; i < last; i++) {
-    if (v[i] === '"' && i + 1 < last && v[i + 1] === '"') { out += '"'; i++; }
-    else out += v[i];
-  }
-  return out;
 }
 
 /** Parse one group body ("k1=v1, k2=(…)") into a lower-cased key→raw-value map. */
@@ -749,7 +734,7 @@ function emitParametersList(param: GrammarParam, hrValue: string): string {
 function emitFindRequests(hrValue: string, resolver: IdResolver): string {
   const v = trim(hrValue);
   if (!v) return '';
-  const rows = splitOnDelim(v, ' | ');
+  const rows = splitOnDelim(v, ' | ', false);
   if (rows.length === 0) return '';
   let out = '    <Query>\n';
   for (const row of rows) {
@@ -758,7 +743,7 @@ function emitFindRequests(hrValue: string, resolver: IdResolver): string {
     if (startsWithCi(r, 'Omit ')) { op = 'Exclude'; r = trim(r.slice(5)); }
     else if (startsWithCi(r, 'Include ')) { r = trim(r.slice(8)); }
     out += `      <RequestRow operation="${op}">\n`;
-    const crits = splitOnDelim(r, ' & ');
+    const crits = splitOnDelim(r, ' & ', false);
     if (crits.length === 0) crits.push('');
     for (const crit of crits) {
       const c = trim(crit);
@@ -885,7 +870,7 @@ function emitRepeatGroup(param: GrammarParam, hrValue: string, resolver: IdResol
   // repeatCount: FileMaker always serializes that many entries, padded.
   if (!trim(hrValue)) hrValue = rawStr(param.raw, 'hrDefault');
   if (!trim(hrValue)) return '';
-  const entries = splitOnDelim(hrValue, ' | ');
+  const entries = splitOnDelim(hrValue, ' | ', true);
   const cap = Number(param.raw.repeatCount ?? 0) || 0;
   while (cap > 0 && entries.length < cap) entries.push('');
   let out = `    <${param.xmlElement}>\n`;
