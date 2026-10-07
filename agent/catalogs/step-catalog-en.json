@@ -4341,7 +4341,8 @@
         "type": "text",
         "xmlElement": "Text",
         "hrSlot": 2,
-        "notes": "Raw text content (not a Calculation/CDATA block). Emitted BEFORE <Field> — FM serializes the value <Text> ahead of the target and it doubles as the variable-target marker (see flagstyle_oracle.json / script_full_multi.xml); hrSlot keeps the HR order Select ; Target ; text. The value is literal text — no FileMaker expression syntax is evaluated. Multi-line text uses &#xD; (carriage return) entities in XML. Content can be arbitrarily long, making this step suitable for storing large static strings such as a complete HTML document into a variable (e.g., <Field>$html</Field>). Special characters in the XML must be entity-encoded: & → &amp;, < → &lt;, > → &gt;, \" → &quot;. Required."
+        "hrQuoted": true,
+        "notes": "Raw text content (not a Calculation/CDATA block). Emitted BEFORE <Field> — FM serializes the value <Text> ahead of the target and it doubles as the variable-target marker (see flagstyle_oracle.json / script_full_multi.xml); hrSlot keeps the HR order Select ; Target ; text. The value is literal text — no FileMaker expression syntax is evaluated. Multi-line text uses &#xD; (carriage return) entities in XML. Content can be arbitrarily long, making this step suitable for storing large static strings such as a complete HTML document into a variable (e.g., <Field>$html</Field>). Special characters in the XML must be entity-encoded: & → &amp;, < → &lt;, > → &gt;, \" → &quot;. FileMaker displays the value wrapped in “…” and never escapes it (“He said “hi”); the HR form is one text literal with embedded \", “ and ” backslash-escaped (hrQuoted), so the line parser cannot lose the step's ] to an odd quote. Required."
       },
       {
         "hrLabel": "Target",

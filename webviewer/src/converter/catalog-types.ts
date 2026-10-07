@@ -152,6 +152,12 @@ export interface StepParam {
    *  bare; Configure Region Monitor Script's is `Script: "…"`). Needs a non-empty
    *  hrLabel; set only where FileMaker renders the label, verified against live FM. */
   hrLabeled?: boolean;
+  /** A literal-text param (`text`/`name`) FileMaker displays wrapped in quotes (Insert
+   *  Text's `… ; “x” ]`). XML→HR writes the value as ONE text literal (`quoteCalcLiteral`:
+   *  embedded `"`/`“`/`”` backslash-escaped) so the line parser reads it back as one
+   *  token whatever quotes, `;` or `]` it holds; HR→XML decodes it. An empty value
+   *  renders no token, as FileMaker does. Set only where FM quotes the value (verified live). */
+  hrQuoted?: boolean;
   /** Governing enum branches: enum value → what it reveals / how it renders */
   discriminatorValues?: Record<string, DiscriminatorValue>;
   /** String form: names the sibling element that governs this param's shape */

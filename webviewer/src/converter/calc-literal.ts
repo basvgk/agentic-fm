@@ -84,3 +84,34 @@ export function calcLiteralSpanAt(s: string, at: number): number {
   if (!isUnescapedCalcQuote(s, at)) return 0;
   return skipCalcLiteral(s, at).end - at;
 }
+
+/**
+ * Write `v` as ONE text literal between `open` and `close` that `skipCalcLiteral`
+ * decodes back to exactly `v`. Every embedded delimiter is backslash-escaped, and
+ * a backslash is escaped only when it would otherwise escape what follows it (the
+ * next character is escapable, or it is last and would escape the closing
+ * delimiter). Everything else is written verbatim, so a value with no delimiter
+ * and no such backslash reads exactly as FileMaker displays a quoted literal text
+ * parameter (`“x”`, `“a\b”`; FileMaker itself never escapes the value it displays).
+ */
+export function quoteCalcLiteral(v: string, open = '“', close = '”'): string {
+  let out = open;
+  for (let i = 0; i < v.length; i++) {
+    const c = v[i];
+    if (isCalcQuote(c)) out += '\\' + c;
+    else if (c === '\\' && (i === v.length - 1 || isCalcEscape(v, i))) out += '\\\\';
+    else out += c;
+  }
+  return out + close;
+}
+
+/**
+ * The decoded value when `s` is exactly one closed text literal (its first
+ * character opens it and its closing delimiter is its last character); `null` for
+ * anything else (bare text, two literals, an unterminated one, trailing text).
+ */
+export function decodeWholeCalcLiteral(s: string): string | null {
+  if (!isCalcQuote(s[0])) return null;
+  const { end, closed, decoded } = skipCalcLiteral(s, 0);
+  return closed && end === s.length ? decoded : null;
+}

@@ -316,3 +316,46 @@ describe('calculation text literals inside split values', () => {
     }
   });
 });
+
+// hrQuoted: a literal text param FileMaker displays quoted. FileMaker shows Insert
+// Text's value as `“x”` and never escapes it. The value used to render bare, so an
+// odd quote opened a literal that never closed and swallowed the step's `]` (and
+// every later line), and `;`/`]` in the text split or ended the step. Mirrors
+// agent/scripts/test_catalog_emit.py.
+describe('hrQuoted literal text params', () => {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const insertText = (text: string) =>
+    '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="61" name="Insert Text"><SelectAll state="True"/>'
+    + `<Text>${esc(text)}</Text><Field>$x</Field></Step></fmxmlsnippet>`;
+
+  it('renders Insert Text quoted and round-trips every quote shape', () => {
+    const values = ['x', 'He said “hi', 'He said "hi', '“x”', '"x"', 'a\\b', 'a\\"b', 'a;b ] c',
+      'it\'s ‘q’', '“', '""', '  sp  ', 'a\\', 'a¶b'];
+    for (const text of values) {
+      const hr = xmlToHr(insertText(text));
+      expect(hr.startsWith('Insert Text [ Select ; Target: $x ; “'), text).toBe(true);
+      expect(hrToXml(hr).xml, text).toContain(`<Text>${esc(text)}</Text>`);
+    }
+    expect(xmlToHr(insertText('a;b ] c'))).toBe('Insert Text [ Select ; Target: $x ; “a;b ] c” ]');
+    expect(xmlToHr(insertText(''))).toBe('Insert Text [ Select ; Target: $x ]');
+  });
+
+  it('keeps the lines after an odd quote', () => {
+    const hr = xmlToHr(insertText('He said “hi')) + '\nInsert Text [ Target: $y ; “next” ]';
+    const xml = hrToXml(hr).xml;
+    expect(xml).toContain('<Text>He said “hi</Text>');
+    expect(xml).toContain('<Text>next</Text>');
+    expect(xml).toContain('<Field>$y</Field>');
+  });
+
+  it('accepts bare, quoted and FileMaker display forms', () => {
+    const cases: [string, string][] = [
+      ['Insert Text [ Target: $x ; hello ]', 'hello'],
+      ['Insert Text [ Target: $x ; "hello" ]', 'hello'],
+      ['Insert Text [ Target: $x ; "<a class=\\"b\\">" ]', '<a class="b">'],
+      ['Insert Text [ Target: $x ; “"x"” ]', '"x"'],
+      ['Insert Text [ Select ; Target: $x ; {"sut":"S","cases":[]} ]', '{"sut":"S","cases":[]}'],
+    ];
+    for (const [hr, text] of cases) expect(hrToXml(hr).xml, hr).toContain(`<Text>${esc(text)}</Text>`);
+  });
+});

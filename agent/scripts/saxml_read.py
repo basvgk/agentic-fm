@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
+from calc_literal import quote_calc_literal
 from catalog_grammar import (
     CatalogEntry,
     StepParam,
@@ -769,7 +770,11 @@ def _extract_simple(
             t = sp.find("Text")
             if t is not None:
                 consumed[i] = True
-                return t.get("value", "") or (t.text or "")
+                raw = t.get("value", "") or (t.text or "")
+                # An hrQuoted param's token is one escaped text literal (the form
+                # the HR renderer writes and the emitter decodes), so a raw value
+                # holding quotes is not unwrapped on the way through.
+                return quote_calc_literal(raw) if raw and param.hr_quoted else raw
             # File-path steps carry the path as <UniversalPathList><ObjectList>
             # <Location>… rather than a <Text> node.
             loc = sp.find(".//Location")

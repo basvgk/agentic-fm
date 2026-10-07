@@ -268,7 +268,7 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"56\" name=\"Insert Picture\">\n    <UniversalPathList type=\"Embedded\">$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Insert Text.xml": {
-    "hr": "Insert Text [ Select ; Target: $variable ; text content ]",
+    "hr": "Insert Text [ Select ; Target: $variable ; “text content” ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"61\" name=\"Insert Text\">\n    <SelectAll state=\"True\"/>\n    <Text>text content</Text>\n    <Field>$variable</Field>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Insert from Device.xml": {

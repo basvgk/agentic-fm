@@ -20,7 +20,7 @@
 import type { ParsedLine } from './parser';
 import type { IdResolver } from './id-resolver';
 import { cdata, escXml } from './step-registry';
-import { calcLiteralSpanAt } from './calc-literal';
+import { calcLiteralSpanAt, decodeWholeCalcLiteral } from './calc-literal';
 import {
   type GrammarEntry,
   type GrammarParam,
@@ -246,6 +246,32 @@ function variableFieldXml(v: string, extraAttrs = ''): string {
  * (straight "…" or smart “…”), is a single variable token; returns the bare
  * variable via the tuple's second element.
  */
+/** Strip one surrounding quote pair (`"…"`, `“…”` or `‘…’`); a no-op on bare text. */
+function unquoteTextValue(s: string): string {
+  if (s.length >= 2 && ((s[0] === '"' && s.endsWith('"')) || (s[0] === '“' && s.endsWith('”'))
+      || (s[0] === '‘' && s.endsWith('’')))) {
+    return s.slice(1, -1);
+  }
+  return s;
+}
+
+/**
+ * The raw XML body for a `text`/`name` param's HR token. An `hrQuoted` param was
+ * rendered as one escaped text literal: decode it. A token that is not exactly one
+ * literal is FileMaker's own unescaped display (`“He said “hi”`) or bare text:
+ * strip one outer quote pair (a no-op on bare text). Any other text param is taken
+ * as written, except that a quoted lone variable used as a path/target unquotes to
+ * the bare `$` reference.
+ */
+function textParamValue(param: GrammarParam, hrValue: string): string {
+  if (param.hrQuoted) {
+    const t = trim(hrValue);
+    return decodeWholeCalcLiteral(t) ?? unquoteTextValue(t);
+  }
+  const [quoted, bare] = isQuotedLoneVariable(hrValue);
+  return quoted ? bare : hrValue;
+}
+
 function isQuotedLoneVariable(v: string): [boolean, string] {
   let t = trim(v);
   const lq = '“', rq = '”';
@@ -1313,8 +1339,7 @@ export function convertStepWithCatalog(
       }
     } else if (param.type === 'text' || param.type === 'name') {
       if (!param.omitWhenEmpty || trim(hrValue)) {
-        const [quoted, bare] = isQuotedLoneVariable(hrValue);
-        const emitValue = quoted ? bare : hrValue;
+        const emitValue = textParamValue(param, hrValue);
         const attrs = elementAttr.get(param.xmlElement) ?? '';
         piece = `    <${param.xmlElement}${attrs}>${escXml(emitValue)}</${param.xmlElement}>`;
       }

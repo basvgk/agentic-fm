@@ -622,3 +622,67 @@ def test_hr_param_splitter_honours_the_literal_grammar():
     line = parse_hr('Show Custom Dialog [ "T\\" ; x ] y" ; ' + _LQ + "M ; ] z" + _RQ + " ]")[0]
     assert line.step_name == "Show Custom Dialog"
     assert line.params == ['"T\\" ; x ] y"', _LQ + "M ; ] z" + _RQ]
+
+
+# --- hrQuoted: a literal text param FileMaker displays quoted ----------------
+# FileMaker shows Insert Text's value as `“x”` and never escapes it. The value used
+# to render bare, so an odd quote opened a literal that never closed and swallowed
+# the step's `]` (and every later line), and `;`/`]` in the text split or ended the
+# step. Mirrors tests/test_catalog_converter_text_literal.cpp in the plug-in.
+_INSERT_TEXT_VALUES = [
+    "x", "He said " + _LQ + "hi", 'He said "hi', _LQ + "x" + _RQ, '"x"', "a\\b", 'a\\"b',
+    "a;b ] c", "it's ‘q’", _LQ, '""', "  sp  ", "a\\", "a¶b",
+]
+
+
+def _insert_text_xml(text: str) -> str:
+    return (
+        '<Step enable="True" id="61" name="Insert Text"><SelectAll state="True"/><Text>'
+        + esc_xml(text) + "</Text><Field>$x</Field></Step>"
+    )
+
+
+def test_insert_text_renders_quoted_and_round_trips():
+    by_name, _ = _load()
+    for text in _INSERT_TEXT_VALUES:
+        hr = _xml_hr(_insert_text_xml(text))
+        assert hr.startswith("Insert Text [ Select ; Target: $x ; " + _LQ), (text, hr)
+        assert "<Text>" + esc_xml(text) + "</Text>" in _emit_hr(by_name, hr), (text, hr)
+    # Identical to FileMaker's own line where FileMaker's line is unambiguous.
+    assert _xml_hr(_insert_text_xml("a;b ] c")) == (
+        "Insert Text [ Select ; Target: $x ; " + _LQ + "a;b ] c" + _RQ + " ]")
+    assert _xml_hr(_insert_text_xml("")) == "Insert Text [ Select ; Target: $x ]"
+
+
+def test_insert_text_accepts_bare_quoted_and_display_forms():
+    by_name, _ = _load()
+    cases = [
+        ("Insert Text [ Target: $x ; hello ]", "hello"),
+        ('Insert Text [ Target: $x ; "hello" ]', "hello"),
+        ('Insert Text [ Target: $x ; "<a class=\\"b\\">" ]', '<a class="b">'),
+        ("Insert Text [ Target: $x ; " + _LQ + '"x"' + _RQ + " ]", '"x"'),
+        ('Insert Text [ Select ; Target: $x ; {"sut":"S","cases":[]} ]', '{"sut":"S","cases":[]}'),
+    ]
+    for hr, text in cases:
+        assert "<Text>" + esc_xml(text) + "</Text>" in _emit_hr(by_name, hr), hr
+
+
+def test_saxml_insert_text_with_quotes_keeps_its_value(tmp_path):
+    """The SaXML reader hands an hrQuoted value to the emitter as the escaped
+    literal the HR renderer writes, so a value holding quotes is not unwrapped."""
+    from pathlib import Path
+
+    from fm_xml_to_snippet import translate_script
+
+    for raw, want in [("&quot;x&quot;", "&quot;x&quot;"), ("He said " + _LQ + "hi", "He said " + _LQ + "hi")]:
+        src = Path(tmp_path) / "insert-text.xml"
+        src.write_text(
+            '<?xml version="1.0"?><Script><ObjectList><Step id="61" name="Insert Text" enable="True">'
+            '<ParameterValues membercount="2"><Parameter type="Boolean">'
+            '<Boolean type="Select" id="4096" value="True" /></Parameter>'
+            '<Parameter type="Text"><Text value="' + raw + '" /></Parameter>'
+            "</ParameterValues></Step></ObjectList></Script>",
+            encoding="utf-8",
+        )
+        out = translate_script(src)
+        assert "<Text>" + want + "</Text>" in out, out

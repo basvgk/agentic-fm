@@ -92,3 +92,38 @@ def calc_literal_span_at(s: str, at: int) -> int:
     if not is_unescaped_calc_quote(s, at):
         return 0
     return skip_calc_literal(s, at)[0] - at
+
+
+def quote_calc_literal(v: str, open_q: str = "“", close_q: str = "”") -> str:
+    """Write ``v`` as ONE text literal between ``open_q`` and ``close_q`` that
+    ``skip_calc_literal`` decodes back to exactly ``v``.
+
+    Every embedded delimiter is backslash-escaped, and a backslash is escaped only
+    when it would otherwise escape what follows it (the next character is
+    escapable, or it is last and would escape the closing delimiter). Everything
+    else is written verbatim, so a value with no delimiter and no such backslash
+    reads exactly as FileMaker displays a quoted literal text parameter (``“x”``,
+    ``“a\\b”``; FileMaker itself never escapes the value it displays).
+    """
+    out = [open_q]
+    last = len(v) - 1
+    for i, c in enumerate(v):
+        if c in CALC_QUOTES:
+            out.append("\\" + c)
+        elif c == "\\" and (i == last or is_calc_escape(v, i)):
+            out.append("\\\\")
+        else:
+            out.append(c)
+    out.append(close_q)
+    return "".join(out)
+
+
+def decode_whole_calc_literal(s: str) -> str | None:
+    """The decoded value when ``s`` is exactly one closed text literal (its first
+    character opens it and its closing delimiter is its last character); ``None``
+    for anything else (bare text, two literals, an unterminated one, trailing text).
+    """
+    if not s or s[0] not in CALC_QUOTES:
+        return None
+    end, closed, decoded = skip_calc_literal(s, 0)
+    return decoded if closed and end == len(s) else None

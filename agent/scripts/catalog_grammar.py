@@ -29,7 +29,12 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Any, Union
 
-from calc_literal import CALC_QUOTES, is_calc_escape, skip_calc_literal
+from calc_literal import (
+    CALC_QUOTES,
+    is_calc_escape,
+    quote_calc_literal,
+    skip_calc_literal,
+)
 
 # ---------------------------------------------------------------------------
 # Parameter type vocabulary
@@ -189,6 +194,13 @@ class StepParam:
     # ``Script: "…"``). Generic across the three bare-by-default value types; needs a
     # non-empty ``hr_label``. Set only where FM renders the label (verified live).
     hr_labeled: bool | None = None
+    # A literal-text param (``text``/``name``) FileMaker displays wrapped in quotes
+    # (Insert Text's ``… ; “x” ]``). XML -> HR writes the value as ONE text literal
+    # (``quote_calc_literal``: embedded ``"``/``“``/``”`` backslash-escaped) so the line
+    # parser reads it back as one token whatever quotes, ``;`` or ``]`` it holds; HR ->
+    # XML decodes it. An empty value renders no token, as FileMaker does. Set only
+    # where FM quotes the value (verified live).
+    hr_quoted: bool | None = None
     omit_when_empty: bool | None = None
     emit_empty_default: bool | None = None
     # Governing discriminator: string form names a sibling; map form carries branches.
@@ -234,6 +246,7 @@ class StepParam:
             hr_hidden=d.get("hrHidden"),
             hr_bare=d.get("hrBare"),
             hr_labeled=d.get("hrLabeled"),
+            hr_quoted=d.get("hrQuoted"),
             omit_when_empty=d.get("omitWhenEmpty"),
             emit_empty_default=d.get("emitEmptyDefault"),
             discriminator=d.get("discriminator"),
@@ -1181,6 +1194,11 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
             val = label + ": " + val
     elif ptype in ("text", "name"):
         val = _child_text(base, param.xml_element)
+        # hr_quoted: FileMaker displays this literal text quoted (``“x”``). Write it
+        # as one escaped literal so an embedded quote, ``;`` or ``]`` cannot open a
+        # literal or end the param/step on the way back.
+        if val and param.hr_quoted:
+            val = quote_calc_literal(val)
         if val and param.parent_element and label:
             val = label + ": " + val
 

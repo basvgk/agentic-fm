@@ -47,7 +47,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from calc_literal import calc_literal_span_at
+from calc_literal import calc_literal_span_at, decode_whole_calc_literal
 from catalog_grammar import (
     CatalogEntry,
     StepParam,
@@ -375,6 +375,33 @@ def _variable_field_xml(var: str, extra_attrs: str = "") -> str:
     """``<Field [repetition]>$var</Field>`` for a ``$var[N]`` target."""
     bare, rep = _parse_field_repetition(_trim(var))
     return "<Field" + extra_attrs + _repetition_attr(rep) + ">" + esc_xml(bare) + "</Field>"
+
+
+def _unquote_text_value(s: str) -> str:
+    """Strip one surrounding quote pair from a free-text HR value: straight
+    ``"…"``, curly ``“…”`` or curly single ``‘…’``. A no-op on bare text."""
+    if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+        return s[1:-1]
+    if len(s) >= 2 and ((s[0] == "“" and s[-1] == "”") or (s[0] == "‘" and s[-1] == "’")):
+        return s[1:-1]
+    return s
+
+
+def _text_param_value(param, hr_value: str) -> str:
+    """The raw XML body for a ``text``/``name`` param's HR token.
+
+    An ``hr_quoted`` param was rendered as one escaped text literal: decode it. A
+    token that is not exactly one literal is FileMaker's own unescaped display
+    (``“He said “hi”``) or bare text: strip one outer quote pair (a no-op on bare
+    text). Any other text param is taken as written, except that a quoted lone
+    variable used as a path/target unquotes to the bare ``$`` reference.
+    """
+    if param.hr_quoted:
+        t = _trim(hr_value)
+        decoded = decode_whole_calc_literal(t)
+        return decoded if decoded is not None else _unquote_text_value(t)
+    quoted, bare = _is_quoted_lone_variable(hr_value)
+    return bare if quoted else hr_value
 
 
 def _is_quoted_lone_variable(v: str) -> tuple[bool, str]:
@@ -1514,8 +1541,7 @@ def convert_step_with_catalog(
                     sid, sname = resolver.resolve_script(script_name)
                     piece = '    <Script id="' + str(sid) + '" name="' + esc_xml(sname) + '"/>'
         elif param.type in ("text", "name") and (not param.omit_when_empty or _trim(hr_value)):
-            quoted, bare = _is_quoted_lone_variable(hr_value)
-            emit_value = bare if quoted else hr_value
+            emit_value = _text_param_value(param, hr_value)
             attrs = element_attr.get(param.xml_element, "")
             piece = "    <" + param.xml_element + attrs + ">" + esc_xml(emit_value) + "</" + param.xml_element + ">"
         # complex + unhandled types yield no piece.

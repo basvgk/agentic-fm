@@ -22,7 +22,7 @@
  */
 
 import type { StepCatalogEntry } from './catalog-types';
-import { isCalcQuote, isCalcEscape, skipCalcLiteral } from './calc-literal';
+import { isCalcQuote, isCalcEscape, quoteCalcLiteral, skipCalcLiteral } from './calc-literal';
 
 // ---------------------------------------------------------------------------
 // DOM helpers — ElementTree `.find` / `.findall` / `.text` semantics over a
@@ -230,6 +230,10 @@ export interface GrammarParam {
   // FileMaker labels the same value type per step (Perform Script bare; Configure
   // Region Monitor Script's `Script: "…"`). Generic; needs a non-empty hrLabel.
   hrLabeled: boolean | null;
+  // A literal-text param FileMaker displays quoted (`“x”`): rendered as one escaped
+  // text literal (quoteCalcLiteral) and decoded on HR→XML. Generic; set only where
+  // FileMaker quotes the value.
+  hrQuoted: boolean | null;
   omitWhenEmpty: boolean | null;
   discriminator: string | null;
   discriminatorValues: Record<string, DiscriminatorBranch>;
@@ -325,6 +329,7 @@ function buildParam(d: Record<string, unknown>): GrammarParam {
     hrHidden: (d.hrHidden as boolean) ?? null,
     hrBare: (d.hrBare as boolean) ?? null,
     hrLabeled: (d.hrLabeled as boolean) ?? null,
+    hrQuoted: (d.hrQuoted as boolean) ?? null,
     omitWhenEmpty: (d.omitWhenEmpty as boolean) ?? null,
     discriminator: (d.discriminator as string) ?? null,
     discriminatorValues,
@@ -937,6 +942,10 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
     if (val && param.hrLabeled && label) val = label + ': ' + val;
   } else if (ptype === 'text' || ptype === 'name') {
     val = childText(base, param.xmlElement);
+    // hrQuoted: FileMaker displays this literal text quoted (`“x”`). Write it as one
+    // escaped literal so an embedded quote, `;` or `]` cannot open a literal or end
+    // the param/step on the way back.
+    if (val && param.hrQuoted) val = quoteCalcLiteral(val);
     if (val && param.parentElement && label) val = label + ': ' + val;
   }
 
