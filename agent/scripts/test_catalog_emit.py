@@ -743,6 +743,63 @@ def test_insert_text_accepts_bare_quoted_and_display_forms():
         assert "<Text>" + esc_xml(text) + "</Text>" in _emit_hr(by_name, hr), hr
 
 
+# File paths take the same facet. FileMaker shows every UniversalPathList path
+# curly-quoted (`Get File Exists [ “$path” ; Target: $v ]`) and stores `;` as a path
+# separator (`file:a;b.txt` copies back as `file:a;file:b.txt`). Rendered bare, the
+# `;` split the param, a `]` ended the step and an odd quote swallowed it. Values are
+# FileMaker's own copy-back. Mirrors webviewer/test/catalog-emit.engine.test.ts.
+def _get_file_exists_xml(xml_value: str) -> str:
+    return (
+        '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="188" name="Get File Exists">'
+        "<UniversalPathList>" + xml_value + "</UniversalPathList><Text/><Field>$v</Field></Step></fmxmlsnippet>"
+    )
+
+
+def test_file_paths_render_quoted_and_round_trip():
+    by_name, _ = _load()
+    cases = [
+        ("$path", _LQ + "$path" + _RQ, "$path"),
+        ("file:a.txt", _LQ + "file:a.txt" + _RQ, "file:a.txt"),
+        ("file:a;file:b.txt", _LQ + "file:a;file:b.txt" + _RQ, "file:a;file:b.txt"),
+        ("file:a]b.txt", _LQ + "file:a]b.txt" + _RQ, "file:a]b.txt"),
+        ("file:a &quot;b&quot;.txt", _LQ + 'file:a \\"b\\".txt' + _RQ, "file:a &quot;b&quot;.txt"),
+        ("file:a " + _LQ + "b.txt", _LQ + "file:a \\" + _LQ + "b.txt" + _RQ, "file:a " + _LQ + "b.txt"),
+        ("file:a.txt&#13;file:b.txt", _LQ + "file:a.txt\rfile:b.txt" + _RQ, "file:a.txt\rfile:b.txt"),
+    ]
+    for xml_value, token, emitted in cases:
+        hr = _hr_of(_get_file_exists_xml(xml_value))
+        assert hr == "Get File Exists [ " + token + " ; Target: $v ]", (xml_value, hr)
+        out = _emit_hr(by_name, hr)
+        assert "<UniversalPathList>" + emitted + "</UniversalPathList>" in out, (xml_value, out)
+        assert "<Field>$v</Field>" in out, out
+
+
+def test_file_path_reads_filemakers_quoted_line_unquoted():
+    by_name, _ = _load()
+    cases = [
+        ("Get File Exists [ " + _LQ + "a.txt" + _RQ + " ; Target: $v ]", "a.txt"),
+        ("Get File Exists [ " + _LQ + "$path" + _RQ + " ; Target: $v ]", "$path"),
+        ('Get File Exists [ "$path" ; Target: $v ]', "$path"),
+        ("Get File Exists [ $path ; Target: $v ]", "$path"),
+        ("Delete File [ Target file: " + _LQ + "a.txt" + _RQ + " ]", "a.txt"),
+    ]
+    for hr, path in cases:
+        assert "<UniversalPathList>" + path + "</UniversalPathList>" in _emit_hr(by_name, hr), hr
+
+
+def test_send_event_text_renders_quoted():
+    by_name, _ = _load()
+    xml = (
+        '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="57" name="Send Event">'
+        '<ContentType value="Text"/><Text>open a;b ] c</Text><Event CopyResultToClipboard="False" '
+        'WaitForCompletion="True" BringTargetToForeground="False" TargetType="NUTD" '
+        'TargetName="&lt;unknown&gt;" id="dosc" class="misc"/></Step></fmxmlsnippet>'
+    )
+    hr = _hr_of(xml)
+    assert "Send Event [ Text ; " + _LQ + "open a;b ] c" + _RQ + " ; Event: " in hr, hr
+    assert "<Text>open a;b ] c</Text>" in _emit_hr(by_name, hr)
+
+
 def test_saxml_insert_text_with_quotes_keeps_its_value(tmp_path):
     """The SaXML reader hands an hrQuoted value to the emitter as the escaped
     literal the HR renderer writes, so a value holding quotes is not unwrapped."""

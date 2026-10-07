@@ -415,6 +415,55 @@ describe('hrQuoted literal text params', () => {
     ];
     for (const [hr, text] of cases) expect(hrToXml(hr).xml, hr).toContain(`<Text>${esc(text)}</Text>`);
   });
+
+  // File paths: FileMaker shows every UniversalPathList path curly-quoted
+  // (`Get File Exists [ “$path” ; Target: $v ]`) and stores `;` as a path separator
+  // (`file:a;b.txt` copies back as `file:a;file:b.txt`). Rendered bare, the `;` split
+  // the param, a `]` ended the step and an odd quote swallowed it. Values below are
+  // FileMaker's own copy-back.
+  const getFileExists = (xmlValue: string) =>
+    '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="188" name="Get File Exists">'
+    + `<UniversalPathList>${xmlValue}</UniversalPathList><Text/><Field>$v</Field></Step></fmxmlsnippet>`;
+
+  it('renders file paths quoted and round-trips every path shape', () => {
+    const cases: [string, string, string][] = [
+      ['$path', '“$path”', '$path'],
+      ['file:a.txt', '“file:a.txt”', 'file:a.txt'],
+      ['file:a;file:b.txt', '“file:a;file:b.txt”', 'file:a;file:b.txt'],
+      ['file:a]b.txt', '“file:a]b.txt”', 'file:a]b.txt'],
+      ['file:a &quot;b&quot;.txt', '“file:a \\"b\\".txt”', 'file:a &quot;b&quot;.txt'],
+      ['file:a “b.txt', '“file:a \\“b.txt”', 'file:a “b.txt'],
+      ['file:a.txt&#13;file:b.txt', '“file:a.txt\rfile:b.txt”', 'file:a.txt\rfile:b.txt'],
+    ];
+    for (const [xmlValue, token, emitted] of cases) {
+      const hr = xmlToHr(getFileExists(xmlValue));
+      expect(hr, xmlValue).toBe(`Get File Exists [ ${token} ; Target: $v ]`);
+      const xml = hrToXml(hr).xml;
+      expect(xml, xmlValue).toContain(`<UniversalPathList>${emitted}</UniversalPathList>`);
+      expect(xml, xmlValue).toContain('<Field>$v</Field>');
+    }
+  });
+
+  it("reads FileMaker's quoted path line back unquoted", () => {
+    const cases: [string, string][] = [
+      ['Get File Exists [ “a.txt” ; Target: $v ]', 'a.txt'],
+      ['Get File Exists [ “$path” ; Target: $v ]', '$path'],
+      ['Get File Exists [ "$path" ; Target: $v ]', '$path'],
+      ['Get File Exists [ $path ; Target: $v ]', '$path'],
+      ['Delete File [ Target file: “a.txt” ]', 'a.txt'],
+    ];
+    for (const [hr, p] of cases) expect(hrToXml(hr).xml, hr).toContain(`<UniversalPathList>${p}</UniversalPathList>`);
+  });
+
+  it('quotes Send Event text', () => {
+    const xml = '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="57" name="Send Event">'
+      + '<ContentType value="Text"/><Text>open a;b ] c</Text><Event CopyResultToClipboard="False" '
+      + 'WaitForCompletion="True" BringTargetToForeground="False" TargetType="NUTD" '
+      + 'TargetName="&lt;unknown&gt;" id="dosc" class="misc"/></Step></fmxmlsnippet>';
+    const hr = xmlToHr(xml);
+    expect(hr).toContain('Send Event [ Text ; “open a;b ] c” ; Event: ');
+    expect(hrToXml(hr).xml).toContain('<Text>open a;b ] c</Text>');
+  });
 });
 
 // Calculation comments: FileMaker stores `/* … */` (nesting) and `// …` (to the

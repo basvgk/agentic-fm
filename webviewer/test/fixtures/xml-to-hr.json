@@ -232,11 +232,11 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"45\" name=\"Undo/Redo\">\n    <UndoRedo value=\"Undo\"/>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Export Field Contents.xml": {
-    "hr": "Export Field Contents [ Create folders: On ; Automatically open: Off ; Create email: Off ; $path ]",
+    "hr": "Export Field Contents [ Create folders: On ; Automatically open: Off ; Create email: Off ; “$path” ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"132\" name=\"Export Field Contents\">\n    <CreateDirectories state=\"True\"/>\n    <AutoOpen state=\"False\"/>\n    <CreateEmail state=\"False\"/>\n    <UniversalPathList>$path</UniversalPathList>\n    <Field table=\"\" id=\"0\" name=\"\"/>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Insert Audio_Video.xml": {
-    "hr": "Insert Audio/Video [ $path ; Reference ]",
+    "hr": "Insert Audio/Video [ “$path” ; Reference ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"159\" name=\"Insert Audio/Video\">\n    <UniversalPathList type=\"Reference\">$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Insert Calculated Result.xml": {
@@ -256,15 +256,15 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"60\" name=\"Insert Current User Name\">\n    <SelectAll state=\"True\"/>\n    <Text/>\n    <Field>$variable</Field>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Insert File.xml": {
-    "hr": "Insert File [ $path ; Target: $file ; Dialog: asFile=True, enable=True, Title=\"Dialog title\", Storage=(type=InsertOnly), Compress=(type=WhenPossible), FilterList=() ]",
+    "hr": "Insert File [ “$path” ; Target: $file ; Dialog: asFile=True, enable=True, Title=\"Dialog title\", Storage=(type=InsertOnly), Compress=(type=WhenPossible), FilterList=() ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"131\" name=\"Insert File\">\n    <UniversalPathList type=\"Embedded\">$path</UniversalPathList>\n    <Text/>\n    <Field>$file</Field>\n    <DialogOptions asFile=\"True\" enable=\"True\">\n      <Title>\n        <Calculation><![CDATA[\"Dialog title\"]]></Calculation>\n      </Title>\n      <Storage type=\"InsertOnly\"/>\n      <Compress type=\"WhenPossible\"/>\n      <FilterList/>\n    </DialogOptions>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Insert PDF.xml": {
-    "hr": "Insert PDF [ $path ]",
+    "hr": "Insert PDF [ “$path” ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"158\" name=\"Insert PDF\">\n    <UniversalPathList type=\"Embedded\">$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Insert Picture.xml": {
-    "hr": "Insert Picture [ $path ]",
+    "hr": "Insert Picture [ “$path” ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"56\" name=\"Insert Picture\">\n    <UniversalPathList type=\"Embedded\">$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Insert Text.xml": {
@@ -316,15 +316,15 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"34\" name=\"Close File\">\n    <FileReference id=\"0\" name=\"\">\n      <UniversalPathList>file:NameOfFile</UniversalPathList>\n    </FileReference>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Convert File.xml": {
-    "hr": "Convert File [ With dialog: On ; Open File: Off ; Skip Indexes: On ; Verify SSL Certificates ; File ; Profile: FieldDelimiter=\"\t\", IsPredefined=-1, FieldNameRow=-1, DataType=\"    \" ; $path ; Import options: TargetTableName=Table, CharacterSet=Macintosh, PreserveContainer=False, MatchFieldNames=False, AutoEnter=False, SplitRepetitions=False, method=Add ]",
+    "hr": "Convert File [ With dialog: On ; Open File: Off ; Skip Indexes: On ; Verify SSL Certificates ; File ; Profile: FieldDelimiter=\"\t\", IsPredefined=-1, FieldNameRow=-1, DataType=\"    \" ; “$path” ; Import options: TargetTableName=Table, CharacterSet=Macintosh, PreserveContainer=False, MatchFieldNames=False, AutoEnter=False, SplitRepetitions=False, method=Add ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"139\" name=\"Convert File\">\n    <NoInteract state=\"False\"/>\n    <Option state=\"False\"/>\n    <SkipIndexes state=\"True\"/>\n    <VerifySSLCertificates state=\"True\"/>\n    <DataSourceType value=\"File\"/>\n    <Profile FieldDelimiter=\"&#9;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"    \"/>\n    <UniversalPathList>$path</UniversalPathList>\n    <ImportOptions TargetTableName=\"Table\" CharacterSet=\"Macintosh\" PreserveContainer=\"False\" MatchFieldNames=\"False\" AutoEnter=\"False\" SplitRepetitions=\"False\" method=\"Add\"/>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Create Data File.xml": {
-    "hr": "Create Data File [ $path ; Create folders: On ]",
+    "hr": "Create Data File [ “$path” ; Create folders: On ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"190\" name=\"Create Data File\">\n    <CreateDirectories state=\"True\"/>\n    <UniversalPathList>$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Delete File.xml": {
-    "hr": "Delete File [ $path ]",
+    "hr": "Delete File [ “$path” ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"197\" name=\"Delete File\">\n    <UniversalPathList>$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Get Data File Position.xml": {
@@ -332,11 +332,11 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"194\" name=\"Get Data File Position\">\n    <Calculation><![CDATA[$fileID]]></Calculation>\n    <Text/>\n    <Field>$variable</Field>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Get File Exists.xml": {
-    "hr": "Get File Exists [ $path ; Target: $variable ]",
+    "hr": "Get File Exists [ “$path” ; Target: $variable ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"188\" name=\"Get File Exists\">\n    <UniversalPathList>$path</UniversalPathList>\n    <Text/>\n    <Field>$variable</Field>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Get File Size.xml": {
-    "hr": "Get File Size [ $path ; Target: $variable ]",
+    "hr": "Get File Size [ “$path” ; Target: $variable ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"189\" name=\"Get File Size\">\n    <UniversalPathList>$path</UniversalPathList>\n    <Text/>\n    <Field>$variable</Field>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/New File.xml": {
@@ -344,7 +344,7 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"82\" name=\"New File\"/>\n</fmxmlsnippet>"
   },
   "files/Open Data File.xml": {
-    "hr": "Open Data File [ $path ; Target: $variable ]",
+    "hr": "Open Data File [ “$path” ; Target: $variable ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"191\" name=\"Open Data File\">\n    <UniversalPathList>$path</UniversalPathList>\n    <Text/>\n    <Field>$variable</Field>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Open File.xml": {
@@ -364,19 +364,19 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"193\" name=\"Read from Data File\">\n    <DataSourceType value=\"3\"/>\n    <Calculation><![CDATA[$fileID]]></Calculation>\n    <Text/>\n    <Field>$variable</Field>\n    <Count>\n      <Calculation><![CDATA[1024]]></Calculation>\n    </Count>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Recover File.xml": {
-    "hr": "Recover File [ With dialog: Off ; $path ]",
+    "hr": "Recover File [ With dialog: Off ; “$path” ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"95\" name=\"Recover File\">\n    <NoInteract state=\"True\"/>\n    <UniversalPathList>$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Rename File.xml": {
-    "hr": "Rename File [ $path ; \"new_name\" ]",
+    "hr": "Rename File [ “$path” ; \"new_name\" ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"199\" name=\"Rename File\">\n    <UniversalPathList>$path</UniversalPathList>\n    <Calculation><![CDATA[\"new_name\"]]></Calculation>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Save a Copy as XML.xml": {
-    "hr": "Save a Copy as XML [ Include details for analysis tools ; $path ; Get ( WindowName ) ]",
+    "hr": "Save a Copy as XML [ Include details for analysis tools ; “$path” ; Get ( WindowName ) ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"3\" name=\"Save a Copy as XML\">\n    <Option state=\"True\"/>\n    <UniversalPathList>$path</UniversalPathList>\n    <Calculation><![CDATA[Get ( WindowName )]]></Calculation>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Save a Copy as.xml": {
-    "hr": "Save a Copy as [ Create folders: On ; Automatically open: Off ; Create email: Off ; copy of current file ; $path ]",
+    "hr": "Save a Copy as [ Create folders: On ; Automatically open: Off ; Create email: Off ; copy of current file ; “$path” ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"37\" name=\"Save a Copy as\">\n    <CreateDirectories state=\"True\"/>\n    <AutoOpen state=\"False\"/>\n    <CreateEmail state=\"False\"/>\n    <SaveAsType value=\"Copy\"/>\n    <UniversalPathList>$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Set Data File Position.xml": {
@@ -544,7 +544,7 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"57\" name=\"Send Event\">\n    <ContentType value=\"Text\"/>\n    <Text/>\n    <Event CopyResultToClipboard=\"False\" WaitForCompletion=\"True\" BringTargetToForeground=\"False\" TargetType=\"NUTD\" TargetName=\"&lt;unknown&gt;\" id=\"dosc\" class=\"misc\"/>\n  </Step>\n</fmxmlsnippet>"
   },
   "miscellaneous/Send Mail.xml": {
-    "hr": "Send Mail [ With dialog: Off ; Attachment path: $attachmentFilePathList ; To: useFoundSet=False, value=$to ; CC: useFoundSet=False, value=$cc ; BCC: useFoundSet=False, value=$bcc ; Subject: $subject ; Message: $message ; Server name: $name ; From address: $from ; Reply address: $replyTo ; SMTP server: $smtp ; Port: 587 ; Username: $username ; Password: $password ; OAuth name: $name ; OAuth from address: $from ; OAuth reply address: $replyTo ; Admin user ID: $adminUserEmail ; Service account email: $serviceAccountEmail ; Private key: $privateKey ; Send via: Off ; Send via: On ; SMTPEncryptionTLS ; SMTPAuthenticationPlain ; OAuthProviderGoogle ]",
+    "hr": "Send Mail [ With dialog: Off ; Attachment path: “$attachmentFilePathList” ; To: useFoundSet=False, value=$to ; CC: useFoundSet=False, value=$cc ; BCC: useFoundSet=False, value=$bcc ; Subject: $subject ; Message: $message ; Server name: $name ; From address: $from ; Reply address: $replyTo ; SMTP server: $smtp ; Port: 587 ; Username: $username ; Password: $password ; OAuth name: $name ; OAuth from address: $from ; OAuth reply address: $replyTo ; Admin user ID: $adminUserEmail ; Service account email: $serviceAccountEmail ; Private key: $privateKey ; Send via: Off ; Send via: On ; SMTPEncryptionTLS ; SMTPAuthenticationPlain ; OAuthProviderGoogle ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"63\" name=\"Send Mail\">\n    <NoInteract state=\"True\"/>\n    <Attachment>\n      <UniversalPathList>$attachmentFilePathList</UniversalPathList>\n    </Attachment>\n    <To UseFoundSet=\"False\">\n      <Calculation><![CDATA[$to]]></Calculation>\n    </To>\n    <Cc UseFoundSet=\"False\">\n      <Calculation><![CDATA[$cc]]></Calculation>\n    </Cc>\n    <Bcc UseFoundSet=\"False\">\n      <Calculation><![CDATA[$bcc]]></Calculation>\n    </Bcc>\n    <Subject>\n      <Calculation><![CDATA[$subject]]></Calculation>\n    </Subject>\n    <Message>\n      <Calculation><![CDATA[$message]]></Calculation>\n    </Message>\n    <SMTPNameDescription>\n      <Calculation><![CDATA[$name]]></Calculation>\n    </SMTPNameDescription>\n    <SMTPEmailAddress>\n      <Calculation><![CDATA[$from]]></Calculation>\n    </SMTPEmailAddress>\n    <SMTPReplyAddress>\n      <Calculation><![CDATA[$replyTo]]></Calculation>\n    </SMTPReplyAddress>\n    <SMTPServer>\n      <Calculation><![CDATA[$smtp]]></Calculation>\n    </SMTPServer>\n    <SMTPPort>\n      <Calculation><![CDATA[587]]></Calculation>\n    </SMTPPort>\n    <SMTPUserName>\n      <Calculation><![CDATA[$username]]></Calculation>\n    </SMTPUserName>\n    <SMTPPassword>\n      <Calculation><![CDATA[$password]]></Calculation>\n    </SMTPPassword>\n    <OAuthNameDescription>\n      <Calculation><![CDATA[$name]]></Calculation>\n    </OAuthNameDescription>\n    <OAuthEmailAddress>\n      <Calculation><![CDATA[$from]]></Calculation>\n    </OAuthEmailAddress>\n    <OAuthReplyAddress>\n      <Calculation><![CDATA[$replyTo]]></Calculation>\n    </OAuthReplyAddress>\n    <OAuthUserID>\n      <Calculation><![CDATA[$adminUserEmail]]></Calculation>\n    </OAuthUserID>\n    <OAuthAccountEmail>\n      <Calculation><![CDATA[$serviceAccountEmail]]></Calculation>\n    </OAuthAccountEmail>\n    <OAuthPrivateKey>\n      <Calculation><![CDATA[$privateKey]]></Calculation>\n    </OAuthPrivateKey>\n    <MultipleEmails state=\"False\"/>\n    <SendViaSMTP state=\"False\"/>\n    <SendViaOAuthAuthentication state=\"True\"/>\n    <SMTPEncryptionType type=\"SMTPEncryptionTLS\"/>\n    <SMTPAuthenticationType type=\"SMTPAuthenticationPlain\"/>\n    <OAuthProvider type=\"OAuthProviderGoogle\"/>\n  </Step>\n</fmxmlsnippet>"
   },
   "miscellaneous/Set Session Identifier.xml": {
@@ -680,7 +680,7 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"172\" name=\"Open Upload to Host\"/>\n</fmxmlsnippet>"
   },
   "pdf files/Append PDF.xml": {
-    "hr": "Append PDF [ $path ; From: File ]",
+    "hr": "Append PDF [ “$path” ; From: File ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"244\" name=\"Append PDF\">\n    <Option state=\"False\"/>\n    <UniversalPathList>$path</UniversalPathList>\n    <AppendPDFFile>\n      <PDFSaveType>File</PDFSaveType>\n    </AppendPDFFile>\n  </Step>\n</fmxmlsnippet>"
   },
   "pdf files/Cancel PDF.xml": {
@@ -688,7 +688,7 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"247\" name=\"Cancel PDF\"/>\n</fmxmlsnippet>"
   },
   "pdf files/Close PDF.xml": {
-    "hr": "Close PDF [ Create folders: Off ; $path ; Save to: File ]",
+    "hr": "Close PDF [ Create folders: Off ; “$path” ; Save to: File ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"245\" name=\"Close PDF\">\n    <CreateDirectories state=\"False\"/>\n    <AutoOpen state=\"False\"/>\n    <CreateEmail state=\"False\"/>\n    <UniversalPathList>$path</UniversalPathList>\n    <ClosePDFFile>\n      <PDFSaveType>File</PDFSaveType>\n    </ClosePDFFile>\n  </Step>\n</fmxmlsnippet>"
   },
   "pdf files/Create PDF.xml": {
@@ -696,11 +696,11 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"243\" name=\"Create PDF\">\n    <Restore state=\"False\"/>\n    <CreatePDFFile>\n      <Document>\n        <Pages AllPages=\"True\">\n          <NumberFrom>\n            <Calculation><![CDATA[1]]></Calculation>\n          </NumberFrom>\n          <PageRange>\n            <From>\n              <Calculation><![CDATA[1]]></Calculation>\n            </From>\n            <To>\n              <Calculation><![CDATA[1]]></Calculation>\n            </To>\n          </PageRange>\n        </Pages>\n      </Document>\n      <Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/>\n      <View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/>\n    </CreatePDFFile>\n  </Step>\n</fmxmlsnippet>"
   },
   "pdf files/Open PDF.xml": {
-    "hr": "Open PDF [ $path ; From: File ]",
+    "hr": "Open PDF [ “$path” ; From: File ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"246\" name=\"Open PDF\">\n    <Option state=\"False\"/>\n    <UniversalPathList>$path</UniversalPathList>\n    <OpenPDFFile>\n      <PDFSaveType>File</PDFSaveType>\n    </OpenPDFFile>\n  </Step>\n</fmxmlsnippet>"
   },
   "pdf files/Print PDF.xml": {
-    "hr": "Print PDF [ With dialog: Off ; $path ]",
+    "hr": "Print PDF [ With dialog: Off ; “$path” ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"242\" name=\"Print PDF\">\n    <NoInteract state=\"True\"/>\n    <Option state=\"False\"/>\n    <UsePrintOptionsFromEnabled state=\"False\"/>\n    <SavePrintOptionsToEnabled state=\"False\"/>\n    <Restore state=\"False\"/>\n    <UniversalPathList>$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "records/Commit Records_Requests.xml": {
@@ -732,11 +732,11 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"8\" name=\"Duplicate Record/Request\"/>\n</fmxmlsnippet>"
   },
   "records/Export Records.xml": {
-    "hr": "Export Records [ With dialog: Off ; Create folders: On ; Automatically open: On ; Create email: On ; Profile: FieldDelimiter=\"\t\", IsPredefined=-1, FieldNameRow=-1, DataType=TABS ; $path ; Export options: FormatUsingCurrentLayout=False, CharacterSet=UTF-8 ; Export fields: ,  ; Summary fields: =True ]",
+    "hr": "Export Records [ With dialog: Off ; Create folders: On ; Automatically open: On ; Create email: On ; Profile: FieldDelimiter=\"\t\", IsPredefined=-1, FieldNameRow=-1, DataType=TABS ; “$path” ; Export options: FormatUsingCurrentLayout=False, CharacterSet=UTF-8 ; Export fields: ,  ; Summary fields: =True ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"36\" name=\"Export Records\">\n    <NoInteract state=\"True\"/>\n    <CreateDirectories state=\"True\"/>\n    <Restore state=\"True\"/>\n    <AutoOpen state=\"True\"/>\n    <CreateEmail state=\"True\"/>\n    <Profile FieldDelimiter=\"&#9;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/>\n    <UniversalPathList>$path</UniversalPathList>\n    <ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"UTF-8\"/>\n    <ExportEntries>\n      <ExportEntry>\n        <Field table=\"\" id=\"0\" name=\"\"/>\n      </ExportEntry>\n      <ExportEntry>\n        <Field table=\"\" id=\"0\" name=\"\"/>\n      </ExportEntry>\n    </ExportEntries>\n    <SummaryFields>\n      <Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/>\n    </SummaryFields>\n  </Step>\n</fmxmlsnippet>"
   },
   "records/Import Records.xml": {
-    "hr": "Import Records [ With dialog: Off ; File ; $path ; Import options: CharacterSet=UTF-8, PreserveContainer=False, MatchFieldNames=False, AutoEnter=True, SplitRepetitions=False, method=Add ; Import fields: =Import, =DoNotImport ]",
+    "hr": "Import Records [ With dialog: Off ; File ; “$path” ; Import options: CharacterSet=UTF-8, PreserveContainer=False, MatchFieldNames=False, AutoEnter=True, SplitRepetitions=False, method=Add ; Import fields: =Import, =DoNotImport ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"35\" name=\"Import Records\">\n    <NoInteract state=\"True\"/>\n    <Restore state=\"True\"/>\n    <VerifySSLCertificates state=\"False\"/>\n    <DataSourceType value=\"File\"/>\n    <UniversalPathList>$path</UniversalPathList>\n    <ImportOptions CharacterSet=\"UTF-8\" PreserveContainer=\"False\" MatchFieldNames=\"False\" AutoEnter=\"True\" SplitRepetitions=\"False\" method=\"Add\"/>\n    <Table id=\"\" name=\"\"/>\n    <TargetFields>\n      <Field FieldOptions=\"0\" map=\"Import\" id=\"\" name=\"\"/>\n      <Field FieldOptions=\"0\" map=\"DoNotImport\" id=\"\" name=\"\"/>\n    </TargetFields>\n  </Step>\n</fmxmlsnippet>"
   },
   "records/New Record_Request.xml": {
@@ -752,19 +752,19 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"51\" name=\"Revert Record/Request\">\n    <NoInteract state=\"True\"/>\n  </Step>\n</fmxmlsnippet>"
   },
   "records/Save Records as Excel.xml": {
-    "hr": "Save Records as Excel [ With dialog: Off ; Create folders: On ; Restore: On ; Automatically open: Off ; Create email: Off ; Profile: DataType=XLXE, FieldDelimiter=\"\t\", FieldNameRow=-1, IsPredefined=-1 ; $path ; Worksheet: \"Sheet1\" ; Title: \"title\" ; Subject: \"subject\" ; Author: \"author\" ; Records being browsed ; Use field names: Off ]",
+    "hr": "Save Records as Excel [ With dialog: Off ; Create folders: On ; Restore: On ; Automatically open: Off ; Create email: Off ; Profile: DataType=XLXE, FieldDelimiter=\"\t\", FieldNameRow=-1, IsPredefined=-1 ; “$path” ; Worksheet: \"Sheet1\" ; Title: \"title\" ; Subject: \"subject\" ; Author: \"author\" ; Records being browsed ; Use field names: Off ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"143\" name=\"Save Records as Excel\">\n    <NoInteract state=\"True\"/>\n    <CreateDirectories state=\"True\"/>\n    <Restore state=\"True\"/>\n    <AutoOpen state=\"False\"/>\n    <CreateEmail state=\"False\"/>\n    <Profile FieldDelimiter=\"&#9;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"XLXE\"/>\n    <UniversalPathList>$path</UniversalPathList>\n    <WorkSheet>\n      <Calculation><![CDATA[\"Sheet1\"]]></Calculation>\n    </WorkSheet>\n    <Title>\n      <Calculation><![CDATA[\"title\"]]></Calculation>\n    </Title>\n    <Subject>\n      <Calculation><![CDATA[\"subject\"]]></Calculation>\n    </Subject>\n    <Author>\n      <Calculation><![CDATA[\"author\"]]></Calculation>\n    </Author>\n    <SaveType value=\"BrowsedRecords\"/>\n    <UseFieldNames state=\"False\"/>\n  </Step>\n</fmxmlsnippet>"
   },
   "records/Save Records as JSONL.xml": {
-    "hr": "Save Records as JSONL [ Off ; Create folders: Off ; Format for fine-tuning: On ; Automatically open: Off ; Create email: Off ; $path ; System Prompt: \"system_prompt\" ; User Prompt: \"user_prompt\" ; Assistant Prompt: \"assistant_prompt\" ]",
+    "hr": "Save Records as JSONL [ Off ; Create folders: Off ; Format for fine-tuning: On ; Automatically open: Off ; Create email: Off ; “$path” ; System Prompt: \"system_prompt\" ; User Prompt: \"user_prompt\" ; Assistant Prompt: \"assistant_prompt\" ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"225\" name=\"Save Records as JSONL\">\n    <Option state=\"False\"/>\n    <CreateDirectories state=\"False\"/>\n    <FineTuneFormat state=\"True\"/>\n    <AutoOpen state=\"False\"/>\n    <CreateEmail state=\"False\"/>\n    <UniversalPathList>$path</UniversalPathList>\n    <SaveAsJSONL>\n      <SystemPrompt>\n        <Calculation><![CDATA[\"system_prompt\"]]></Calculation>\n      </SystemPrompt>\n      <UserPrompt>\n        <Calculation><![CDATA[\"user_prompt\"]]></Calculation>\n      </UserPrompt>\n      <AssistantPrompt>\n        <Calculation><![CDATA[\"assistant_prompt\"]]></Calculation>\n      </AssistantPrompt>\n    </SaveAsJSONL>\n  </Step>\n</fmxmlsnippet>"
   },
   "records/Save Records as PDF.xml": {
-    "hr": "Save Records as PDF [ With dialog: Off ; Append: Off ; Create folders: On ; Restore: On ; Automatically open: Off ; Create email: Off ; $path ; Saved label: \"title\" ; Records: source=RecordsBeingBrowsed, Document=(Title=\"title\", Subject=\"subject\", Author=\"author\", Keywords=\"keywords\", Pages=(AllPages=True, NumberFrom=1)), Security=(ScreenReader=True, Copying=True, Editing=AnyExceptExtractingPages, Printing=HighResolution), View=(Magnification=100, Layout=SinglePage, Show=PagesPanelAndPage) ]",
+    "hr": "Save Records as PDF [ With dialog: Off ; Append: Off ; Create folders: On ; Restore: On ; Automatically open: Off ; Create email: Off ; “$path” ; Saved label: \"title\" ; Records: source=RecordsBeingBrowsed, Document=(Title=\"title\", Subject=\"subject\", Author=\"author\", Keywords=\"keywords\", Pages=(AllPages=True, NumberFrom=1)), Security=(ScreenReader=True, Copying=True, Editing=AnyExceptExtractingPages, Printing=HighResolution), View=(Magnification=100, Layout=SinglePage, Show=PagesPanelAndPage) ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\">\n    <NoInteract state=\"True\"/>\n    <Option state=\"False\"/>\n    <CreateDirectories state=\"True\"/>\n    <Restore state=\"True\"/>\n    <AutoOpen state=\"False\"/>\n    <CreateEmail state=\"False\"/>\n    <UniversalPathList>$path</UniversalPathList>\n    <Calculation><![CDATA[\"title\"]]></Calculation>\n    <PDFOptions source=\"RecordsBeingBrowsed\">\n      <Document>\n        <Title>\n          <Calculation><![CDATA[\"title\"]]></Calculation>\n        </Title>\n        <Subject>\n          <Calculation><![CDATA[\"subject\"]]></Calculation>\n        </Subject>\n        <Author>\n          <Calculation><![CDATA[\"author\"]]></Calculation>\n        </Author>\n        <Keywords>\n          <Calculation><![CDATA[\"keywords\"]]></Calculation>\n        </Keywords>\n        <Pages AllPages=\"True\">\n          <NumberFrom>\n            <Calculation><![CDATA[1]]></Calculation>\n          </NumberFrom>\n        </Pages>\n      </Document>\n      <Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/>\n      <View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/>\n    </PDFOptions>\n  </Step>\n</fmxmlsnippet>"
   },
   "records/Save Records as Snapshot Link.xml": {
-    "hr": "Save Records as Snapshot Link [ Create folders: On ; Create email: Off ; Records being browsed ; $path ]",
+    "hr": "Save Records as Snapshot Link [ Create folders: On ; Create email: Off ; Records being browsed ; “$path” ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"152\" name=\"Save Records as Snapshot Link\">\n    <CreateDirectories state=\"True\"/>\n    <CreateEmail state=\"False\"/>\n    <SaveType value=\"BrowsedRecords\"/>\n    <UniversalPathList>$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "records/Truncate Table.xml": {
@@ -796,7 +796,7 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"108\" name=\"Select Dictionaries\"/>\n</fmxmlsnippet>"
   },
   "spelling/Set Dictionary.xml": {
-    "hr": "Set Dictionary [ Spelling Language: US English ; $userDictionaryPath ]",
+    "hr": "Set Dictionary [ Spelling Language: US English ; “$userDictionaryPath” ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"209\" name=\"Set Dictionary\">\n    <MainDictionary value=\"US English\"/>\n    <UniversalPathList>$userDictionaryPath</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "spelling/Spelling Options.xml": {

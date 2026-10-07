@@ -1523,6 +1523,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false,
         "notes": "Source file path or URL. Can be a variable."
       },
@@ -1622,6 +1623,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": true
       },
       {
@@ -1726,6 +1728,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": "Target file",
+        "hrQuoted": true,
         "required": true
       }
     ],
@@ -2334,6 +2337,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false
       },
       {
@@ -2424,6 +2428,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false
       },
       {
@@ -2964,6 +2969,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": true
       },
       {
@@ -2990,6 +2996,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": true
       },
       {
@@ -3624,6 +3631,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false,
         "notes": "File path, folder path, or URL. Can be a variable."
       },
@@ -3697,6 +3705,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false,
         "notes": "Source file path. If omitted, user is prompted with a dialog."
       },
@@ -3991,6 +4000,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false,
         "notes": "Source file path (direct text content of UniversalPathList). If omitted, user is prompted. Carries the type attribute via the UniversalPathList/@type param (G11)."
       },
@@ -4263,6 +4273,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false,
         "notes": "Source file path (direct text content of UniversalPathList). File path must begin with \"image\", \"imagemac\", \"imagewin\", or \"imagelinux\". Optional; if omitted, user is prompted."
       },
@@ -4297,6 +4308,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false,
         "notes": "Source file path (direct text content of UniversalPathList). File path must begin with \"image\", \"imagemac\", \"imagewin\", or \"imagelinux\". Optional; if omitted, user is prompted."
       },
@@ -4854,6 +4866,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": true
       },
       {
@@ -6428,6 +6441,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false
       }
     ],
@@ -6553,6 +6567,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": "Source file",
+        "hrQuoted": true,
         "required": true
       },
       {
@@ -6811,6 +6826,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": "Output path",
+        "hrQuoted": true,
         "required": false,
         "note": "Text content is the file path (variable or literal). If omitted, Save As dialog is shown."
       }
@@ -6893,6 +6909,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": "Destination file",
+        "hrQuoted": true,
         "required": true,
         "note": "Destination file path for the XML output"
       },
@@ -6994,6 +7011,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": "Output path",
+        "hrQuoted": true,
         "required": false,
         "note": "Output file path. If omitted, Save Records as Excel dialog is shown."
       },
@@ -7115,6 +7133,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": "Output path",
+        "hrQuoted": true,
         "required": false,
         "note": "Output file path. If omitted, Save Records as JSONL dialog is shown."
       },
@@ -7236,6 +7255,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": "Output path",
+        "hrQuoted": true,
         "omitWhenEmpty": true,
         "required": false,
         "note": "Output file path. If omitted, Save Records as PDF dialog is shown."
@@ -7344,6 +7364,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": "Output path",
+        "hrQuoted": true,
         "required": false,
         "note": "Output file path. If omitted, Save Records as Snapshot Link dialog is shown."
       }
@@ -7507,8 +7528,9 @@
         "xmlElement": "Text",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false,
-        "note": "Self-closing <Text/> when empty. Contains script text content when ContentType=Text."
+        "note": "Self-closing <Text/> when empty. Contains script text content when ContentType=Text. FileMaker displays it curly-quoted (“…”), unescaped, like a file path; hrQuoted."
       },
       {
         "xmlElement": "Event",
@@ -7557,6 +7579,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": "Attachment path",
+        "hrQuoted": true,
         "parentElement": "Attachment",
         "omitWhenEmpty": true,
         "required": false,
@@ -7890,6 +7913,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": "User Dictionary",
+        "hrQuoted": true,
         "required": false,
         "note": "Path to user dictionary file. If omitted, no user dictionary is used."
       }
@@ -9101,6 +9125,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false,
         "notes": "Source file path (PDFSaveType=File)"
       },
@@ -9159,6 +9184,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false,
         "notes": "Source file path (PDFSaveType=File)"
       },
@@ -9238,6 +9264,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false,
         "notes": "Output file path (PDFSaveType=File)"
       },
@@ -9338,6 +9365,7 @@
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
         "required": false,
         "notes": "Source PDF path (File mode); Source-mode container ref not captured."
       },
