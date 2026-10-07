@@ -31,6 +31,7 @@ from typing import Any, Union
 
 from calc_literal import (
     CALC_QUOTES,
+    hr_sep,
     is_calc_escape,
     quote_calc_literal,
     skip_calc_literal,
@@ -581,8 +582,19 @@ def _split_element_attr(xml_element: str) -> tuple[bool, str, str]:
     return True, xml_element[:pos], xml_element[pos + 2 :]
 
 
+def _hr_join(items: list[str], sep: str) -> str:
+    """Join HR tokens with ``sep``, breaking the line before a separator that a
+    trailing ``//`` comment would otherwise swallow (``calc_literal.hr_sep``)."""
+    out = ""
+    for i, item in enumerate(items):
+        if i:
+            out += hr_sep(items[i - 1], sep)
+        out += item
+    return out
+
+
 def _join_with_comma(items: list[str]) -> str:
-    return ", ".join(items)
+    return _hr_join(items, ", ")
 
 
 # --- group-value quoting (attr / text kinds) --------------------------------
@@ -814,7 +826,7 @@ def _render_repeat_group(container: ET.Element, param: StepParam) -> str:
     entries = [
         _render_group_element(e, fields) for e in container.findall(entry_el)
     ]
-    return " | ".join(entries)
+    return _hr_join(entries, " | ")
 
 
 def _render_repeat_group_positional(container: ET.Element, param: StepParam) -> str | None:
@@ -859,7 +871,7 @@ def _render_repeat_group_positional(container: ET.Element, param: StepParam) -> 
     expected = max(rc, len(tokens)) if rc > 0 else len(tokens)
     if count != expected:
         return None
-    return " ; ".join(tokens)
+    return _hr_join(tokens, " ; ")
 
 
 def _render_field_list(container: ET.Element, param: StepParam) -> str:
@@ -1332,7 +1344,7 @@ def render_step_hr(entry: CatalogEntry, step: ET.Element) -> str:
             add(_param_token(entry, param, compute_param_hr(entry, step, param)))
     if not parts:
         return entry.name
-    return entry.name + " [ " + " ; ".join(parts) + " ]"
+    return entry.name + " [ " + _hr_join(parts, " ; ") + hr_sep(parts[-1], " ]")
 
 
 if __name__ == "__main__":

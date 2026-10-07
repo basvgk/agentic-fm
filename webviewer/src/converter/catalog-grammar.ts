@@ -22,7 +22,7 @@
  */
 
 import type { StepCatalogEntry } from './catalog-types';
-import { isCalcQuote, isCalcEscape, quoteCalcLiteral, skipCalcLiteral } from './calc-literal';
+import { hrSep, isCalcQuote, isCalcEscape, quoteCalcLiteral, skipCalcLiteral } from './calc-literal';
 
 // ---------------------------------------------------------------------------
 // DOM helpers — ElementTree `.find` / `.findall` / `.text` semantics over a
@@ -135,8 +135,21 @@ function splitElementAttr(xmlElement: string): [boolean, string, string] {
   return [true, xmlElement.slice(0, pos), xmlElement.slice(pos + 2)];
 }
 
+/**
+ * Join HR tokens with `sep`, breaking the line before a separator that a
+ * trailing `//` comment would otherwise swallow (calc-literal.ts hrSep).
+ */
+function hrJoin(items: string[], sep: string): string {
+  let out = '';
+  items.forEach((item, i) => {
+    if (i) out += hrSep(items[i - 1], sep);
+    out += item;
+  });
+  return out;
+}
+
 function joinWithComma(items: string[]): string {
-  return items.join(', ');
+  return hrJoin(items, ', ');
 }
 
 // Group-value quoting (attr / text kinds). A group body (`k1=v1, k2=v2` /
@@ -580,7 +593,7 @@ function renderRepeatGroup(container: Element, param: GrammarParam): string {
   const entryEl = (param.raw.entryElement as string) ?? '';
   const fields = (param.raw.fields as Record<string, unknown>[]) ?? [];
   const entries = findChildren(container, entryEl).map((e) => renderGroupElement(e, fields));
-  return entries.join(' | ');
+  return hrJoin(entries, ' | ');
 }
 
 /**
@@ -621,7 +634,7 @@ function renderRepeatGroupPositional(container: Element, param: GrammarParam): s
   const rc = Number(param.raw.repeatCount ?? 0) || 0;
   const expected = rc > 0 ? Math.max(rc, tokens.length) : tokens.length;
   if (count !== expected) return null;
-  return tokens.join(' ; ');
+  return hrJoin(tokens, ' ; ');
 }
 
 function renderFieldList(container: Element, param: GrammarParam): string {
@@ -1079,5 +1092,5 @@ export function renderStepHr(entry: GrammarEntry, step: Element): string {
     }
   }
   if (parts.length === 0) return entry.name;
-  return entry.name + ' [ ' + parts.join(' ; ') + ' ]';
+  return entry.name + ' [ ' + hrJoin(parts, ' ; ') + hrSep(parts[parts.length - 1], ' ]');
 }

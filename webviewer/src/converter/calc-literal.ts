@@ -1,5 +1,5 @@
 /**
- * calc-literal.ts — the FileMaker calculation text-literal grammar for the converters.
+ * calc-literal.ts — the FileMaker calculation text-literal and comment grammar for the converters.
  *
  * Every converter scanner that must step over (or decode) a text literal inside
  * calculation text uses these helpers: the HR line parser's bracket finders and
@@ -22,6 +22,19 @@
  *    doubled escape: the second character is content (`"a""b"` is `a"b`).
  *  - `'`, `‘` and `’` are never calculation delimiters.
  * A delimiter preceded by an odd backslash run outside a literal does not open one.
+ *
+ * Calculation comments, measured against FileMaker Pro 26.0.2:
+ *  - A slash-star opens a block comment that runs to its MATCHING star-slash:
+ *    block comments nest (`1 /* a /* b ⁎/ c ⁎/ + 2`, with ⁎/ standing for the
+ *    closer, is 3). An unmatched opener is error 1205.
+ *  - `//` opens a line comment that runs to the next return (FileMaker stores a
+ *    return in a calculation as CR; HR text carries it as LF; a pasted LF is
+ *    stored as CR).
+ *  - Inside a comment nothing is structure: a quote opens no literal, `//` inside
+ *    a block comment and `/*` inside a line comment are plain text.
+ *  - A comment opens only outside a literal.
+ * The HR splitters use a narrower comment rule (`hrCalcCommentSpanAt`), because a
+ * step line mixes calculations with bare values such as file paths.
  */
 
 const CALC_QUOTES = '"“”';
@@ -114,4 +127,131 @@ export function decodeWholeCalcLiteral(s: string): string | null {
   if (!isCalcQuote(s[0])) return null;
   const { end, closed, decoded } = skipCalcLiteral(s, 0);
   return closed && end === s.length ? decoded : null;
+}
+
+// ---------------------------------------------------------------------------
+// Calculation comments
+// ---------------------------------------------------------------------------
+
+/**
+ * Length of the calculation comment that opens at `at`, and whether it closes
+ * (`{ len: 0 }` when no `/*` or `//` starts there; the caller has established
+ * that `at` is outside a literal). A block comment runs past its matching close
+ * (block comments nest), or to the end of `s` when it has none. A line comment
+ * runs up to, not including, the next CR or LF; it is always closed.
+ */
+export function calcCommentLen(s: string, at: number): { len: number; closed: boolean } {
+  if (at + 1 >= s.length || s[at] !== '/') return { len: 0, closed: false };
+  if (s[at + 1] === '/') {
+    let i = at + 2;
+    while (i < s.length && s[i] !== '\n' && s[i] !== '\r') i++;
+    return { len: i - at, closed: true };
+  }
+  if (s[at + 1] !== '*') return { len: 0, closed: false };
+  let depth = 1;
+  let i = at + 2;
+  while (i + 1 < s.length) {
+    if (s[i] === '/' && s[i + 1] === '*') { depth++; i += 2; }
+    else if (s[i] === '*' && s[i + 1] === '/') {
+      i += 2;
+      if (--depth === 0) return { len: i - at, closed: true };
+    } else i++;
+  }
+  return { len: s.length - at, closed: false };
+}
+
+/** A comment opens in HR text only after one of these (or at the start). */
+const HR_COMMENT_MAY_FOLLOW = ' \t\r\n()[]{};,&+=<>^"“”';
+
+/**
+ * True when a comment opener at `at` is not glued to a word or path character.
+ * HR step text mixes calculations with bare non-calculation values (a file path
+ * `filewin://srv/a.csv`, `file:a//b`, a Flow URL), and a splitter cannot tell
+ * which a value is before it has split the line, so a comment opens only where a
+ * calculation token can end (`$y//note`, which FileMaker accepts, is then read as
+ * plain text, exactly as before comments were recognised).
+ */
+export function hrCalcCommentMayOpenAfter(s: string, at: number): boolean {
+  return at === 0 || HR_COMMENT_MAY_FOLLOW.includes(s[at - 1]);
+}
+
+/**
+ * Length of the comment an HR splitter steps over at `at` (0 when none):
+ * `calcCommentLen` under the HR rule. An unmatched block comment is not a
+ * comment (FileMaker rejects it, and reading it as one would swallow the rest of
+ * the step; `hrUnterminatedCalcCommentAt` reports it).
+ *
+ * `stops` handles the one-line form. FileMaker's Script Workspace draws a
+ * calculation's returns as spaces, so its line for a step reads
+ * `Height: 400 // Pixels ; Width: 600 // Pixels ; … ]`, and that is also how an
+ * author writes it: on the LAST line of `s` (no CR or LF follows the comment) a
+ * `//` comment ends before the first character of `stops`, the separator the
+ * caller splits on (`;` for step parameters, `,` for a list, `|` for repeated
+ * entries). A comment followed by a line break runs to that break, whatever it
+ * holds. XML→HR writes a line break after a comment whose text holds such a
+ * character (`hrNeedsLineBreakAfter`), so its own output never depends on it.
+ */
+export function hrCalcCommentSpanAt(s: string, at: number, stops = ''): number {
+  if (at + 1 >= s.length || s[at] !== '/' || (s[at + 1] !== '/' && s[at + 1] !== '*')) return 0;
+  if (!hrCalcCommentMayOpenAfter(s, at)) return 0;
+  const { len, closed } = calcCommentLen(s, at);
+  if (!closed) return 0;
+  if (s[at + 1] === '/' && at + len === s.length && stops) {
+    for (let j = at + 2; j < s.length; j++) if (stops.includes(s[j])) return j - at;
+  }
+  return len;
+}
+
+/** True when an unmatched block-comment opener (one `hrCalcCommentSpanAt` declines only because it never closes) opens at `at`. */
+export function hrUnterminatedCalcCommentAt(s: string, at: number): boolean {
+  if (at + 1 >= s.length || s[at] !== '/' || s[at + 1] !== '*') return false;
+  if (!hrCalcCommentMayOpenAfter(s, at)) return false;
+  return !calcCommentLen(s, at).closed;
+}
+
+/**
+ * Length of the opaque span an HR splitter steps over whole at `at`: a text
+ * literal (an unterminated one runs to the end) or a comment. 0 when neither
+ * opens there. A separator, bracket or quote inside the span is content.
+ */
+export function hrCalcOpaqueSpanAt(s: string, at: number, stops = ''): number {
+  return calcLiteralSpanAt(s, at) || hrCalcCommentSpanAt(s, at, stops);
+}
+
+/**
+ * True when XML→HR must break the line after the HR token `token` (one value as
+ * rendered, e.g. `Height: 400 // Pixels`) and before the separator `sep` that
+ * follows it (` ; `, `, `, ` | `, or the step's closing ` ]`): `token` ends inside
+ * a `//` line comment whose text holds `;`, `]` or the separator's own character,
+ * which the one-line reading of `hrCalcCommentSpanAt` would take as structure.
+ * Any other trailing comment (`Height: 400 // Pixels ; …`) stays on one line.
+ */
+export function hrNeedsLineBreakAfter(token: string, sep: string): boolean {
+  let i = 0;
+  while (i < token.length) {
+    const lit = calcLiteralSpanAt(token, i);
+    if (lit) { i += lit; continue; }
+    const c = hrCalcCommentSpanAt(token, i);
+    if (c) {
+      if (token[i + 1] === '/' && i + c === token.length) {
+        const text = token.slice(i + 2);
+        const own = sep.trim()[0] ?? ']';
+        return text.includes(';') || text.includes(']') || text.includes(own);
+      }
+      i += c;
+      continue;
+    }
+    i++;
+  }
+  return false;
+}
+
+/**
+ * The separator XML→HR writes after the HR token `token`: `sep` as is, or a line
+ * break followed by `sep` without its leading space when `token` ends in a `//`
+ * comment the one-line reading would cut (`hrNeedsLineBreakAfter`).
+ */
+export function hrSep(token: string, sep: string): string {
+  if (!hrNeedsLineBreakAfter(token, sep)) return sep;
+  return '\n' + sep.replace(/^ +/, '');
 }

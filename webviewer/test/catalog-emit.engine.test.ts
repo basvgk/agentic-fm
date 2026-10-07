@@ -359,3 +359,73 @@ describe('hrQuoted literal text params', () => {
     for (const [hr, text] of cases) expect(hrToXml(hr).xml, hr).toContain(`<Text>${esc(text)}</Text>`);
   });
 });
+
+// Calculation comments: FileMaker stores `/* … */` (nesting) and `// …` (to the
+// next return) verbatim, and the punctuation inside is not structure. Every shape
+// was pasted into FileMaker Pro 26.0.2 and copied back unchanged. Mirrors
+// agent/scripts/test_calc_comments.py.
+describe('calculation comments inside split values', () => {
+  const cd = (c: string) => `<![CDATA[${c}]]>`;
+  const snip = (steps: string) => `<fmxmlsnippet type="FMObjectList">${steps}</fmxmlsnippet>`;
+  const pjs = (params: string[]) =>
+    '<Step enable="True" id="175" name="Perform JavaScript in Web Viewer">'
+    + `<ObjectName><Calculation>${cd('"wv"')}</Calculation></ObjectName>`
+    + `<FunctionName><Calculation>${cd('"f"')}</Calculation></FunctionName>`
+    + `<Parameters Count="${params.length}">`
+    + params.map((p) => `<P><Calculation>${cd(p)}</Calculation></P>`).join('')
+    + '</Parameters></Step>';
+  const scd = (t: string, m: string) =>
+    '<Step enable="True" id="87" name="Show Custom Dialog">'
+    + `<Title><Calculation>${cd(t)}</Calculation></Title>`
+    + `<Message><Calculation>${cd(m)}</Calculation></Message></Step>`;
+  const ifStep = (c: string) =>
+    `<Step enable="True" id="68" name="If"><Restore state="False"/><Calculation>${cd(c)}</Calculation></Step>`
+    + '<Step enable="True" id="70" name="End If"/>';
+  const after = '<Step enable="True" id="89" name="# (comment)"><Text>after</Text></Step>';
+  const calcs = (xml: string) =>
+    [...xml.matchAll(/<!\[CDATA\[([\s\S]*?)\]\]>/g)].map((m) => m[1].replace(/\r/g, '\n'));
+  const roundTrip = (steps: string) => {
+    const xml = snip(steps);
+    const hr = xmlToHr(xml);
+    const back = hrToXml(hr).xml;
+    const want = calcs(xml);
+    expect(calcs(back).slice(0, want.length), hr).toEqual(want);
+    expect(back).not.toContain('UNKNOWN');
+    return hr;
+  };
+
+  it('keeps a , ; ] or quote inside a block comment in its value', () => {
+    roundTrip(pjs(['/* a, b ; ] */ "x"', '"y"']) + after);
+    roundTrip(scd('"T" /* ; ] */', '"M"'));
+    roundTrip(scd('"T" /* it"s ; */', '"M"'));
+    roundTrip(pjs(['/* it"s, */ "x"', '"y"']));
+  });
+
+  it('keeps a line comment to its line break, and breaks the line where one line would cut it', () => {
+    roundTrip(pjs(['"x" // a, b ; ]\r& "y"', '"z"']) + after);
+    roundTrip(pjs(['"x" // it"s, ;\r& "y"', '"z"']));
+    expect(roundTrip(scd('"T" // x', '"M"'))).toContain('[ "T" // x ; "M"');
+    expect(roundTrip(scd('"T" // a ; b', '"M"'))).toContain('"T" // a ; b\n; "M"');
+    roundTrip(pjs(['"x" // c, d', '"y" // e ] f']) + after);
+    expect(roundTrip(ifStep('$x = 1 // a ; b'))).toContain('If [ $x = 1 // a ; b\n]');
+  });
+
+  it('reads the one-line form: a trailing comment ends at the separator', () => {
+    expect(parseLine('Move/Resize Window [ Current Window ; Height: 400 // Pixels ; Width: 600 // P ; Top: 100 ]', 1).params)
+      .toEqual(['Current Window', 'Height: 400 // Pixels', 'Width: 600 // P', 'Top: 100']);
+    const out = hrToXml('Set Variable [ $x ; Value: $y // note ]\nBeep\nSet Variable [ $z ; Value: 2 ]').xml;
+    expect(calcs(out)).toEqual(['$y // note', '2']);
+    expect(out).toContain('name="Beep"');
+  });
+
+  it('reads paths, disabled-step prefixes and an unmatched /* as plain text', () => {
+    expect(parseLine('Create Data File [ filewin://srv/a.txt ; Create folders: On ]', 1).params)
+      .toEqual(['filewin://srv/a.txt', 'Create folders: On']);
+    const d = hrToXml('// Set Variable [ $x ; Value: 1 /* ; */ ]\nBeep').xml;
+    expect(calcs(d)[0]).toBe('1 /* ; */');
+    const u = hrToXml('Show Custom Dialog [ "T" /* x ; "M" ]\nBeep');
+    expect(calcs(u.xml).slice(0, 2)).toEqual(['"T" /* x', '"M"']);
+    expect(u.xml).toContain('name="Beep"');
+    expect(u.warnings.some((w) => w.message.includes('/*'))).toBe(true);
+  });
+});

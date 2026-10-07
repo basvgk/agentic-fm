@@ -8,13 +8,23 @@
  *   If [ condition ]
  *   Go to Layout [ "LayoutName" ]
  *
- * Every scanner below tracks calculation text literals with the shared grammar
- * in calc-literal.ts: `"`, `“` and `”` are one interchangeable delimiter and a
- * delimiter after an odd backslash run is content, so a `;`, `[` or `]` inside
- * `"a\" ; b"` or `“c ; d”` is literal text, not structure.
+ * Every scanner below steps over calculation text literals and comments whole
+ * with the shared grammar in calc-literal.ts: `"`, `“` and `”` are one
+ * interchangeable delimiter, a delimiter after an odd backslash run is content,
+ * and outside a literal a block comment (nesting) and `// …` (to the end of the
+ * line) are comments, so a `;`, `[`, `]` or quote inside `"a\" ; b"`, `“c ; d”`
+ * or a comment is content, not structure. HR's comment rule is narrower than
+ * FileMaker's: an opener glued to a word or path character (`filewin://srv`) is
+ * plain text, and an unmatched block-comment opener is plain text (reported by
+ * hrToXml as a warning).
  */
 
-import { isUnescapedCalcQuote } from './calc-literal';
+import {
+  calcLiteralSpanAt,
+  hrCalcOpaqueSpanAt,
+  hrUnterminatedCalcCommentAt,
+  isUnescapedCalcQuote,
+} from './calc-literal';
 
 export interface ParsedLine {
   /** Original line text */
@@ -35,6 +45,8 @@ export interface ParsedLine {
   params: string[];
   /** Indentation level (spaces/tabs) */
   indent: number;
+  /** An unmatched block-comment opener outside every literal: FileMaker rejects the calc (error 1205); the splitters read it as plain text. */
+  unterminatedCalcComment?: boolean;
 }
 
 /** Parse a single line of HR script text */
@@ -73,27 +85,31 @@ export function parseLine(raw: string, lineNumber: number): ParsedLine {
 
   let stepName: string;
   let bracketContent = '';
+  let content = '';
   let params: string[] = [];
 
   if (bracketIdx >= 0) {
     stepName = workText.substring(0, bracketIdx).trim();
     // Extract content between outermost [ and ]
     const closeBracket = findMatchingBracket(workText, bracketIdx);
-    if (closeBracket >= 0) {
-      bracketContent = workText.substring(bracketIdx + 1, closeBracket).trim();
-      params = splitParams(bracketContent);
-    } else {
-      bracketContent = workText.substring(bracketIdx + 1).trim();
-      params = splitParams(bracketContent);
-    }
+    // Split the untrimmed content: a line break before the closing `]` ends a
+    // `//` comment (XML→HR writes one after a comment that holds a `;`), and
+    // trimming it would hand that comment to the one-line reading.
+    content = closeBracket >= 0
+      ? workText.substring(bracketIdx + 1, closeBracket)
+      : workText.substring(bracketIdx + 1);
+    bracketContent = content.trim();
+    params = splitParams(content);
   } else {
     stepName = workText.trim();
   }
 
-  return {
+  const parsed: ParsedLine = {
     raw, lineNumber, disabled, isComment: false,
     stepName, bracketContent, params, indent,
   };
+  if (hasUnterminatedCalcComment(content)) parsed.unterminatedCalcComment = true;
+  return parsed;
 }
 
 /** Parse all lines of HR script text */
@@ -109,64 +125,157 @@ interface MergedLine {
 }
 
 /**
+ * How a `//` line comment ends while a scanner looks for a step's closing `]`.
+ * AtLineEnd — the comment runs to the end of its line (the calculation
+ * grammar); tried first, so a `]` inside the comment is comment text.
+ * YieldsToFinalBracket — the fallback for a line written with the step's own `]`
+ * after a trailing comment (`Set Variable [ $x ; Value: $y // note ]`,
+ * FileMaker's own line): when the comment's line ends with `]`, that `]` closes
+ * the step. Used only when AtLineEnd never closes the statement, so `… // a ; ]`
+ * followed by a continuation line keeps its `]` as comment text.
+ */
+const enum LineCommentEnd { AtLineEnd, YieldsToFinalBracket }
+
+/** Offset just past the literal or comment that opens at `i` (`i` when none does). */
+function stepOverOpaque(s: string, i: number, mode: LineCommentEnd, stops = ''): number {
+  const span = hrCalcOpaqueSpanAt(s, i, stops);
+  if (!span) return i;
+  let end = i + span;
+  if (mode === LineCommentEnd.YieldsToFinalBracket && !calcLiteralSpanAt(s, i) && s[i + 1] === '/') {
+    let k = end;
+    while (k > i + 2 && (s[k - 1] === ' ' || s[k - 1] === '\t')) k--;
+    if (k > i + 2 && s[k - 1] === ']') end = k - 1;
+  }
+  return end;
+}
+
+/**
+ * An AtLineEnd statement scan that reached the end of the text with its bracket
+ * still open: per line (indexed from `first`) the depth carried into it, whether
+ * it was entered outside every literal and comment, and the lowest depth at any
+ * later line end. A later statement starting on a cleanly entered line is
+ * answered from it without rescanning, which keeps a script full of
+ * `… // note ]` lines linear.
+ */
+class OpenScanTrace {
+  valid = false;
+  startDepth: number[] = [];
+  cleanStart: boolean[] = [];
+  endMin: number[] = [];
+  constructor(readonly first: number) {}
+
+  knownOpenFrom(k: number): boolean {
+    if (!this.valid || k <= this.first || k - this.first >= this.cleanStart.length) return false;
+    const r = k - this.first;
+    return this.cleanStart[r] && this.endMin[r] > this.startDepth[r];
+  }
+}
+
+/**
+ * Index of the line on which the statement starting at line `first` ends: the
+ * first line end, reached outside every literal and comment, at which its
+ * bracket depth is back to <= 0. -1 when the text ends first (recorded in
+ * `trace`). `text` is every line joined with `\n`; `lineStart[k]` is line k's offset.
+ */
+function statementEndLine(text: string, lineStart: number[], first: number,
+                          mode: LineCommentEnd, trace: OpenScanTrace | null): number {
+  const nLines = lineStart.length;
+  const lineEndDepth: number[] = [];
+  const reach = (to: number): void => {
+    if (!trace) return;
+    while (lineEndDepth.length <= to - first) {
+      trace.startDepth.push(0);
+      trace.cleanStart.push(false);
+      lineEndDepth.push(Infinity);
+    }
+  };
+  reach(first);
+  let i = lineStart[first];
+  while (i < text.length && (text[i] === ' ' || text[i] === '\t')) i++;
+  if (text.startsWith('//', i)) i += 2; // disabled-step prefix, not a comment
+  let depth = 0;
+  let line = first;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === '\n') {
+      if (depth <= 0) return line;
+      if (trace) {
+        reach(line + 1);
+        lineEndDepth[line - first] = depth;
+        trace.startDepth[line + 1 - first] = depth;
+        trace.cleanStart[line + 1 - first] = true;
+      }
+      line++;
+      i++;
+      continue;
+    }
+    if (depth > 0) {
+      const past = stepOverOpaque(text, i, mode);
+      if (past !== i) {
+        for (let j = i; j < past; j++) if (text[j] === '\n') line++;
+        i = past;
+        continue;
+      }
+    } else if (isUnescapedCalcQuote(text, i)) {
+      // A quote before any `[` keeps the historical per-line toggle.
+      let past = i + calcLiteralSpanAt(text, i);
+      const eol = text.indexOf('\n', i);
+      if (eol !== -1 && past > eol) past = eol;
+      i = past;
+      continue;
+    }
+    if (ch === '[') depth++;
+    if (ch === ']') depth--;
+    i++;
+  }
+  if (depth <= 0) return nLines - 1;
+  if (trace) {
+    reach(nLines - 1);
+    lineEndDepth[nLines - 1 - first] = depth;
+    trace.endMin = new Array<number>(lineEndDepth.length + 1).fill(Infinity);
+    for (let r = lineEndDepth.length - 1; r >= 0; r--) {
+      trace.endMin[r] = Math.min(trace.endMin[r + 1], lineEndDepth[r]);
+    }
+    trace.valid = true;
+  }
+  return -1;
+}
+
+/**
  * Merge continuation lines into their opening statement.
- * When a line opens a bracket `[` without a matching `]` on the same line,
- * subsequent lines are appended (joined with `\n`) until brackets balance.
+ * A statement runs to the first line end, outside every literal and comment,
+ * at which its brackets balance; its lines are joined with `\n`.
  *
  * Comment lines (`#`) and empty lines at bracket depth 0 pass through unchanged.
- * Quoted strings are respected when tracking bracket depth.
  */
 function mergeMultilineStatements(lines: string[]): MergedLine[] {
   const result: MergedLine[] = [];
-  let accumulator = '';
-  let startLine = 1;
-  let bracketDepth = 0;
-  let inQuote = false;
+  if (lines.length === 0) return result;
+  const lineStart: number[] = [];
+  let pos = 0;
+  for (const l of lines) { lineStart.push(pos); pos += l.length + 1; }
+  const text = lines.join('\n');
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // If we're not accumulating and this is a comment or empty line, pass through
-    if (bracketDepth === 0 && (trimmed.startsWith('#') || trimmed === '')) {
-      result.push({ text: line, sourceLineNumber: i + 1 });
+  let trace = new OpenScanTrace(0);
+  let k = 0;
+  while (k < lines.length) {
+    const trimmed = lines[k].trim();
+    if (trimmed.startsWith('#') || trimmed === '') {
+      result.push({ text: lines[k], sourceLineNumber: k + 1 });
+      k++;
       continue;
     }
-
-    // Start or continue accumulation
-    if (bracketDepth === 0) {
-      accumulator = line;
-      startLine = i + 1;
-    } else {
-      accumulator += '\n' + line;
+    let last = -1;
+    if (!trace.knownOpenFrom(k)) {
+      const fresh = new OpenScanTrace(k);
+      last = statementEndLine(text, lineStart, k, LineCommentEnd.AtLineEnd, fresh);
+      if (fresh.valid) trace = fresh;
     }
-
-    // Scan this line for bracket depth changes
-    for (let j = 0; j < line.length; j++) {
-      const ch = line[j];
-      if (isUnescapedCalcQuote(line, j)) {
-        inQuote = !inQuote;
-        continue;
-      }
-      if (inQuote) continue;
-      if (ch === '[') bracketDepth++;
-      if (ch === ']') bracketDepth--;
-    }
-
-    // When brackets are balanced, emit the accumulated line
-    if (bracketDepth <= 0) {
-      result.push({ text: accumulator, sourceLineNumber: startLine });
-      accumulator = '';
-      bracketDepth = 0;
-      inQuote = false;
-    }
+    if (last < 0) last = statementEndLine(text, lineStart, k, LineCommentEnd.YieldsToFinalBracket, null);
+    if (last < 0) last = lines.length - 1; // unclosed: the rest, as before
+    result.push({ text: lines.slice(k, last + 1).join('\n'), sourceLineNumber: k + 1 });
+    k = last + 1;
   }
-
-  // Flush any remaining accumulation (unbalanced brackets)
-  if (accumulator) {
-    result.push({ text: accumulator, sourceLineNumber: startLine });
-  }
-
   return result;
 }
 
@@ -183,51 +292,65 @@ function findTopLevelBracket(text: string): number {
   return -1;
 }
 
-/**
- * Find the matching closing ']' for an opening '['.
- * Handles nested brackets and text literals.
- */
-function findMatchingBracket(text: string, openIdx: number): number {
+function findMatchingBracketIn(text: string, openIdx: number, mode: LineCommentEnd): number {
   let depth = 0;
-  let inQuote = false;
-  for (let i = openIdx; i < text.length; i++) {
-    if (isUnescapedCalcQuote(text, i)) inQuote = !inQuote;
-    if (inQuote) continue;
+  let i = openIdx;
+  while (i < text.length) {
+    const past = stepOverOpaque(text, i, mode);
+    if (past !== i) { i = past; continue; }
     if (text[i] === '[') depth++;
     if (text[i] === ']') {
       depth--;
       if (depth === 0) return i;
     }
+    i++;
   }
   return -1;
 }
 
 /**
+ * Find the matching closing ']' for an opening '['.
+ * Handles nested brackets, text literals and comments.
+ */
+function findMatchingBracket(text: string, openIdx: number): number {
+  const idx = findMatchingBracketIn(text, openIdx, LineCommentEnd.AtLineEnd);
+  return idx >= 0 ? idx : findMatchingBracketIn(text, openIdx, LineCommentEnd.YieldsToFinalBracket);
+}
+
+/** True when an unmatched block-comment opener lies outside every literal and comment of `content`. */
+function hasUnterminatedCalcComment(content: string): boolean {
+  let i = 0;
+  while (i < content.length) {
+    const past = stepOverOpaque(content, i, LineCommentEnd.AtLineEnd, ';');
+    if (past !== i) { i = past; continue; }
+    if (hrUnterminatedCalcCommentAt(content, i)) return true;
+    i++;
+  }
+  return false;
+}
+
+/**
  * Split bracket content by semicolons, respecting:
- * - Text literals (calc-literal.ts)
+ * - Text literals and comments (calc-literal.ts)
  * - Nested parentheses (for function calls)
  * - Nested brackets
  */
 function splitParams(content: string): string[] {
   const params: string[] = [];
   let current = '';
-  let inQuote = false;
   let parenDepth = 0;
   let bracketDepth = 0;
 
   for (let i = 0; i < content.length; i++) {
+    // On the last line a `//` comment ends before the next `;` (the one-line
+    // form FileMaker's Script Workspace shows, calc-literal.ts hrCalcCommentSpanAt).
+    const span = hrCalcOpaqueSpanAt(content, i, ';');
+    if (span) {
+      current += content.slice(i, i + span);
+      i += span - 1;
+      continue;
+    }
     const ch = content[i];
-
-    if (isUnescapedCalcQuote(content, i)) {
-      inQuote = !inQuote;
-      current += ch;
-      continue;
-    }
-
-    if (inQuote) {
-      current += ch;
-      continue;
-    }
 
     if (ch === '(') parenDepth++;
     if (ch === ')') parenDepth--;

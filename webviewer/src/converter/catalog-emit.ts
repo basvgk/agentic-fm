@@ -20,7 +20,7 @@
 import type { ParsedLine } from './parser';
 import type { IdResolver } from './id-resolver';
 import { cdata, escXml } from './step-registry';
-import { calcLiteralSpanAt, decodeWholeCalcLiteral } from './calc-literal';
+import { decodeWholeCalcLiteral, hrCalcOpaqueSpanAt } from './calc-literal';
 import {
   type GrammarEntry,
   type GrammarParam,
@@ -42,6 +42,15 @@ import {
 // ---------------------------------------------------------------------------
 function trim(s: string): string {
   return s.replace(/^[ \t]+/, '').replace(/[ \t]+$/, '');
+}
+
+/**
+ * Trim a split piece: a line comment ends at a line break, so a piece can end
+ * with the break XML→HR wrote after it (calc-literal.ts hrSep); it is not part
+ * of the value.
+ */
+function trimPiece(s: string): string {
+  return s.replace(/^[ \t\r\n]+/, '').replace(/[ \t\r\n]+$/, '');
 }
 
 function ciEquals(a: string, b: string): boolean {
@@ -81,8 +90,9 @@ function escXmlAttr(s: string): string {
  * Split on top-level commas, respecting paren/bracket/brace depth + text literals.
  * Used by the parametersList grammar and the attrGroup/repeatGroup body parser,
  * whose quoted values are written as calculation literals (groupQuoteValue). A
- * literal is stepped over whole with the calculation literal grammar
- * (calc-literal.ts), so a comma inside `"a\", b"` or `“c, d”` is content.
+ * literal or a calculation comment is stepped over whole with the calculation
+ * grammar (calc-literal.ts hrCalcOpaqueSpanAt), so a comma inside `"a\", b"`,
+ * `“c, d”` or a block comment is content.
  */
 function splitTopLevelCommas(s: string): string[] {
   const out: string[] = [];
@@ -90,7 +100,7 @@ function splitTopLevelCommas(s: string): string[] {
   let cur = '';
   let paren = 0, bracket = 0, brace = 0;
   for (let i = 0; i < s.length; i++) {
-    const lit = calcLiteralSpanAt(s, i);
+    const lit = hrCalcOpaqueSpanAt(s, i, ',');
     if (lit) { cur += s.slice(i, i + lit); i += lit - 1; continue; }
     const c = s[i];
     if (c === '(') paren++;
@@ -100,14 +110,14 @@ function splitTopLevelCommas(s: string): string[] {
     else if (c === '{') brace++;
     else if (c === '}') { if (brace > 0) brace--; }
     if (c === ',' && paren === 0 && bracket === 0 && brace === 0) {
-      const item = trim(cur);
+      const item = trimPiece(cur);
       if (item) out.push(item);
       cur = '';
       continue;
     }
     cur += c;
   }
-  const tail = trim(cur);
+  const tail = trimPiece(cur);
   if (tail) out.push(tail);
   return out;
 }
@@ -115,7 +125,7 @@ function splitTopLevelCommas(s: string): string[] {
 /**
  * Split `s` on every top-level occurrence of multi-char `delim`, keeping a
  * delimiter inside a quoted region. With `calcLiterals` the region is a
- * calculation text literal (the repeatGroup entries, whose values are
+ * calculation text literal or comment (the repeatGroup entries, whose values are
  * calculations or groupQuoteValue-quoted text); without it a straight `"`
  * toggles a find-request phrase (the findRequests rows and criteria: find text
  * is not a calculation, and `"` is FileMaker's match-phrase operator there).
@@ -128,11 +138,11 @@ function splitOnDelim(s: string, delim: string, calcLiterals: boolean): string[]
   let i = 0;
   while (i + delim.length <= s.length) {
     if (calcLiterals) {
-      const lit = calcLiteralSpanAt(s, i);
+      const lit = hrCalcOpaqueSpanAt(s, i, delim.trim()[0] ?? delim[0]);
       if (lit) { i += lit; continue; }
     } else if (s[i] === '"') { inQuote = !inQuote; i++; continue; }
     if (!inQuote && s.slice(i, i + delim.length) === delim) {
-      const piece = trim(s.slice(start, i));
+      const piece = trimPiece(s.slice(start, i));
       if (piece) out.push(piece);
       i += delim.length;
       start = i;
@@ -140,22 +150,22 @@ function splitOnDelim(s: string, delim: string, calcLiterals: boolean): string[]
     }
     i++;
   }
-  const tail = trim(s.slice(start));
+  const tail = trimPiece(s.slice(start));
   if (tail) out.push(tail);
   return out;
 }
 
 /**
  * Split a fieldList body on top-level commas, PRESERVING empty entries. Text
- * literals are stepped over whole, as in splitTopLevelCommas.
+ * literals and comments are stepped over whole, as in splitTopLevelCommas.
  */
 function splitListEntries(s: string): string[] {
   const out: string[] = [];
-  if (!trim(s)) return out;
+  if (!trimPiece(s)) return out;
   let cur = '';
   let paren = 0, bracket = 0, brace = 0;
   for (let i = 0; i < s.length; i++) {
-    const lit = calcLiteralSpanAt(s, i);
+    const lit = hrCalcOpaqueSpanAt(s, i, ',');
     if (lit) { cur += s.slice(i, i + lit); i += lit - 1; continue; }
     const c = s[i];
     if (c === '(') paren++;
@@ -165,13 +175,13 @@ function splitListEntries(s: string): string[] {
     else if (c === '{') brace++;
     else if (c === '}') { if (brace > 0) brace--; }
     if (c === ',' && paren === 0 && bracket === 0 && brace === 0) {
-      out.push(trim(cur));
+      out.push(trimPiece(cur));
       cur = '';
       continue;
     }
     cur += c;
   }
-  out.push(trim(cur));
+  out.push(trimPiece(cur));
   return out;
 }
 

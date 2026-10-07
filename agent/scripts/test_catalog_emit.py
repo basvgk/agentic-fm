@@ -22,7 +22,7 @@ import json
 import os
 import re
 
-from calc_literal import is_unescaped_calc_quote
+from calc_literal import hr_calc_opaque_span_at, is_unescaped_calc_quote
 from catalog_emit import (
     EmptyResolver,
     convert_step_with_catalog,
@@ -59,8 +59,10 @@ FM26_AI_SKIP = {
 
 
 # --- minimal HR line parser (port of parser.ts parseLine + splitParams) ---------
-# Text literals follow the calculation literal grammar (calc_literal.py), exactly as
-# parser.ts does: every unescaped ", “ or ” toggles in/out of a literal.
+# Text literals and comments follow the calculation grammar (calc_literal.py), exactly
+# as parser.ts does: a literal or a comment is stepped over whole; on the last line a
+# ``//`` comment ends before the next ``;`` (the one-line form), and a step's own ``]``
+# after a trailing comment closes it when nothing else does.
 def _find_top_level_bracket(text: str) -> int:
     in_quote = False
     for i, c in enumerate(text):
@@ -72,36 +74,43 @@ def _find_top_level_bracket(text: str) -> int:
 
 
 def _find_matching_bracket(text: str, open_idx: int) -> int:
-    depth = 0
-    in_quote = False
-    for i in range(open_idx, len(text)):
-        c = text[i]
-        if is_unescaped_calc_quote(text, i):
-            in_quote = not in_quote
-        if in_quote:
-            continue
-        if c == "[":
-            depth += 1
-        elif c == "]":
-            depth -= 1
-            if depth == 0:
-                return i
+    for yields in (False, True):
+        depth = 0
+        i = open_idx
+        while i < len(text):
+            span = hr_calc_opaque_span_at(text, i)
+            if span:
+                end = i + span
+                if yields and text[i] == "/" and text[i + 1] == "/":
+                    k = end
+                    while k > i + 2 and text[k - 1] in " \t":
+                        k -= 1
+                    if k > i + 2 and text[k - 1] == "]":
+                        end = k - 1
+                i = end
+                continue
+            if text[i] == "[":
+                depth += 1
+            elif text[i] == "]":
+                depth -= 1
+                if depth == 0:
+                    return i
+            i += 1
     return -1
 
 
 def _split_params(content: str) -> list[str]:
     params: list[str] = []
     cur = ""
-    in_quote = False
     paren = bracket = 0
-    for i, c in enumerate(content):
-        if is_unescaped_calc_quote(content, i):
-            in_quote = not in_quote
-            cur += c
+    i = 0
+    while i < len(content):
+        span = hr_calc_opaque_span_at(content, i, ";")
+        if span:
+            cur += content[i : i + span]
+            i += span
             continue
-        if in_quote:
-            cur += c
-            continue
+        c = content[i]
         if c == "(":
             paren += 1
         elif c == ")":
@@ -113,8 +122,10 @@ def _split_params(content: str) -> list[str]:
         if c == ";" and paren == 0 and bracket == 0:
             params.append(cur.strip())
             cur = ""
+            i += 1
             continue
         cur += c
+        i += 1
     if cur.strip():
         params.append(cur.strip())
     return params
@@ -136,7 +147,7 @@ def _parse_hr_line(raw: str) -> tuple[bool, str, list[str]]:
         return (disabled, work.strip(), [])
     step_name = work[:bi].strip()
     close = _find_matching_bracket(work, bi)
-    content = work[bi + 1 : close].strip() if close >= 0 else work[bi + 1 :].strip()
+    content = work[bi + 1 : close] if close >= 0 else work[bi + 1 :]
     return (disabled, step_name, _split_params(content))
 
 

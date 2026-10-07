@@ -49,6 +49,7 @@ export function hrToXml(hrText: string, context?: FMContext | null): ConversionR
   const lines = parseScript(trimmedText);
   const resolver = createIdResolver(context ?? null);
   const errors: ConversionError[] = [];
+  const parseWarnings: ConversionError[] = [];
   const stepXmls: string[] = [];
 
   for (const line of lines) {
@@ -60,6 +61,13 @@ export function hrToXml(hrText: string, context?: FMContext | null): ConversionR
     if (!line.stepName) {
       stepXmls.push(stepSelfClose('# (comment)', !line.disabled));
       continue;
+    }
+
+    if (line.unterminatedCalcComment) {
+      parseWarnings.push({
+        line: line.lineNumber,
+        message: `Unclosed /* comment in "${line.stepName} [...]": FileMaker rejects this calculation; the /* was read as plain text.`,
+      });
     }
 
     const converter = getHrToXmlConverter(line.stepName);
@@ -86,7 +94,7 @@ export function hrToXml(hrText: string, context?: FMContext | null): ConversionR
 
   // Report unresolved references as warnings (not errors).
   // The XML is still valid — FileMaker resolves by name on paste.
-  const warnings: ConversionError[] = [];
+  const warnings: ConversionError[] = [...parseWarnings];
   for (const ref of resolver.getUnresolved()) {
     warnings.push({
       line: 0,

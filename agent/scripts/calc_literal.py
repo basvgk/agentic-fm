@@ -1,4 +1,4 @@
-"""calc_literal.py — the FileMaker calculation text-literal grammar for the converters.
+"""calc_literal.py — the FileMaker calculation text-literal and comment grammar for the converters.
 
 Every converter scanner that must step over (or decode) a text literal inside
 calculation text uses these helpers: the human-readable step-line splitters (the
@@ -24,6 +24,22 @@ Grammar, measured against FileMaker Pro 26.0.2:
 * ``'``, ``‘`` and ``’`` are never calculation delimiters.
 
 A delimiter preceded by an odd backslash run outside a literal does not open one.
+
+Calculation comments, measured against FileMaker Pro 26.0.2:
+
+* ``/*`` opens a block comment that runs to its MATCHING ``*/``: block comments nest
+  (``1 /* a /* b */ c */ + 2`` is 3, ``1 /* a */ */ + 2`` is error 1204). An
+  unmatched ``/*`` is error 1205.
+* ``//`` opens a line comment that runs to the next return (FileMaker stores a
+  return in a calculation as CR; human-readable text carries it as LF; a pasted LF
+  is stored as CR).
+* Inside a comment nothing is structure: a quote opens no literal
+  (``1 /* "*/" */ + 2`` is error 1206), ``//`` inside a block comment and ``/*``
+  inside a line comment are plain text.
+* A comment opens only outside a literal (``"a /* b"`` is the text ``a /* b``).
+
+The human-readable splitters use a narrower comment rule (``hr_calc_comment_span_at``),
+because a step line mixes calculations with bare values such as file paths.
 Stdlib only.
 """
 
@@ -127,3 +143,149 @@ def decode_whole_calc_literal(s: str) -> str | None:
         return None
     end, closed, decoded = skip_calc_literal(s, 0)
     return decoded if closed and end == len(s) else None
+
+
+# --- calculation comments ----------------------------------------------------
+
+
+def calc_comment_len(s: str, at: int) -> tuple[int, bool]:
+    """Length of the calculation comment that opens at ``at`` and whether it closes.
+
+    ``(0, False)`` when no ``/*`` or ``//`` starts there (the caller has established
+    that ``at`` is outside a literal). A block comment runs past its matching ``*/``
+    (block comments nest), or to the end of ``s`` when it has none (not closed). A
+    line comment runs up to, not including, the next CR or LF (or to the end); it is
+    always closed.
+    """
+    n = len(s)
+    if at + 1 >= n or s[at] != "/":
+        return 0, False
+    if s[at + 1] == "/":
+        i = at + 2
+        while i < n and s[i] not in "\r\n":
+            i += 1
+        return i - at, True
+    if s[at + 1] != "*":
+        return 0, False
+    depth = 1
+    i = at + 2
+    while i + 1 < n:
+        if s[i] == "/" and s[i + 1] == "*":
+            depth += 1
+            i += 2
+        elif s[i] == "*" and s[i + 1] == "/":
+            i += 2
+            depth -= 1
+            if depth == 0:
+                return i - at, True
+        else:
+            i += 1
+    return n - at, False
+
+
+# A comment opens in human-readable text only after one of these (or at the start).
+_HR_COMMENT_MAY_FOLLOW = frozenset(' \t\r\n()[]{};,&+=<>^"“”')
+
+
+def hr_calc_comment_may_open_after(s: str, at: int) -> bool:
+    """True when a comment opener at ``at`` is not glued to a word or path character.
+
+    Human-readable step text mixes calculations with bare non-calculation values (a
+    file path ``filewin://srv/a.csv``, ``file:a//b``, a Flow URL), and a splitter
+    cannot tell which a value is before it has split the line. So a comment opens
+    only where a calculation token can end: at the start of the text, after
+    whitespace, after a literal delimiter, or after one of ``( ) [ ] { } ; , & + = <
+    > ^`` -- never glued to a preceding word or path character (``$y//note``, which
+    FileMaker accepts, is then read as plain text, exactly as before comments were
+    recognised).
+    """
+    return at == 0 or s[at - 1] in _HR_COMMENT_MAY_FOLLOW
+
+
+def hr_calc_comment_span_at(s: str, at: int, stops: str = "") -> int:
+    """Length of the comment a human-readable splitter steps over at ``at`` (0 if none).
+
+    ``calc_comment_len`` under the human-readable rule: the opener must not be glued
+    to a word character, and a block comment with no matching ``*/`` in ``s`` is not
+    a comment (FileMaker rejects it, and reading it as one would swallow the rest of
+    the step; ``hr_unterminated_calc_comment_at`` reports it).
+
+    ``stops`` handles the one-line form. FileMaker's Script Workspace draws a
+    calculation's returns as spaces, so its line for a step reads
+    ``Height: 400 // Pixels ; Width: 600 // Pixels ; … ]``, and that is also how an
+    author writes it: on the LAST line of ``s`` (no CR or LF follows the comment) a
+    ``//`` comment ends before the first character of ``stops`` -- the separator the
+    caller splits on (``;`` for step parameters, ``,`` for a list, ``|`` for repeated
+    entries). A comment followed by a line break runs to that break, whatever it
+    holds. XML->HR writes a line break after a comment whose text holds such a
+    character (``hr_needs_line_break_after``), so its own output never depends on it.
+    """
+    if at + 1 >= len(s) or s[at] != "/" or s[at + 1] not in "/*":
+        return 0
+    if not hr_calc_comment_may_open_after(s, at):
+        return 0
+    span, closed = calc_comment_len(s, at)
+    if not closed:
+        return 0
+    if s[at + 1] == "/" and at + span == len(s) and stops:
+        for j in range(at + 2, len(s)):
+            if s[j] in stops:
+                return j - at
+    return span
+
+
+def hr_unterminated_calc_comment_at(s: str, at: int) -> bool:
+    """True when an unmatched ``/*`` (one ``hr_calc_comment_span_at`` declines only
+    because it never closes) opens at ``at``."""
+    if at + 1 >= len(s) or s[at] != "/" or s[at + 1] != "*":
+        return False
+    if not hr_calc_comment_may_open_after(s, at):
+        return False
+    return not calc_comment_len(s, at)[1]
+
+
+def hr_calc_opaque_span_at(s: str, at: int, stops: str = "") -> int:
+    """Length of the opaque span a human-readable splitter steps over whole at ``at``:
+    a text literal (an unterminated one runs to the end) or a comment
+    (``hr_calc_comment_span_at``). 0 when neither opens there. A separator, bracket or
+    quote inside the span is content, not structure."""
+    lit = calc_literal_span_at(s, at)
+    if lit:
+        return lit
+    return hr_calc_comment_span_at(s, at, stops)
+
+
+def hr_needs_line_break_after(token: str, sep: str) -> bool:
+    """True when XML->HR must break the line after ``token`` and token the separator
+    ``sep`` that follows it (`` ; ``, ``, ``, `` | ``, or the step's closing `` ]``):
+    ``token`` ends inside a ``//`` line comment whose text holds ``;``, ``]`` or the
+    separator's own character, which the one-line reading of
+    ``hr_calc_comment_span_at`` would take as structure. Any other trailing comment
+    (``Height: 400 // Pixels ; …``) stays on FileMaker's one line.
+    """
+    i = 0
+    n = len(token)
+    while i < n:
+        lit = calc_literal_span_at(token, i)
+        if lit:
+            i += lit
+            continue
+        c = hr_calc_comment_span_at(token, i)
+        if c:
+            if token[i + 1] == "/" and i + c == n:
+                text = token[i + 2 :]
+                own = sep.strip(" ")[:1] or "]"
+                return any(ch in text for ch in ";]") or own in text
+            i += c
+            continue
+        i += 1
+    return False
+
+
+def hr_sep(token: str, sep: str) -> str:
+    """The separator XML->HR writes after the HR token ``token``: ``sep`` as is, or a line break
+    followed by ``sep`` without its leading space when ``token`` ends in a ``//``
+    comment the one-line reading would cut (``hr_needs_line_break_after``)."""
+    if not hr_needs_line_break_after(token, sep):
+        return sep
+    return "\n" + sep.lstrip(" ")

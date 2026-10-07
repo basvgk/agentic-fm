@@ -47,7 +47,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from calc_literal import calc_literal_span_at, decode_whole_calc_literal
+from calc_literal import decode_whole_calc_literal, hr_calc_opaque_span_at
 from catalog_grammar import (
     CatalogEntry,
     StepParam,
@@ -109,6 +109,13 @@ def _trim(s: str) -> str:
     return s.strip(" \t")
 
 
+def _trim_piece(s: str) -> str:
+    """Trim a split piece: a line comment ends at a line break, so a piece can end
+    with the break XML->HR wrote after it (``calc_literal.hr_sep``); it is not part
+    of the value."""
+    return s.strip(" \t\r\n")
+
+
 def _ci_equals(a: str, b: str) -> bool:
     return a.lower() == b.lower()
 
@@ -166,8 +173,9 @@ def _split_top_level_commas(s: str) -> list[str]:
 
     Used by the parametersList grammar and the attrGroup/repeatGroup body parser,
     whose quoted values are written as calculation literals (``_group_quote_value``).
-    A literal is stepped over whole with the calculation literal grammar
-    (``calc_literal``), so a comma inside ``"a\\", b"`` or ``“c, d”`` is content.
+    A literal or a calculation comment is stepped over whole with the calculation
+    grammar (``calc_literal.hr_calc_opaque_span_at``), so a comma inside ``"a\\", b"``,
+    ``“c, d”`` or ``/* e, f */`` is content.
     """
     out: list[str] = []
     if not s:
@@ -177,7 +185,7 @@ def _split_top_level_commas(s: str) -> list[str]:
     i = 0
     n = len(s)
     while i < n:
-        lit = calc_literal_span_at(s, i)
+        lit = hr_calc_opaque_span_at(s, i, ",")
         if lit:
             cur += s[i : i + lit]
             i += lit
@@ -198,7 +206,7 @@ def _split_top_level_commas(s: str) -> list[str]:
         elif c == "}" and brace > 0:
             brace -= 1
         if c == "," and paren == 0 and bracket == 0 and brace == 0:
-            item = _trim(cur)
+            item = _trim_piece(cur)
             if item:
                 out.append(item)
             cur = ""
@@ -206,7 +214,7 @@ def _split_top_level_commas(s: str) -> list[str]:
             continue
         cur += c
         i += 1
-    tail = _trim(cur)
+    tail = _trim_piece(cur)
     if tail:
         out.append(tail)
     return out
@@ -216,7 +224,7 @@ def _split_on_delim(s: str, delim: str, calc_literals: bool) -> list[str]:
     """Split ``s`` on every top-level occurrence of multi-char ``delim``.
 
     A delimiter inside a quoted region is kept. With ``calc_literals`` the region is a
-    calculation text literal (the repeatGroup entries, whose values are calculations
+    calculation text literal or comment (the repeatGroup entries, whose values are calculations
     or ``_group_quote_value``-quoted text); without it a straight ``"`` toggles a
     find-request phrase (the findRequests rows and criteria: find text is not a
     calculation, and ``"`` is FileMaker's match-phrase operator there).
@@ -232,7 +240,7 @@ def _split_on_delim(s: str, delim: str, calc_literals: bool) -> list[str]:
     n = len(s)
     while i + dn <= n:
         if calc_literals:
-            lit = calc_literal_span_at(s, i)
+            lit = hr_calc_opaque_span_at(s, i, delim.strip(" ")[:1] or delim[0])
             if lit:
                 i += lit
                 continue
@@ -241,14 +249,14 @@ def _split_on_delim(s: str, delim: str, calc_literals: bool) -> list[str]:
             i += 1
             continue
         if not in_quote and s[i : i + dn] == delim:
-            piece = _trim(s[start:i])
+            piece = _trim_piece(s[start:i])
             if piece:
                 out.append(piece)
             i += dn
             start = i
             continue
         i += 1
-    tail = _trim(s[start:])
+    tail = _trim_piece(s[start:])
     if tail:
         out.append(tail)
     return out
@@ -257,17 +265,17 @@ def _split_on_delim(s: str, delim: str, calc_literals: bool) -> list[str]:
 def _split_list_entries(s: str) -> list[str]:
     """Split a fieldList body on top-level commas, PRESERVING empty entries.
 
-    Text literals are stepped over whole, as in ``_split_top_level_commas``.
+    Text literals and comments are stepped over whole, as in ``_split_top_level_commas``.
     """
     out: list[str] = []
-    if not _trim(s):
+    if not _trim_piece(s):
         return out
     cur = ""
     paren = bracket = brace = 0
     i = 0
     n = len(s)
     while i < n:
-        lit = calc_literal_span_at(s, i)
+        lit = hr_calc_opaque_span_at(s, i, ",")
         if lit:
             cur += s[i : i + lit]
             i += lit
@@ -288,13 +296,13 @@ def _split_list_entries(s: str) -> list[str]:
         elif c == "}" and brace > 0:
             brace -= 1
         if c == "," and paren == 0 and bracket == 0 and brace == 0:
-            out.append(_trim(cur))
+            out.append(_trim_piece(cur))
             cur = ""
             i += 1
             continue
         cur += c
         i += 1
-    out.append(_trim(cur))
+    out.append(_trim_piece(cur))
     return out
 
 
