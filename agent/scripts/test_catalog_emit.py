@@ -442,16 +442,75 @@ def test_repetition_subscript_emits_attribute_at_step_level():
     assert '<Field table="Invoices" id="0" repetition="2" name="Description"/>' in out
 
 
-def test_repetition_one_and_non_numeric_subscripts():
-    """`[1]` is the default (no attribute); a non-literal subscript is not a repetition."""
+def test_repetition_one_and_malformed_subscripts():
+    """`[1]` is the default (no attribute); `[0]` and `[]` are not a repetition."""
     by_name, _ = _load()
     out = _emit_hr(by_name, "Set Field [ Invoices::Description[1] ; 1 ]")
     assert '<Field table="Invoices" id="0" name="Description"/>' in out
     out = _emit_hr(by_name, 'Show Custom Dialog [ "T" ; "" ; $rep[1] ]')
     assert "<Field>$rep</Field>" in out
-    for ref in ("$rep[0]", "$rep[]", "$rep[$i]"):
+    for ref in ("$rep[0]", "$rep[]"):
         out = _emit_hr(by_name, 'Insert Text [ Select ; Target: ' + ref + ' ; "x" ]')
         assert "repetition=" not in out, ref
+
+
+# ---------------------------------------------------------------------------
+# Calculated repetitions — `T::F[calc]` in HR.
+#
+# Authored in FileMaker Pro 26.0.2's own Specify Field / Specify Target dialogs
+# (Set Field, Go to Field, Insert Text field and variable targets) and copied
+# out: a calculated repetition is repetition="0" on the <Field> plus a sibling
+# <Repetition><Calculation> right after it; the Script Workspace line reads
+# `T::F[$i]`, the calc verbatim (brackets, semicolons and quotes included).
+# A Show Custom Dialog input's target dialog takes digits only, so a group entry
+# has no calculated form. Mirrors the C++ FieldOps_CalcRepetition_* tests.
+# ---------------------------------------------------------------------------
+_FM_CALC_REP = (
+    '<fmxmlsnippet type="FMObjectList">'
+    '<Step enable="True" id="76" name="Set Field"><Calculation><![CDATA["x"]]></Calculation>'
+    '<Field table="Invoices" id="31" repetition="0" name="Description"></Field>'
+    '<Repetition><Calculation><![CDATA[Let ( [ a = "]" ; b = 2 ] ; b )]]></Calculation></Repetition></Step>'
+    '<Step enable="True" id="61" name="Insert Text"><SelectAll state="False"></SelectAll><Text>t</Text>'
+    '<Field repetition="0">$v</Field>'
+    '<Repetition><Calculation><![CDATA[$i + 1]]></Calculation></Repetition></Step>'
+    '<Step enable="True" id="17" name="Go to Field"><SelectAll state="False"></SelectAll>'
+    '<Field table="Invoices" id="31" repetition="0" name="Description"></Field>'
+    '<Repetition><Calculation><![CDATA[$k // ] ;]]></Calculation></Repetition></Step>'
+    "</fmxmlsnippet>"
+)
+
+
+def test_calculated_repetition_renders_as_subscript():
+    hr = _hr_of(_FM_CALC_REP).split("\n")
+    assert hr[0] == 'Set Field [ Invoices::Description[Let ( [ a = "]" ; b = 2 ] ; b )] ; "x" ]'
+    assert "Target: $v[$i + 1]" in hr[1]
+    # A `//` comment holding `]` or `;` breaks the line before the closing `]`.
+    assert hr[2] == "Go to Field [ Invoices::Description[$k // ] ;"
+    assert hr[3] == "] ]"
+
+
+def test_calculated_repetition_emits_filemaker_form():
+    by_name, _ = _load()
+    out = _emit_hr(by_name, 'Set Field [ Invoices::Description[Let ( [ a = "]" ; b = 2 ] ; b )] ; "x" ]')
+    assert (
+        '<Field table="Invoices" id="0" repetition="0" name="Description"/>\n'
+        "    <Repetition>\n"
+        '      <Calculation><![CDATA[Let ( [ a = "]" ; b = 2 ] ; b )]]></Calculation>\n'
+        "    </Repetition>"
+    ) in out
+    out = _emit_hr(by_name, 'Insert Text [ Target: $v[$i + 1] ; "t" ]')
+    assert (
+        '<Field repetition="0">$v</Field>\n'
+        "    <Repetition>\n"
+        "      <Calculation><![CDATA[$i + 1]]></Calculation>\n"
+        "    </Repetition>"
+    ) in out
+    # A digits-only subscript stays the literal form.
+    out = _emit_hr(by_name, "Set Field [ Invoices::Description[ 2 ] ; 1 ]")
+    assert 'repetition="2" name="Description"' in out and "<Repetition>" not in out
+    # A group entry has no calculated form: the subscript is dropped.
+    out = _emit_hr(by_name, 'Show Custom Dialog [ "T" ; "" ; $rep[$i] ]')
+    assert "<Field>$rep</Field>" in out and "<Repetition>" not in out
 
 
 def _saxml_target(inner: str) -> str:
@@ -487,20 +546,26 @@ def test_saxml_reference_repetition_becomes_attribute():
         assert '<Field table="Invoices" id="31"' + want + ' name="Description"/>' in out, text
 
 
-def test_saxml_calculated_repetition_is_refused_not_dropped():
-    """A computed repetition has no fmxmlsnippet form: refuse it loudly."""
+def test_saxml_calculated_repetition_becomes_calculated_form():
+    """SaXML -> XML: a computed repetition becomes repetition="0" plus the
+    <Repetition><Calculation> sibling (FileMaker's own fmxmlsnippet form)."""
     import xml.etree.ElementTree as ET
 
-    import pytest
-
-    from saxml_read import UnsupportedSaXML, read_saxml_step
+    from saxml_read import read_saxml_step
 
     by_name, _ = _load()
+    entry = by_name["Set Field"]
     step = ET.fromstring(_saxml_target(
         '<FieldReference id="31" name="Description" UUID="F">' + _saxml_rep("$i")
         + '<TableOccurrenceReference id="1" name="Invoices" UUID="T"/></FieldReference>'))
-    with pytest.raises(UnsupportedSaXML):
-        read_saxml_step(by_name["Set Field"], step)
+    disabled, values, resolver = read_saxml_step(entry, step)
+    out = convert_step_with_catalog(entry, disabled, values, resolver)
+    assert (
+        '<Field table="Invoices" id="31" repetition="0" name="Description"/>\n'
+        "    <Repetition>\n"
+        "      <Calculation><![CDATA[$i]]></Calculation>\n"
+        "    </Repetition>"
+    ) in out
 
 
 # ---------------------------------------------------------------------------

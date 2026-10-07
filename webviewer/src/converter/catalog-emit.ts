@@ -230,25 +230,89 @@ function parseFieldRepetition(ref: string): [string, number] {
   return [ref.slice(0, open), rep];
 }
 
-/** FileMaker's `repetition="N"` attribute, written only for N > 1. */
-function repetitionAttr(rep: number): string {
+/**
+ * Split a trailing repetition subscript that may be a literal OR a calculation.
+ *
+ * `T::F[2]` -> [`T::F`, 2, '']; `T::F[$i + 1]` -> [`T::F`, 0, `$i + 1`]. The
+ * subscript opens at the first `[` and must close, bracket-balanced (text
+ * literals and comments are opaque), on the last character; the calc is
+ * trimmed (XML→HR writes a line break before the closing `]` after a `//`
+ * comment). A digits-only subscript is the literal form with
+ * `parseFieldRepetition`'s rules. Anything else returns [ref, 0, ''].
+ */
+function parseFieldSubscript(ref: string): [string, number, string] {
+  if (ref.length < 3 || ref[ref.length - 1] !== ']') return [ref, 0, ''];
+  const open = ref.indexOf('[');
+  if (open <= 0) return [ref, 0, ''];
+  let depth = 0;
+  let close = -1;
+  for (let i = open; i < ref.length; ) {
+    const span = hrCalcOpaqueSpanAt(ref, i);
+    if (span) {
+      i += span;
+      continue;
+    }
+    if (ref[i] === '[') depth++;
+    else if (ref[i] === ']' && --depth === 0) {
+      close = i;
+      break;
+    }
+    i++;
+  }
+  if (close !== ref.length - 1) return [ref, 0, ''];
+  const inner = ref.slice(open + 1, close).replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
+  if (!inner) return [ref, 0, ''];
+  if (/^[0-9]+$/.test(inner)) {
+    const [bare, rep] = parseFieldRepetition(ref.slice(0, open) + '[' + inner + ']');
+    return [bare, rep, ''];
+  }
+  return [ref.slice(0, open), 0, inner];
+}
+
+/** FileMaker's `repetition` attribute: "0" for the calculated form, else "N" only for N > 1. */
+function repetitionAttr(rep: number, calc = ''): string {
+  if (calc) return ' repetition="0"';
   return rep > 1 ? ` repetition="${rep}"` : '';
 }
 
 /**
- * `<Field table id [repetition] name/>` for a `Table::Field[N]` ref, in
- * FileMaker's attribute order. The subscript is stripped before name resolution.
+ * FileMaker's calculated-repetition sibling, written right after the `<Field>`
+ * it subscripts: `<Repetition><Calculation>` (measured, FileMaker Pro 26.0.2:
+ * Set Field, Go to Field, Insert Text field and variable targets).
  */
-function fieldRefXml(resolver: IdResolver, ref: string, extraAttrs = ''): string {
-  const [bare, rep] = parseFieldRepetition(trim(ref));
-  const rf = resolver.resolveField(bare);
-  return `<Field${extraAttrs} table="${escXml(rf.table)}" id="${rf.fieldId}"${repetitionAttr(rep)} name="${escXml(rf.fieldName)}"/>`;
+function repetitionCalcSibling(calc: string, indent: string): string {
+  if (!calc) return '';
+  return `\n${indent}<Repetition>\n${indent}  <Calculation>${cdata(calc)}</Calculation>\n${indent}</Repetition>`;
 }
 
-/** `<Field [repetition]>$var</Field>` for a `$var[N]` target. */
-function variableFieldXml(v: string, extraAttrs = ''): string {
-  const [bare, rep] = parseFieldRepetition(trim(v));
-  return `<Field${extraAttrs}${repetitionAttr(rep)}>${escXml(bare)}</Field>`;
+/**
+ * `<Field table id [repetition] name/>` for a `Table::Field[N]` ref, in
+ * FileMaker's attribute order, plus the `<Repetition>` sibling for a calculated
+ * `Table::Field[calc]`. The subscript is stripped before name resolution. Group
+ * children (`allowCalc` false) have no calculated form in FileMaker, whose
+ * input-target dialog takes digits only, so a calculated subscript is dropped.
+ */
+function fieldRefXml(
+  resolver: IdResolver,
+  ref: string,
+  extraAttrs = '',
+  indent = '    ',
+  allowCalc = true,
+): string {
+  const [bare, rep, parsedCalc] = parseFieldSubscript(trim(ref));
+  const calc = allowCalc ? parsedCalc : '';
+  const rf = resolver.resolveField(bare);
+  return (
+    `<Field${extraAttrs} table="${escXml(rf.table)}" id="${rf.fieldId}"${repetitionAttr(rep, calc)} name="${escXml(rf.fieldName)}"/>` +
+    repetitionCalcSibling(calc, indent)
+  );
+}
+
+/** `<Field [repetition]>$var</Field>` for a `$var[N]` target, plus the sibling for `$var[calc]`. */
+function variableFieldXml(v: string, extraAttrs = '', indent = '    ', allowCalc = true): string {
+  const [bare, rep, parsedCalc] = parseFieldSubscript(trim(v));
+  const calc = allowCalc ? parsedCalc : '';
+  return `<Field${extraAttrs}${repetitionAttr(rep, calc)}>${escXml(bare)}</Field>` + repetitionCalcSibling(calc, indent);
 }
 
 /**
@@ -872,7 +936,7 @@ function emitGroupElement(
         }
       }
     } else if (kind === 'field') {
-      if (present) children += `${ci}${fieldRefXml(resolver, it!)}\n`;
+      if (present) children += `${ci}${fieldRefXml(resolver, it!, '', ci, false)}\n`;
     } else if (kind === 'script') {
       if (present) {
         const rs = resolver.resolveScript(groupUnquoteValue(it!));
@@ -881,9 +945,9 @@ function emitGroupElement(
     } else if (kind === 'fieldOrVariable') {
       const v = present ? groupUnquoteValue(it!) : '';
       if (v && isVariable(v)) {
-        children += `${ci}${variableFieldXml(v)}\n`;
+        children += `${ci}${variableFieldXml(v, '', ci, false)}\n`;
       } else if (v) {
-        children += `${ci}${fieldRefXml(resolver, v)}\n`;
+        children += `${ci}${fieldRefXml(resolver, v, '', ci, false)}\n`;
       } else {
         children += `${ci}<Field table="" id="0" name=""/>\n`;
       }

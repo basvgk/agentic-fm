@@ -205,14 +205,71 @@ describe('field / variable repetitions', () => {
     ).toContain('<Field table="Invoices" id="0" repetition="2" name="Description"/>');
   });
 
-  it('treats [1] as the default and a non-literal subscript as no repetition', () => {
+  it('treats [1] as the default and [0] / [] as no repetition', () => {
     expect(hrToXml('Set Field [ Invoices::Description[1] ; 1 ]').xml).toContain(
       '<Field table="Invoices" id="0" name="Description"/>',
     );
     expect(hrToXml('Show Custom Dialog [ "T" ; "" ; $rep[1] ]').xml).toContain('<Field>$rep</Field>');
-    for (const ref of ['$rep[0]', '$rep[]', '$rep[$i]']) {
+    for (const ref of ['$rep[0]', '$rep[]']) {
       expect(hrToXml(`Insert Text [ Select ; Target: ${ref} ; "x" ]`).xml).not.toContain('repetition=');
     }
+  });
+});
+
+// Calculated repetitions: `T::F[calc]` in HR. Authored in FileMaker Pro 26.0.2's
+// own Specify Field / Specify Target dialogs (Set Field, Go to Field, Insert Text
+// field and variable targets) and copied out: repetition="0" on the <Field> plus a
+// sibling <Repetition><Calculation> right after it; the Script Workspace line
+// reads `T::F[$i]`, the calc verbatim. A Show Custom Dialog input's target dialog
+// takes digits only, so a group entry has no calculated form. Mirrors the Python
+// test_calculated_repetition_* cases and the C++ FieldOps_CalcRepetition_* tests.
+describe('calculated repetitions', () => {
+  const fm =
+    '<fmxmlsnippet type="FMObjectList">'
+    + '<Step enable="True" id="76" name="Set Field"><Calculation><![CDATA["x"]]></Calculation>'
+    + '<Field table="Invoices" id="31" repetition="0" name="Description"></Field>'
+    + '<Repetition><Calculation><![CDATA[Let ( [ a = "]" ; b = 2 ] ; b )]]></Calculation></Repetition></Step>'
+    + '<Step enable="True" id="61" name="Insert Text"><SelectAll state="False"></SelectAll><Text>t</Text>'
+    + '<Field repetition="0">$v</Field>'
+    + '<Repetition><Calculation><![CDATA[$i + 1]]></Calculation></Repetition></Step>'
+    + '<Step enable="True" id="17" name="Go to Field"><SelectAll state="False"></SelectAll>'
+    + '<Field table="Invoices" id="31" repetition="0" name="Description"></Field>'
+    + '<Repetition><Calculation><![CDATA[$k // ] ;]]></Calculation></Repetition></Step>'
+    + '</fmxmlsnippet>';
+
+  it('renders a calculated repetition as a subscript', () => {
+    const hr = xmlToHr(fm).trim().split('\n');
+    expect(hr[0]).toBe('Set Field [ Invoices::Description[Let ( [ a = "]" ; b = 2 ] ; b )] ; "x" ]');
+    expect(hr[1]).toContain('Target: $v[$i + 1]');
+    // A `//` comment holding `]` or `;` breaks the line before the closing `]`.
+    expect(hr[2]).toBe('Go to Field [ Invoices::Description[$k // ] ;');
+    expect(hr[3]).toBe('] ]');
+  });
+
+  it("emits FileMaker's calculated form", () => {
+    expect(hrToXml('Set Field [ Invoices::Description[Let ( [ a = "]" ; b = 2 ] ; b )] ; "x" ]').xml).toContain(
+      '<Field table="Invoices" id="0" repetition="0" name="Description"/>\n'
+        + '    <Repetition>\n'
+        + '      <Calculation><![CDATA[Let ( [ a = "]" ; b = 2 ] ; b )]]></Calculation>\n'
+        + '    </Repetition>',
+    );
+    expect(hrToXml('Insert Text [ Target: $v[$i + 1] ; "t" ]').xml).toContain(
+      '<Field repetition="0">$v</Field>\n'
+        + '    <Repetition>\n'
+        + '      <Calculation><![CDATA[$i + 1]]></Calculation>\n'
+        + '    </Repetition>',
+    );
+    const lit = hrToXml('Set Field [ Invoices::Description[ 2 ] ; 1 ]').xml;
+    expect(lit).toContain('repetition="2" name="Description"');
+    expect(lit).not.toContain('<Repetition>');
+    const grp = hrToXml('Show Custom Dialog [ "T" ; "" ; $rep[$i] ]').xml;
+    expect(grp).toContain('<Field>$rep</Field>');
+    expect(grp).not.toContain('<Repetition>');
+  });
+
+  it('round-trips through HR unchanged', () => {
+    const hr1 = xmlToHr(fm.replace('<SelectAll state="False"></SelectAll><Field table', '<SelectAll state="True"></SelectAll><Field table'));
+    expect(xmlToHr(hrToXml(hr1).xml)).toBe(hr1);
   });
 });
 

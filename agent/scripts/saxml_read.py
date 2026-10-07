@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
-from calc_literal import quote_calc_literal
+from calc_literal import hr_sep, quote_calc_literal
 from catalog_grammar import (
     CatalogEntry,
     StepParam,
@@ -191,13 +191,18 @@ def _field_ref_token(fr: ET.Element) -> str:
     return name if not table else table + "::" + name
 
 
-def _repetition_suffix(ref_el: ET.Element) -> str:
-    """The ``[N]`` HR subscript for a ``<FieldReference>`` / ``<Variable>`` target.
+def _repetition_suffix(ref_el: ET.Element, allow_calc: bool = True) -> str:
+    """The ``[N]`` / ``[calc]`` HR subscript for a ``<FieldReference>`` / ``<Variable>``
+    target.
 
     SaXML gives every field and variable reference a ``<repetition>`` calc; the
-    fmxmlsnippet form carries it as ``repetition="N"`` and only for a literal
-    N > 1, so ``1`` (the default) yields no subscript. A computed repetition
-    (``$i``) has no fmxmlsnippet spelling here and is refused rather than dropped.
+    fmxmlsnippet form carries a literal as ``repetition="N"``, only for N > 1, so
+    ``1`` (the default) yields no subscript. A computed repetition (``$i``) is
+    fmxmlsnippet's ``repetition="0"`` plus a ``<Repetition><Calculation>`` sibling,
+    which the emit's field and fieldOrVariable params write from ``[calc]``. A
+    Show Custom Dialog input (``allow_calc=False``) has no calculated form --
+    FileMaker's input-target dialog takes digits only -- so one is refused there
+    rather than dropped.
     """
     rep = ref_el.find("repetition")
     if rep is None:
@@ -207,22 +212,25 @@ def _repetition_suffix(ref_el: ET.Element) -> str:
         return ""
     if text.isascii() and text.isdigit() and int(text) > 1:
         return "[" + str(int(text)) + "]"
+    if allow_calc:
+        return "[" + text + hr_sep(text, "]")
     raise UnsupportedSaXML(
         "calculated repetition %r on %s %r has no fmxmlsnippet form"
         % (text, ref_el.tag, ref_el.get("name") or ref_el.get("value") or "")
     )
 
 
-def _target_token(ref_el: ET.Element) -> str:
-    """A field/variable TARGET reference -> its HR token with any ``[N]`` subscript
-    (``Table::Field[2]`` / ``$var[2]``) — the form the emit's field and
-    fieldOrVariable params parse back into ``repetition="N"``. Field references
-    elsewhere (sort / field lists) keep the bare ``_field_ref_token``."""
+def _target_token(ref_el: ET.Element, allow_calc: bool = True) -> str:
+    """A field/variable TARGET reference -> its HR token with any subscript
+    (``Table::Field[2]`` / ``$var[$i]``) — the form the emit's field and
+    fieldOrVariable params parse back into ``repetition="N"`` or the calculated
+    form. Field references elsewhere (sort / field lists) keep the bare
+    ``_field_ref_token``."""
     if ref_el.tag == "Variable":
         tok = ref_el.get("value", "")
     else:
         tok = _field_ref_token(ref_el)
-    return tok + _repetition_suffix(ref_el) if tok else ""
+    return tok + _repetition_suffix(ref_el, allow_calc) if tok else ""
 
 
 def _layout_token_from_lrc(lrc: ET.Element) -> str:
@@ -1266,10 +1274,10 @@ def _input_field_token(fp: ET.Element) -> str:
     if tgt is not None:
         var = tgt.find("Variable")
         if var is not None:
-            fld = _target_token(var)
+            fld = _target_token(var, allow_calc=False)
         else:
             fr = tgt.find("FieldReference")
-            fld = _target_token(fr) if fr is not None else ""
+            fld = _target_token(fr, allow_calc=False) if fr is not None else ""
         if fld:
             parts.append("field=" + fld)
     lbl = None

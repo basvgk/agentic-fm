@@ -513,17 +513,37 @@ export function hrParamOrder(entry: GrammarEntry): number[] {
 }
 
 /**
+ * The calculation of FileMaker's calculated-repetition form for `fld`:
+ * `repetition="0"` with a `<Repetition><Calculation>` as its next element
+ * sibling. Empty otherwise (FileMaker ignores such a sibling unless the
+ * `<Field>` says "0").
+ */
+function repetitionCalcOf(fld: Element): string {
+  if (fld.getAttribute('repetition') !== '0') return '';
+  let sib = fld.nextSibling;
+  while (sib && sib.nodeType !== 1) sib = sib.nextSibling;
+  if (!sib || (sib as Element).tagName !== 'Repetition') return '';
+  return childText(sib as Element, 'Calculation');
+}
+
+/**
  * Append FileMaker's `[N]` repetition subscript to a field/variable ref.
  *
  * FileMaker serializes a repetition as `repetition="N"` on the `<Field>`
  * (`<Field table="T" id="1" repetition="2" name="F"/>`, or
  * `<Field repetition="2">$var</Field>`) and writes the attribute only for N > 1;
  * its Script Workspace line shows `T::F[2]` / `$var[2]`. Repetition 1 is the
- * default and carries no subscript.
+ * default and carries no subscript. A calculated repetition is `repetition="0"`
+ * plus a `<Repetition><Calculation>` sibling, shown as `T::F[calc]`; a calc
+ * ending in a `//` comment holding `]` or `;` gets a line break before the
+ * closing `]`.
  */
 function withRepetitionSuffix(ref: string, fld: Element): string {
+  if (!ref) return ref;
+  const calc = repetitionCalcOf(fld);
+  if (calc) return ref + '[' + calc + hrSep(calc, ']');
   const rep = parseInt(fld.getAttribute('repetition') ?? '', 10);
-  return ref && rep > 1 ? ref + '[' + rep + ']' : ref;
+  return rep > 1 ? ref + '[' + rep + ']' : ref;
 }
 
 // ---------------------------------------------------------------------------

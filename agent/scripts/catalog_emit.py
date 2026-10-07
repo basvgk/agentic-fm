@@ -354,15 +354,84 @@ def _parse_field_repetition(ref: str) -> tuple[str, int]:
     return ref[:open_idx], rep
 
 
-def _repetition_attr(rep: int) -> str:
-    """FileMaker's ``repetition="N"`` attribute, written only for N > 1."""
+def _parse_field_subscript(ref: str) -> tuple[str, int, str]:
+    """Split a trailing repetition subscript that may be a literal OR a calculation.
+
+    ``T::F[2]`` -> (``T::F``, 2, ``""``); ``T::F[$i + 1]`` -> (``T::F``, 0, ``$i + 1``).
+    The subscript opens at the first ``[`` and must close, bracket-balanced (text
+    literals and comments are opaque), on the last character; the calc is trimmed
+    (XML->HR writes a line break before the closing ``]`` after a ``//`` comment).
+    A digits-only subscript is the literal form with ``_parse_field_repetition``'s
+    rules. Anything else returns (ref, 0, "").
+    """
+    if len(ref) < 3 or ref[-1] != "]":
+        return ref, 0, ""
+    open_idx = ref.find("[")
+    if open_idx <= 0:
+        return ref, 0, ""
+    depth = 0
+    close = -1
+    i = open_idx
+    while i < len(ref):
+        span = hr_calc_opaque_span_at(ref, i)
+        if span:
+            i += span
+            continue
+        if ref[i] == "[":
+            depth += 1
+        elif ref[i] == "]":
+            depth -= 1
+            if depth == 0:
+                close = i
+                break
+        i += 1
+    if close != len(ref) - 1:
+        return ref, 0, ""
+    inner = ref[open_idx + 1 : close].strip(" \t\r\n")
+    if not inner:
+        return ref, 0, ""
+    if inner.isascii() and inner.isdigit():
+        bare, rep = _parse_field_repetition(ref[:open_idx] + "[" + inner + "]")
+        return bare, rep, ""
+    return ref[:open_idx], 0, inner
+
+
+def _repetition_attr(rep: int, calc: str = "") -> str:
+    """FileMaker's ``repetition`` attribute: ``"0"`` for the calculated form, else
+    ``"N"`` written only for N > 1."""
+    if calc:
+        return ' repetition="0"'
     return ' repetition="' + str(rep) + '"' if rep > 1 else ""
 
 
-def _field_ref_xml(resolver: "IdResolver", ref: str, extra_attrs: str = "") -> str:
+def _repetition_calc_sibling(calc: str, indent: str) -> str:
+    """FileMaker's calculated-repetition sibling, written right after the ``<Field>``
+    it subscripts: ``<Repetition><Calculation>`` (measured, FileMaker Pro 26.0.2:
+    Set Field, Go to Field, Insert Text field and variable targets)."""
+    if not calc:
+        return ""
+    return (
+        "\n" + indent + "<Repetition>\n"
+        + indent + "  <Calculation>" + cdata(calc) + "</Calculation>\n"
+        + indent + "</Repetition>"
+    )
+
+
+def _field_ref_xml(
+    resolver: "IdResolver",
+    ref: str,
+    extra_attrs: str = "",
+    indent: str = "    ",
+    allow_calc: bool = True,
+) -> str:
     """``<Field table id [repetition] name/>`` for a ``Table::Field[N]`` ref, in
-    FileMaker's attribute order. The subscript is stripped before name resolution."""
-    bare, rep = _parse_field_repetition(_trim(ref))
+    FileMaker's attribute order, plus the ``<Repetition>`` sibling for a calculated
+    ``Table::Field[calc]``. The subscript is stripped before name resolution. Group
+    children (``allow_calc=False``) have no calculated form in FileMaker, whose
+    input-target dialog takes digits only, so a calculated subscript is dropped."""
+    bare, rep, calc = _parse_field_subscript(_trim(ref))
+    if not allow_calc:
+        calc = ""
     table, fid, fname = resolver.resolve_field(bare)
     return (
         "<Field"
@@ -372,17 +441,26 @@ def _field_ref_xml(resolver: "IdResolver", ref: str, extra_attrs: str = "") -> s
         + '" id="'
         + str(fid)
         + '"'
-        + _repetition_attr(rep)
+        + _repetition_attr(rep, calc)
         + ' name="'
         + esc_xml(fname)
         + '"/>'
+        + _repetition_calc_sibling(calc, indent)
     )
 
 
-def _variable_field_xml(var: str, extra_attrs: str = "") -> str:
-    """``<Field [repetition]>$var</Field>`` for a ``$var[N]`` target."""
-    bare, rep = _parse_field_repetition(_trim(var))
-    return "<Field" + extra_attrs + _repetition_attr(rep) + ">" + esc_xml(bare) + "</Field>"
+def _variable_field_xml(
+    var: str, extra_attrs: str = "", indent: str = "    ", allow_calc: bool = True
+) -> str:
+    """``<Field [repetition]>$var</Field>`` for a ``$var[N]`` target, plus the
+    ``<Repetition>`` sibling for a calculated ``$var[calc]``."""
+    bare, rep, calc = _parse_field_subscript(_trim(var))
+    if not allow_calc:
+        calc = ""
+    return (
+        "<Field" + extra_attrs + _repetition_attr(rep, calc) + ">" + esc_xml(bare) + "</Field>"
+        + _repetition_calc_sibling(calc, indent)
+    )
 
 
 def _unquote_text_value(s: str) -> str:
@@ -1015,7 +1093,7 @@ def _emit_group_element(
                     children += ci + "</" + child_element + ">\n"
         elif kind == "field":
             if present:
-                children += ci + _field_ref_xml(resolver, it) + "\n"
+                children += ci + _field_ref_xml(resolver, it, indent=ci, allow_calc=False) + "\n"
         elif kind == "script":
             if present:
                 sid, sname = resolver.resolve_script(_group_unquote_value(it))
@@ -1032,9 +1110,9 @@ def _emit_group_element(
         elif kind == "fieldOrVariable":
             v = _group_unquote_value(it) if present else ""
             if v and _is_variable(v):
-                children += ci + _variable_field_xml(v) + "\n"
+                children += ci + _variable_field_xml(v, indent=ci, allow_calc=False) + "\n"
             elif v:
-                children += ci + _field_ref_xml(resolver, v) + "\n"
+                children += ci + _field_ref_xml(resolver, v, indent=ci, allow_calc=False) + "\n"
             else:
                 children += ci + '<Field table="" id="0" name=""/>\n'
         elif kind == "group":

@@ -506,20 +506,44 @@ def _child_text(parent: ET.Element | None, name: str) -> str:
     return c.text if (c is not None and c.text) else ""
 
 
-def _with_repetition_suffix(ref: str, fld: ET.Element) -> str:
+def _repetition_calc_of(fld: ET.Element, parent: ET.Element | None) -> str:
+    """The calculation of FileMaker's calculated-repetition form for ``fld``:
+    ``repetition="0"`` with a ``<Repetition><Calculation>`` as its next element
+    sibling under ``parent``. Empty otherwise (FileMaker ignores such a sibling
+    unless the ``<Field>`` says ``"0"``)."""
+    if parent is None or fld.get("repetition") != "0":
+        return ""
+    kids = list(parent)
+    for i, k in enumerate(kids):
+        if k is fld:
+            if i + 1 < len(kids) and kids[i + 1].tag == "Repetition":
+                return _child_text(kids[i + 1], "Calculation")
+            return ""
+    return ""
+
+
+def _with_repetition_suffix(ref: str, fld: ET.Element, parent: ET.Element | None = None) -> str:
     """Append FileMaker's ``[N]`` repetition subscript to a field/variable ref.
 
     FileMaker serializes a repetition as ``repetition="N"`` on the ``<Field>``
     (``<Field table="T" id="1" repetition="2" name="F"/>``, or
     ``<Field repetition="2">$var</Field>``) and writes the attribute only for
     N > 1; its Script Workspace line shows ``T::F[2]`` / ``$var[2]``. Repetition 1
-    is the default and carries no subscript.
+    is the default and carries no subscript. A calculated repetition is
+    ``repetition="0"`` plus a ``<Repetition><Calculation>`` sibling (``parent`` is
+    the ``<Field>``'s parent), shown as ``T::F[calc]``; a calc ending in a ``//``
+    comment holding ``]`` or ``;`` gets a line break before the closing ``]``.
     """
+    if not ref:
+        return ref
+    calc = _repetition_calc_of(fld, parent)
+    if calc:
+        return ref + "[" + calc + hr_sep(calc, "]")
     try:
         rep = int(fld.get("repetition", "0") or "0")
     except ValueError:
         rep = 0
-    if ref and rep > 1:
+    if rep > 1:
         return ref + "[" + str(rep) + "]"
     return ref
 
@@ -1110,7 +1134,7 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
                 val = name if not table else table + "::" + name
             elif text:
                 val = text
-            val = _with_repetition_suffix(val, field_node)
+            val = _with_repetition_suffix(val, field_node, base)
             if val and label:
                 val = label + ": " + val
     elif ptype == "flagElement":
@@ -1134,7 +1158,9 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
         if field_node is not None:
             table = field_node.get("table", "")
             name = field_node.get("name", "")
-            val = _with_repetition_suffix(name if not table else table + "::" + name, field_node)
+            val = _with_repetition_suffix(
+                name if not table else table + "::" + name, field_node, base
+            )
             # hr_labeled: label the field where FileMaker does (inverse of bare).
             if val and param.hr_labeled and label:
                 val = label + ": " + val
