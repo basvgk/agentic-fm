@@ -95,12 +95,27 @@ def _calc(el, selector='Calculation'):
 # Step renderers — hand-coded for structurally unique steps
 # ---------------------------------------------------------------------------
 
+# A comment whose text holds a return is drawn by FileMaker on several Script
+# Workspace lines, each continuation aligned under the text after ``# ``. HR writes
+# it the same way: the break becomes a new line indented past the comment's own
+# indentation, two spaces for a CR (the return FileMaker itself stores, and the
+# form an author writes) and one tab for an LF (FileMaker keeps an LF a pasted
+# ``&#10;`` put there). convert() indents those lines with the step.
+COMMENT_CR_PAD, COMMENT_LF_PAD = '  ', '\t'
+
+
+def encode_hr_comment_text(text):
+    """*text* with each line break written as an HR continuation (column 0)."""
+    pads = {'\r': '\n' + COMMENT_CR_PAD, '\n': '\n' + COMMENT_LF_PAD}
+    return ''.join(pads.get(c, c) for c in text)
+
+
 def _render_comment(step):
     """# (comment) — id 89"""
     text_el = step.find('Text')
     text = text_el.text if text_el is not None and text_el.text else ''
     if text:
-        return f'# {text}', (False, False)
+        return f'# {encode_hr_comment_text(text)}', (False, False)
     return '', (False, False)  # blank line
 
 
@@ -258,7 +273,10 @@ def snippet_to_hr(xml_string):
         if not enabled:
             text = f'// {text}'
 
-        lines.append(INDENT * indent + text)
+        prefix = INDENT * indent
+        if step.get('name') == '# (comment)' and prefix:
+            text = text.replace('\n', '\n' + prefix)  # continuation lines sit under it
+        lines.append(prefix + text)
 
         if open_after:
             indent += 1

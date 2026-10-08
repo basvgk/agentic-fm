@@ -49,6 +49,58 @@ export interface ParsedLine {
   unterminatedCalcComment?: boolean;
 }
 
+// --- Comment line breaks ---
+//
+// FileMaker draws a comment whose text holds a return on several Script
+// Workspace lines, each continuation aligned under the text after `# `. HR
+// writes it the same way: the break becomes a new line indented past the
+// comment's own indentation, two spaces for a CR (the return FileMaker itself
+// stores, and the form an author writes) and one tab for an LF (FileMaker keeps
+// an LF a pasted `&#10;` put there). A blank line still ends the comment.
+
+const COMMENT_CR_PAD = '  ';
+const COMMENT_LF_PAD = '\t';
+
+/** A comment's text with each line break written as an HR continuation (relative to column 0). */
+export function encodeHrCommentText(text: string): string {
+  return text.replace(/[\r\n]/g, (c) => (c === '\r' ? '\n' + COMMENT_CR_PAD : '\n' + COMMENT_LF_PAD));
+}
+
+/** Put the comment line's indentation in front of each of its continuation lines. */
+export function indentHrContinuations(hrLine: string, prefix: string): string {
+  return prefix ? hrLine.split('\n').join('\n' + prefix) : hrLine;
+}
+
+/** `line` continues a comment whose own line starts with the whitespace `lead`. */
+export function isHrCommentContinuation(line: string, lead: string): boolean {
+  if (!line.startsWith(lead)) return false;
+  return line.startsWith(COMMENT_CR_PAD, lead.length) || line.charAt(lead.length) === COMMENT_LF_PAD;
+}
+
+/**
+ * The comment text a merged comment statement carries: `#` and the first line's
+ * leading blanks dropped, each continuation line's pad turned back into its CR
+ * or LF. A one-line comment is trimmed at both ends, as before; one that
+ * continues keeps every blank inside it.
+ */
+function decodeHrCommentText(raw: string, indent: number): string {
+  const lead = raw.substring(0, indent);
+  const stripCr = (s: string) => (s.endsWith('\r') ? s.slice(0, -1) : s);
+  const [head, ...rest] = raw.split('\n');
+  if (rest.length === 0) return head.substring(indent + 1).trim();
+  let text = stripCr(head.substring(indent + 1)).replace(/^[ \t]+/, '');
+  for (const physical of rest) {
+    const line = stripCr(physical);
+    if (isHrCommentContinuation(line, lead)) {
+      const lf = line.charAt(lead.length) === COMMENT_LF_PAD;
+      text += (lf ? '\n' : '\r') + line.substring(lead.length + (lf ? 1 : 2));
+    } else {
+      text += '\n' + line; // parseLine handed a raw multi-line comment
+    }
+  }
+  return text;
+}
+
 /** Parse a single line of HR script text */
 export function parseLine(raw: string, lineNumber: number): ParsedLine {
   const trimmed = raw.trimStart();
@@ -62,9 +114,9 @@ export function parseLine(raw: string, lineNumber: number): ParsedLine {
     };
   }
 
-  // Comment: # ...
+  // Comment: # ... (its continuation lines merged in by parseScript)
   if (trimmed.startsWith('#')) {
-    const commentText = trimmed.substring(1).trim();
+    const commentText = decodeHrCommentText(raw, indent);
     return {
       raw, lineNumber, disabled: false, isComment: true,
       commentText, stepName: '# (comment)', bracketContent: '',
@@ -260,9 +312,18 @@ function mergeMultilineStatements(lines: string[]): MergedLine[] {
   let k = 0;
   while (k < lines.length) {
     const trimmed = lines[k].trim();
-    if (trimmed.startsWith('#') || trimmed === '') {
+    if (trimmed === '') {
       result.push({ text: lines[k], sourceLineNumber: k + 1 });
       k++;
+      continue;
+    }
+    // A comment takes its continuation lines with it (encodeHrCommentText).
+    if (trimmed.startsWith('#')) {
+      const lead = lines[k].substring(0, lines[k].length - lines[k].trimStart().length);
+      let j = k + 1;
+      while (j < lines.length && isHrCommentContinuation(lines[j], lead)) j++;
+      result.push({ text: lines.slice(k, j).join('\n'), sourceLineNumber: k + 1 });
+      k = j;
       continue;
     }
     let last = -1;

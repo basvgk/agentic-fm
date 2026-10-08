@@ -1,4 +1,5 @@
 import type { ParsedLine } from '../parser';
+import { encodeHrCommentText } from '../parser';
 import { registerHrToXml, registerXmlToHr, stepOpen, stepSelfClose, cdata, escXml } from '../step-registry';
 import { hrSep } from '../calc-literal';
 
@@ -21,8 +22,10 @@ registerHrToXml({
 registerXmlToHr({
   xmlStepNames: ['# (comment)'],
   toHR(el: Element): string {
+    // A return in the text continues on an indented line, the way the Script
+    // Workspace draws it (encodeHrCommentText); xmlToHr indents those lines.
     const text = el.querySelector('Text')?.textContent ?? '';
-    return `# ${text}`;
+    return `# ${encodeHrCommentText(text)}`;
   },
 });
 

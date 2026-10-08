@@ -4,7 +4,7 @@
  * Parses HR script text line-by-line and emits valid fmxmlsnippet XML.
  */
 
-import { parseScript } from './parser';
+import { parseScript, parseLine } from './parser';
 import { getHrToXmlConverter, stepOpen, stepSelfClose, cdata, escXml } from './step-registry';
 import type { IdResolver } from './id-resolver';
 import { createIdResolver } from './id-resolver';
@@ -61,6 +61,22 @@ export function hrToXml(hrText: string, context?: FMContext | null): ConversionR
     if (!line.stepName) {
       stepXmls.push(stepSelfClose('# (comment)', !line.disabled));
       continue;
+    }
+
+    // A comment's continuation line (one indented past the comment) is part of
+    // its text. Say so when that line reads as a step: it is the same text an
+    // author gets by under-indenting a comment above a deeper step, and folding
+    // a step into a comment must not be silent.
+    if (line.isComment) {
+      line.raw.split('\n').slice(1).forEach((physical, i) => {
+        const as = parseLine(physical, line.lineNumber + i + 1);
+        if (!as.isComment && as.stepName && getHrToXmlConverter(as.stepName)) {
+          parseWarnings.push({
+            line: as.lineNumber,
+            message: `Line ${as.lineNumber} is indented under the comment on line ${line.lineNumber}, so it was kept as part of that comment, though it reads as "${as.stepName}". If it is a step, indent it to the comment's level.`,
+          });
+        }
+      });
     }
 
     if (line.unterminatedCalcComment) {

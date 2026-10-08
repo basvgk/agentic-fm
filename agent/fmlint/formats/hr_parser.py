@@ -157,9 +157,18 @@ def _merge_multiline(lines: list) -> list:
     k = 0
     while k < len(lines):
         trimmed = lines[k].strip()
-        if trimmed.startswith("#") or trimmed == "":
+        if trimmed == "":
             result.append((lines[k], k + 1))
             k += 1
+            continue
+        # A comment takes its continuation lines with it (see _decode_comment_text).
+        if trimmed.startswith("#"):
+            lead = lines[k][: len(lines[k]) - len(lines[k].lstrip())]
+            j = k + 1
+            while j < len(lines) and is_comment_continuation(lines[j], lead):
+                j += 1
+            result.append(("\n".join(lines[k:j]), k + 1))
+            k = j
             continue
         last = -1
         if not trace.known_open_from(k):
@@ -176,6 +185,43 @@ def _merge_multiline(lines: list) -> list:
     return result
 
 
+# A comment whose text holds a return is drawn by FileMaker on several Script
+# Workspace lines, each continuation aligned under the text after ``# ``. HR writes
+# it the same way: the break becomes a new line indented past the comment's own
+# indentation, two spaces for a CR (the return FileMaker itself stores, and the form
+# an author writes) and one tab for an LF (FileMaker keeps an LF a pasted ``&#10;``
+# put there). A blank line still ends the comment.
+COMMENT_CR_PAD, COMMENT_LF_PAD = "  ", "\t"
+
+
+def is_comment_continuation(line: str, lead: str) -> bool:
+    """*line* continues a comment whose own line starts with the whitespace *lead*."""
+    if not line.startswith(lead):
+        return False
+    return line.startswith(COMMENT_CR_PAD, len(lead)) or line[len(lead):len(lead) + 1] == COMMENT_LF_PAD
+
+
+def _decode_comment_text(raw: str, indent: int) -> str:
+    """The text a merged comment statement carries: ``#`` and the first line's leading
+    blanks dropped, each continuation line's pad turned back into its CR or LF. A
+    one-line comment is trimmed at both ends, as before; one that continues keeps
+    every blank inside it."""
+    lead = raw[:indent]
+    head, *rest = raw.split("\n")
+    if not rest:
+        return head[indent + 1:].strip()
+    strip_cr = lambda s: s[:-1] if s.endswith("\r") else s  # noqa: E731
+    text = strip_cr(head[indent + 1:]).lstrip(" \t")
+    for physical in rest:
+        line = strip_cr(physical)
+        if is_comment_continuation(line, lead):
+            lf = line[len(lead)] == COMMENT_LF_PAD
+            text += ("\n" if lf else "\r") + line[len(lead) + (1 if lf else 2):]
+        else:
+            text += "\n" + line  # _parse_line handed a raw multi-line comment
+    return text
+
+
 def _parse_line(raw: str, line_number: int) -> ParsedHRLine:
     """Parse a single HR script line."""
     trimmed = raw.lstrip()
@@ -187,7 +233,7 @@ def _parse_line(raw: str, line_number: int) -> ParsedHRLine:
 
     # Comment: # ...
     if trimmed.startswith("#"):
-        comment_text = trimmed[1:].strip()
+        comment_text = _decode_comment_text(raw, indent)
         return ParsedHRLine(
             raw=raw, line_number=line_number, is_comment=True,
             comment_text=comment_text, step_name="# (comment)", indent=indent,
