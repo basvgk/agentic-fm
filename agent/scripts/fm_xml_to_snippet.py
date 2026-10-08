@@ -61,12 +61,17 @@ L2 = '      '   # grandchildren of <Step>
 # ---------------------------------------------------------------------------
 
 def escape_xml(text: str) -> str:
-    """Escape &, <, > for XML text content."""
+    """Escape &, <, > for XML text content, and write a carriage return as ``&#13;``.
+
+    XML parsing turns a raw CR into LF, and FileMaker stores CR and LF as different
+    characters, so a multi-line comment written with a raw CR pastes back as LF.
+    """
     if not text:
         return ''
-    if '&' not in text and '<' not in text and '>' not in text:
+    if '&' not in text and '<' not in text and '>' not in text and '\r' not in text:
         return text
-    return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    return (text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            .replace('\r', '&#13;'))
 
 
 def cdata(text: str) -> str:

@@ -764,7 +764,9 @@ def test_file_paths_render_quoted_and_round_trip():
         ("file:a]b.txt", _LQ + "file:a]b.txt" + _RQ, "file:a]b.txt"),
         ("file:a &quot;b&quot;.txt", _LQ + 'file:a \\"b\\".txt' + _RQ, "file:a &quot;b&quot;.txt"),
         ("file:a " + _LQ + "b.txt", _LQ + "file:a \\" + _LQ + "b.txt" + _RQ, "file:a " + _LQ + "b.txt"),
-        ("file:a.txt&#13;file:b.txt", _LQ + "file:a.txt\rfile:b.txt" + _RQ, "file:a.txt\rfile:b.txt"),
+        # A return is written back as FileMaker writes it (``&#13;``; a raw CR pastes as LF).
+        ("file:a.txt&#13;file:b.txt", _LQ + "file:a.txt\rfile:b.txt" + _RQ, "file:a.txt&#13;file:b.txt"),
+        ("file:a.txt&#10;file:b.txt", _LQ + "file:a.txt\nfile:b.txt" + _RQ, "file:a.txt\nfile:b.txt"),
     ]
     for xml_value, token, emitted in cases:
         hr = _hr_of(_get_file_exists_xml(xml_value))
@@ -772,6 +774,48 @@ def test_file_paths_render_quoted_and_round_trip():
         out = _emit_hr(by_name, hr)
         assert "<UniversalPathList>" + emitted + "</UniversalPathList>" in out, (xml_value, out)
         assert "<Field>$v</Field>" in out, out
+
+
+def test_carriage_return_in_text_value_emits_char_ref():
+    """A CR in a text value is written ``&#13;``, FileMaker's own copy-back: XML
+    parsing turns a raw CR into LF, so a raw CR pasted back holding LF (FileMaker Pro
+    26.0.2). An LF value stays raw. Mirrors webviewer/test/catalog-emit.engine.test.ts."""
+    by_name, _ = _load()
+    send_event = (
+        '<Step enable="True" id="57" name="Send Event"><ContentType value="Text"/><Text>a{0}b</Text>'
+        '<Event CopyResultToClipboard="False" WaitForCompletion="True" BringTargetToForeground="False" '
+        'TargetType="NUTD" TargetName="&lt;unknown&gt;" id="dosc" class="misc"/></Step>'
+    )
+    shapes = [
+        ('<Step enable="True" id="61" name="Insert Text"><SelectAll state="True"/>'
+         "<Text>line1{0}line2</Text><Field>$v</Field></Step>", "<Text>line1{0}line2</Text>"),
+        ('<Step enable="True" id="188" name="Get File Exists"><UniversalPathList>file:a.txt{0}file:b.txt'
+         "</UniversalPathList><Text/><Field>$v</Field></Step>", "<UniversalPathList>file:a.txt{0}file:b.txt</UniversalPathList>"),
+        (send_event, "<Text>a{0}b</Text>"),
+    ]
+    for step, want in shapes:
+        out = _emit_hr(by_name, _hr_of('<fmxmlsnippet type="FMObjectList">' + step.format("&#13;") + "</fmxmlsnippet>"))
+        assert want.format("&#13;") in out, out
+        assert "\r" not in out, out
+        out = _emit_hr(by_name, _hr_of('<fmxmlsnippet type="FMObjectList">' + step.format("&#10;") + "</fmxmlsnippet>"))
+        assert want.format("\n") in out, out
+
+
+def test_saxml_comment_with_return_emits_char_ref():
+    """SaXML -> XML: a comment's return (``&#13;`` in its ``value`` attribute) is
+    written back ``&#13;``, not a raw CR that a paste reads as LF."""
+    import xml.etree.ElementTree as ET
+
+    from fm_xml_to_snippet import tx_comment
+
+    step = ET.fromstring(
+        '<Step enable="True" id="89" name="# (comment)"><ParameterValues>'
+        '<Parameter type="Comment"><Comment value="a&#13;b &amp; c"/></Parameter>'
+        "</ParameterValues></Step>"
+    )
+    out = tx_comment(step)
+    assert "<Text>a&#13;b &amp; c</Text>" in out, out
+    assert "\r" not in out, out
 
 
 def test_file_path_reads_filemakers_quoted_line_unquoted():

@@ -433,7 +433,9 @@ describe('hrQuoted literal text params', () => {
       ['file:a]b.txt', '“file:a]b.txt”', 'file:a]b.txt'],
       ['file:a &quot;b&quot;.txt', '“file:a \\"b\\".txt”', 'file:a &quot;b&quot;.txt'],
       ['file:a “b.txt', '“file:a \\“b.txt”', 'file:a “b.txt'],
-      ['file:a.txt&#13;file:b.txt', '“file:a.txt\rfile:b.txt”', 'file:a.txt\rfile:b.txt'],
+      // A return is written back as FileMaker writes it (`&#13;`; a raw CR pastes as LF).
+      ['file:a.txt&#13;file:b.txt', '“file:a.txt\rfile:b.txt”', 'file:a.txt&#13;file:b.txt'],
+      ['file:a.txt&#10;file:b.txt', '“file:a.txt\nfile:b.txt”', 'file:a.txt\nfile:b.txt'],
     ];
     for (const [xmlValue, token, emitted] of cases) {
       const hr = xmlToHr(getFileExists(xmlValue));
@@ -453,6 +455,46 @@ describe('hrQuoted literal text params', () => {
       ['Delete File [ Target file: “a.txt” ]', 'a.txt'],
     ];
     for (const [hr, p] of cases) expect(hrToXml(hr).xml, hr).toContain(`<UniversalPathList>${p}</UniversalPathList>`);
+  });
+
+  // A carriage return in a text value: FileMaker copies it back as `&#13;`, and XML
+  // parsing turns a raw CR into LF, so a raw CR pasted back holding LF (FileMaker Pro
+  // 26.0.2: Insert Text, a path list, Send Event and Perform AppleScript text, a
+  // comment). An LF value stays raw; a calculation keeps its line break in CDATA.
+  it('writes a carriage return in a text value as &#13;', () => {
+    const sendEvent = (t: string) => '<Step enable="True" id="57" name="Send Event">'
+      + `<ContentType value="Text"/><Text>${t}</Text><Event CopyResultToClipboard="False" `
+      + 'WaitForCompletion="True" BringTargetToForeground="False" TargetType="NUTD" '
+      + 'TargetName="&lt;unknown&gt;" id="dosc" class="misc"/></Step>';
+    const steps = (sep: string): [string, string][] => [
+      [`<Step enable="True" id="61" name="Insert Text"><SelectAll state="True"/><Text>line1${sep}line2</Text><Field>$v</Field></Step>`,
+        `<Text>line1${sep}line2</Text>`],
+      [`<Step enable="True" id="188" name="Get File Exists"><UniversalPathList>file:a.txt${sep}file:b.txt</UniversalPathList><Text/><Field>$v</Field></Step>`,
+        `<UniversalPathList>file:a.txt${sep}file:b.txt</UniversalPathList>`],
+      [sendEvent(`a${sep}b`), `<Text>a${sep}b</Text>`],
+      [`<Step enable="True" id="67" name="Perform AppleScript"><ContentType value="Text"/><Text>beep${sep}beep</Text></Step>`,
+        `<Text>beep${sep}beep</Text>`],
+    ];
+    const wrap = (x: string) => `<fmxmlsnippet type="FMObjectList">${x}</fmxmlsnippet>`;
+    for (const [x, want] of [...steps('&#13;'),
+      ['<Step enable="True" id="89" name="# (comment)"><Text>a&#13;b</Text></Step>', '<Text>a&#13;b</Text>'] as [string, string]]) {
+      const out = hrToXml(xmlToHr(wrap(x))).xml;
+      expect(out, x).toContain(want);
+      expect(out.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, ''), x).not.toContain('\r');
+    }
+    for (const [x, want] of steps('&#10;')) {
+      expect(hrToXml(xmlToHr(wrap(x))).xml, x).toContain(want.replace('&#10;', '\n'));
+    }
+    const calc = hrToXml(xmlToHr(wrap('<Step enable="True" id="141" name="Set Variable"><Value><Calculation>'
+      + '<![CDATA[1 +\r2]]></Calculation></Value><Name>$v</Name></Step>'))).xml;
+    expect(calc).toContain('<![CDATA[1 +\n2]]>');
+    expect(calc).not.toContain('&#13;');
+  });
+
+  it('escapes comment text', () => {
+    expect(hrToXml('# a < b & c').xml).toContain('<Text>a &lt; b &amp; c</Text>');
+    expect(hrToXml('Foo Bar Nope [ a & <b> ]').xml)
+      .toContain('<Text>[UNKNOWN STEP: Foo Bar Nope] Foo Bar Nope [ a &amp; &lt;b&gt; ]</Text>');
   });
 
   it('quotes Send Event text', () => {

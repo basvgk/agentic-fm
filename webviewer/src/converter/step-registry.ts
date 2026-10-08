@@ -46,13 +46,19 @@ export function getXmlToHrConverter(xmlStepName: string): XmlStepConverter | und
   return xmlToHrRegistry.get(xmlStepName);
 }
 
-/** XML helper: escape special chars for XML content */
+/**
+ * XML helper: escape special chars for XML content. A carriage return is written
+ * as `&#13;` (FileMaker's own serialization): XML parsing turns a raw CR into LF,
+ * and FileMaker stores CR and LF as different characters, so a raw CR in a path
+ * list or text param pastes back as LF.
+ */
 export function escXml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/\r/g, '&#13;');
 }
 
 /** XML helper: wrap in CDATA */

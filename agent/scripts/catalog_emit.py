@@ -133,11 +133,17 @@ def _split_element_attr(xml_element: str) -> tuple[bool, str, str]:
 
 
 def esc_xml(s: str) -> str:
+    """Escape & < > " and write a carriage return as ``&#13;``, as FileMaker does.
+
+    XML parsing turns a raw CR into LF, and FileMaker stores CR and LF as different
+    characters, so a raw CR in a path list or text param pastes back as LF.
+    """
     return (
         s.replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace('"', "&quot;")
+        .replace("\r", "&#13;")
     )
 
 

@@ -5,7 +5,7 @@
  */
 
 import { parseScript } from './parser';
-import { getHrToXmlConverter, stepOpen, stepSelfClose, cdata } from './step-registry';
+import { getHrToXmlConverter, stepOpen, stepSelfClose, cdata, escXml } from './step-registry';
 import type { IdResolver } from './id-resolver';
 import { createIdResolver } from './id-resolver';
 import type { FMContext } from '@/context/types';
@@ -116,7 +116,7 @@ export function hrToXml(hrText: string, context?: FMContext | null): ConversionR
 function unknownStepXml(stepName: string, rawText: string, enabled: boolean): string {
   return [
     stepOpen('# (comment)', enabled),
-    `    <Text>[UNKNOWN STEP: ${stepName}] ${rawText}</Text>`,
+    `    <Text>[UNKNOWN STEP: ${escXml(stepName)}] ${escXml(rawText)}</Text>`,
     '  </Step>',
   ].join('\n');
 }

@@ -12,7 +12,7 @@ registerHrToXml({
     }
     return [
       stepOpen('# (comment)', !line.disabled),
-      `    <Text>${text}</Text>`,
+      `    <Text>${escXml(text)}</Text>`,
       '  </Step>',
     ].join('\n');
   },
