@@ -11,6 +11,9 @@ to HR converter used to write the LF raw, so the text after it parsed as a new
 line, a step FMLint could not name. Mirrors the webviewer
 ``hr-comment-line-breaks.test.ts`` cases. Runs under pytest, or standalone:
 ``python3 agent/scripts/test_comment_line_breaks.py``.
+
+A disabled comment is ``// # text``, as the converter writes it and FileMaker
+draws it; the parser used to read it as a disabled step named ``# text``.
 """
 
 from __future__ import annotations
@@ -35,6 +38,10 @@ def _snippet(steps: str) -> str:
 
 def _comment(text: str) -> str:
     return f'<Step enable="True" id="89" name="# (comment)"><Text>{text}</Text></Step>'
+
+
+def _disabled_comment(text: str) -> str:
+    return f'<Step enable="False" id="89" name="# (comment)"><Text>{text}</Text></Step>'
 
 
 def _hr(steps: str) -> str:
@@ -82,6 +89,31 @@ def test_authored_form():
     assert lines[1].comment_text == "first line\rsecond line"
     crlf = parse_hr("# a\r\n  b\r\nBeep")
     assert crlf[0].comment_text == "a\rb" and crlf[1].step_name.strip() == "Beep"
+
+
+def test_disabled_comment_round_trip():
+    assert _hr(_disabled_comment("a")) == "// # a"
+    assert _hr(_disabled_comment("a&#13;b")) == "// # a\n  b"
+    for t in ["a", "a&#13;b", "a&#10;b", "one&#13;two&#13;&#13;four", "// note", "# hash", "a&#13;Beep"]:
+        lines = parse_hr(_hr(_disabled_comment(t)))
+        assert [(ln.is_comment, ln.disabled, ln.comment_text) for ln in lines] == [(True, True, _fm(t))], t
+
+
+def test_disabled_comment_nested_beside_enabled_and_disabled_step():
+    hr = _hr(
+        '<Step enable="True" id="68" name="If"><Calculation><![CDATA[1]]></Calculation></Step>'
+        + _disabled_comment("inner&#13;more")
+        + _comment("b")
+        + '<Step enable="False" id="93" name="Beep"/>'
+        + '<Step enable="True" id="70" name="End If"/>'
+    )
+    assert hr == "If [ 1 ]\n    // # inner\n      more\n    # b\n    // Beep\nEnd If"
+    lines = parse_hr(hr)
+    assert [(ln.step_name.strip(), ln.disabled) for ln in lines] == [
+        ("If", False), ("# (comment)", True), ("# (comment)", False), ("Beep", True), ("End If", False)]
+    assert lines[1].comment_text == "inner\rmore"
+    tight = parse_hr("//# a\n  b")
+    assert [(ln.is_comment, ln.disabled, ln.comment_text) for ln in tight] == [(True, True, "a\rb")]
 
 
 if __name__ == "__main__":

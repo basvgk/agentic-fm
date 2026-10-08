@@ -8,6 +8,9 @@
  * for its own comments) and one tab for an LF (kept from a pasted `&#10;`).
  * xmlToHr used to write the LF raw, so the text after it parsed as a new line
  * and became an `[UNKNOWN STEP]` comment.
+ *
+ * A disabled comment is `// # text`, as xmlToHr writes it and FileMaker draws
+ * it; the parser used to read it as a disabled step named `# text`.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -23,6 +26,8 @@ const entries: StepCatalogEntry[] = rawCatalog.steps ?? rawCatalog;
 loadCatalog(entries);
 
 const snippet = (steps: string) => `<fmxmlsnippet type="FMObjectList">${steps}</fmxmlsnippet>`;
+const disabledComment = (t: string) =>
+  `<Step enable="False" id="89" name="# (comment)"><Text>${t}</Text></Step>`;
 const comment = (t: string) => `<Step enable="True" id="89" name="# (comment)"><Text>${t}</Text></Step>`;
 const texts = (xml: string) => [...xml.matchAll(/<Text>([\s\S]*?)<\/Text>/g)].map((m) => m[1]);
 // How hrToXml writes FileMaker's text back: a CR as `&#13;`, an LF and a tab raw.
@@ -68,5 +73,33 @@ describe('comment line breaks in HR', () => {
     expect(texts(xml)).toEqual(['note&#13;Beep']);
     expect(warnings.map((w) => w.line)).toEqual([3]);
     expect(hrToXml('# note\n  see Beep below').warnings).toEqual([]);
+  });
+
+  it.each(['a', 'a&#13;b', 'a&#10;b', 'one&#13;two&#13;&#13;four', '// note', '# hash', 'a&#13;Beep'])(
+    'round-trips the disabled comment %s as one disabled comment',
+    (t) => {
+      const hr = xmlToHr(snippet(disabledComment(t)));
+      expect(hr.startsWith('// # ')).toBe(true);
+      const { xml, errors } = hrToXml(hr);
+      expect(errors).toEqual([]);
+      expect(texts(xml)).toEqual([asEmitted(t)]);
+      expect(xml.match(/enable="False"/g)).toHaveLength(1);
+      expect(xml).not.toContain('UNKNOWN STEP');
+    },
+  );
+
+  it('keeps a nested disabled comment beside an enabled comment and a disabled step', () => {
+    const hr = xmlToHr(snippet(
+      '<Step enable="True" id="68" name="If"><Calculation><![CDATA[1]]></Calculation></Step>' +
+      disabledComment('inner&#13;more') + comment('b') +
+      '<Step enable="False" id="86" name="Beep"/>' +
+      '<Step enable="True" id="70" name="End If"/>'));
+    expect(hr).toBe('If [ 1 ]\n    // # inner\n      more\n    # b\n    // Beep\nEnd If');
+    const { xml } = hrToXml(hr);
+    expect(xml.match(/<Step /g)).toHaveLength(5);
+    expect(xml.match(/enable="False"/g)).toHaveLength(2);
+    expect(texts(xml)).toEqual(['inner&#13;more', 'b']);
+    expect(xml).not.toContain('UNKNOWN STEP');
+    expect(texts(hrToXml('//# a\n  b').xml)).toEqual(['a&#13;b']);
   });
 });

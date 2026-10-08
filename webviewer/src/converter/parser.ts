@@ -78,17 +78,29 @@ export function isHrCommentContinuation(line: string, lead: string): boolean {
 }
 
 /**
- * The comment text a merged comment statement carries: `#` and the first line's
- * leading blanks dropped, each continuation line's pad turned back into its CR
- * or LF. A one-line comment is trimmed at both ends, as before; one that
- * continues keeps every blank inside it.
+ * Where a comment line's `#` sits in its trimmed text: 0 for `# text`, past the
+ * `//` for a disabled comment, which XML->HR writes and FileMaker's Script
+ * Workspace draws as `// # text`. -1 when the line is not a comment.
  */
-function decodeHrCommentText(raw: string, indent: number): string {
+function commentHashOffset(trimmed: string): number {
+  if (trimmed.startsWith('#')) return 0;
+  const m = /^\/\/[ \t]*#/.exec(trimmed);
+  return m ? m[0].length - 1 : -1;
+}
+
+/**
+ * The comment text a merged comment statement carries: `#` (and a disabled
+ * comment's `//`) and the first line's leading blanks dropped, each
+ * continuation line's pad turned back into its CR or LF. A one-line comment is
+ * trimmed at both ends, as before; one that continues keeps every blank inside
+ * it. `hash` is the `#`'s offset in `raw`.
+ */
+function decodeHrCommentText(raw: string, indent: number, hash: number): string {
   const lead = raw.substring(0, indent);
   const stripCr = (s: string) => (s.endsWith('\r') ? s.slice(0, -1) : s);
   const [head, ...rest] = raw.split('\n');
-  if (rest.length === 0) return head.substring(indent + 1).trim();
-  let text = stripCr(head.substring(indent + 1)).replace(/^[ \t]+/, '');
+  if (rest.length === 0) return head.substring(hash + 1).trim();
+  let text = stripCr(head.substring(hash + 1)).replace(/^[ \t]+/, '');
   for (const physical of rest) {
     const line = stripCr(physical);
     if (isHrCommentContinuation(line, lead)) {
@@ -114,11 +126,13 @@ export function parseLine(raw: string, lineNumber: number): ParsedLine {
     };
   }
 
-  // Comment: # ... (its continuation lines merged in by parseScript)
-  if (trimmed.startsWith('#')) {
-    const commentText = decodeHrCommentText(raw, indent);
+  // Comment: # ... (its continuation lines merged in by parseScript);
+  // a disabled comment is // # ...
+  const hash = commentHashOffset(trimmed);
+  if (hash >= 0) {
+    const commentText = decodeHrCommentText(raw, indent, indent + hash);
     return {
-      raw, lineNumber, disabled: false, isComment: true,
+      raw, lineNumber, disabled: hash > 0, isComment: true,
       commentText, stepName: '# (comment)', bracketContent: '',
       params: [], indent,
     };
@@ -317,8 +331,9 @@ function mergeMultilineStatements(lines: string[]): MergedLine[] {
       k++;
       continue;
     }
-    // A comment takes its continuation lines with it (encodeHrCommentText).
-    if (trimmed.startsWith('#')) {
+    // A comment, enabled or disabled, takes its continuation lines with it
+    // (encodeHrCommentText).
+    if (commentHashOffset(trimmed) >= 0) {
       const lead = lines[k].substring(0, lines[k].length - lines[k].trimStart().length);
       let j = k + 1;
       while (j < lines.length && isHrCommentContinuation(lines[j], lead)) j++;

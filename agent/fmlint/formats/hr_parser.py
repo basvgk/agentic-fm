@@ -2,10 +2,13 @@
 
 Parses HR format lines like:
   # comment text
+  // # disabled comment text
   // Disabled Step [ params ]
   Set Variable [ $name ; expression ]
   If [ condition ]
 """
+
+import re
 
 from ..literals import hr_opaque_span_at, is_double_delimiter, literal_span_at
 from ..types import ParsedHRLine
@@ -161,8 +164,9 @@ def _merge_multiline(lines: list) -> list:
             result.append((lines[k], k + 1))
             k += 1
             continue
-        # A comment takes its continuation lines with it (see _decode_comment_text).
-        if trimmed.startswith("#"):
+        # A comment, enabled or disabled, takes its continuation lines with it
+        # (see _decode_comment_text).
+        if _comment_hash_offset(trimmed) >= 0:
             lead = lines[k][: len(lines[k]) - len(lines[k].lstrip())]
             j = k + 1
             while j < len(lines) and is_comment_continuation(lines[j], lead):
@@ -201,17 +205,31 @@ def is_comment_continuation(line: str, lead: str) -> bool:
     return line.startswith(COMMENT_CR_PAD, len(lead)) or line[len(lead):len(lead) + 1] == COMMENT_LF_PAD
 
 
-def _decode_comment_text(raw: str, indent: int) -> str:
-    """The text a merged comment statement carries: ``#`` and the first line's leading
-    blanks dropped, each continuation line's pad turned back into its CR or LF. A
-    one-line comment is trimmed at both ends, as before; one that continues keeps
-    every blank inside it."""
+_DISABLED_COMMENT = re.compile(r"//[ \t]*#")
+
+
+def _comment_hash_offset(trimmed: str) -> int:
+    """Where a comment line's ``#`` sits in its trimmed text: 0 for ``# text``, past
+    the ``//`` for a disabled comment, which the XML to HR converter writes and
+    FileMaker's Script Workspace draws as ``// # text``. -1 when not a comment."""
+    if trimmed.startswith("#"):
+        return 0
+    m = _DISABLED_COMMENT.match(trimmed)
+    return m.end() - 1 if m else -1
+
+
+def _decode_comment_text(raw: str, indent: int, hash_at: int) -> str:
+    """The text a merged comment statement carries: ``#`` (and a disabled comment's
+    ``//``) and the first line's leading blanks dropped, each continuation line's pad
+    turned back into its CR or LF. A one-line comment is trimmed at both ends, as
+    before; one that continues keeps every blank inside it. *hash_at* is the ``#``'s
+    offset in *raw*."""
     lead = raw[:indent]
     head, *rest = raw.split("\n")
     if not rest:
-        return head[indent + 1:].strip()
+        return head[hash_at + 1:].strip()
     strip_cr = lambda s: s[:-1] if s.endswith("\r") else s  # noqa: E731
-    text = strip_cr(head[indent + 1:]).lstrip(" \t")
+    text = strip_cr(head[hash_at + 1:]).lstrip(" \t")
     for physical in rest:
         line = strip_cr(physical)
         if is_comment_continuation(line, lead):
@@ -231,11 +249,12 @@ def _parse_line(raw: str, line_number: int) -> ParsedHRLine:
     if not trimmed:
         return ParsedHRLine(raw=raw, line_number=line_number, indent=indent)
 
-    # Comment: # ...
-    if trimmed.startswith("#"):
-        comment_text = _decode_comment_text(raw, indent)
+    # Comment: # ... ; a disabled comment is // # ...
+    hash_at = _comment_hash_offset(trimmed)
+    if hash_at >= 0:
+        comment_text = _decode_comment_text(raw, indent, indent + hash_at)
         return ParsedHRLine(
-            raw=raw, line_number=line_number, is_comment=True,
+            raw=raw, line_number=line_number, is_comment=True, disabled=hash_at > 0,
             comment_text=comment_text, step_name="# (comment)", indent=indent,
         )
 
