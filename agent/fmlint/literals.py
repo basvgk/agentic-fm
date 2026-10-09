@@ -28,7 +28,9 @@ calculation comments with ``hr_opaque_span_at``: outside a literal ``/* … */``
 (block comments nest) and ``// …`` (to the end of the line) are comments, measured
 against FileMaker Pro 26.0.2. Because a step line mixes calculations with bare
 values such as file paths, a comment opens there only where a calculation token can
-end (``hr_comment_may_open_after``), and an unmatched ``/*`` is plain text. The
+end (``hr_comment_may_open_after``), and an unmatched ``/*`` is plain text. Their
+parenthesis and bracket depth reads every form FileMaker reads as one
+(``CALC_OPEN_PARENS`` and its siblings, ``hr_bracket_depth_delta``). The
 converters' copy of this grammar is ``agent/scripts/calc_literal.py``.
 """
 
@@ -180,3 +182,33 @@ def hr_comment_span_at(text, idx, stops=""):
 def hr_opaque_span_at(text, idx, stops=""):
     """Length of the literal or comment a step-line splitter steps over whole at *idx*."""
     return literal_span_at(text, idx) or hr_comment_span_at(text, idx, stops)
+
+
+# FileMaker reads ``﹙`` and ``（`` as ``(``, ``﹚`` and ``）`` as ``)``, ``［`` as ``[``
+# and ``］`` as ``]`` in a calculation, pairing them freely with the ASCII forms
+# (``Left （ "abc" ; 2 ）`` is ``ab``, ``Let ( ［ a = 1 ; b = 2 ] ; a + b )`` is 3;
+# measured against FileMaker Pro 26.0.2 and 26.0.3). A paste stores them as ASCII.
+# Inside a literal they are ordinary text.
+CALC_OPEN_PARENS = frozenset("(\ufe59\uff08")
+CALC_CLOSE_PARENS = frozenset(")\ufe5a\uff09")
+CALC_OPEN_BRACKETS = frozenset("[\uff3b")
+CALC_CLOSE_BRACKETS = frozenset("]\uff3d")
+
+
+def hr_bracket_depth_delta(text, idx, depth):
+    """Depth change (+1, -1 or 0) for the bracket at *idx* in a step-line scan that
+    tracks a step's own ``[ ]`` (or a field subscript's) with the calculation inside,
+    *depth* brackets being open before *idx*. The outer brackets are human-readable
+    syntax and ASCII only; inside them the calculation's brackets count in every
+    form, so ``［`` opens only once a bracket is open and ``］`` closes only a
+    bracket nested inside the outer one: a stray ``］`` never closes the step."""
+    ch = text[idx]
+    if ch == "[":
+        return 1
+    if ch == "]":
+        return -1
+    if depth > 0 and ch in CALC_OPEN_BRACKETS:
+        return 1
+    if depth > 1 and ch in CALC_CLOSE_BRACKETS:
+        return -1
+    return 0

@@ -34,7 +34,9 @@
  *    a block comment and `/*` inside a line comment are plain text.
  *  - A comment opens only outside a literal.
  * The HR splitters use a narrower comment rule (`hrCalcCommentSpanAt`), because a
- * step line mixes calculations with bare values such as file paths.
+ * step line mixes calculations with bare values such as file paths. Their
+ * parenthesis and bracket depth reads every form FileMaker reads as one
+ * (`isCalcOpenParen` and its siblings, `hrBracketDepthDelta`, below).
  */
 
 const CALC_QUOTES = '"“”';
@@ -254,4 +256,43 @@ export function hrNeedsLineBreakAfter(token: string, sep: string): boolean {
 export function hrSep(token: string, sep: string): string {
   if (!hrNeedsLineBreakAfter(token, sep)) return sep;
   return '\n' + sep.replace(/^ +/, '');
+}
+
+// FileMaker reads `﹙` and `（` as `(`, `﹚` and `）` as `)`, `［` as `[` and `］` as
+// `]` in a calculation, pairing them freely with the ASCII forms
+// (`Left （ "abc" ; 2 ）` is `ab`, `Let ( ［ a = 1 ; b = 2 ] ; a + b )` is 3;
+// measured against FileMaker Pro 26.0.2 and 26.0.3). A paste stores them as
+// ASCII. Inside a literal they are ordinary text.
+const CALC_OPEN_PARENS = '(\uFE59\uFF08';
+const CALC_CLOSE_PARENS = ')\uFE5A\uFF09';
+const CALC_OPEN_BRACKETS = '[\uFF3B';
+const CALC_CLOSE_BRACKETS = ']\uFF3D';
+
+const isOneOf = (forms: string, c: string | undefined): boolean =>
+  c !== undefined && c.length === 1 && forms.includes(c);
+
+/** True when `c` is a calculation `(` in any form FileMaker reads as one. */
+export function isCalcOpenParen(c: string | undefined): boolean { return isOneOf(CALC_OPEN_PARENS, c); }
+/** True when `c` is a calculation `)` in any form FileMaker reads as one. */
+export function isCalcCloseParen(c: string | undefined): boolean { return isOneOf(CALC_CLOSE_PARENS, c); }
+/** True when `c` is a calculation `[` in any form FileMaker reads as one. */
+export function isCalcOpenBracket(c: string | undefined): boolean { return isOneOf(CALC_OPEN_BRACKETS, c); }
+/** True when `c` is a calculation `]` in any form FileMaker reads as one. */
+export function isCalcCloseBracket(c: string | undefined): boolean { return isOneOf(CALC_CLOSE_BRACKETS, c); }
+
+/**
+ * Depth change (+1, -1 or 0) for the bracket at `at` in an HR scan that tracks a
+ * step's own `[ ]` (or a field subscript's) with the calculation inside, `depth`
+ * brackets being open before `at`. The outer brackets are HR syntax and ASCII
+ * only; inside them the calculation's brackets count in every form, so `［` opens
+ * only once a bracket is open and `］` closes only a bracket nested inside the
+ * outer one: a stray `］` never closes the step.
+ */
+export function hrBracketDepthDelta(s: string, at: number, depth: number): number {
+  const c = s[at];
+  if (c === '[') return 1;
+  if (c === ']') return -1;
+  if (depth > 0 && isCalcOpenBracket(c)) return 1;
+  if (depth > 1 && isCalcCloseBracket(c)) return -1;
+  return 0;
 }

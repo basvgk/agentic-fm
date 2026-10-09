@@ -20,7 +20,15 @@
 import type { ParsedLine } from './parser';
 import type { IdResolver } from './id-resolver';
 import { cdata, escXml } from './step-registry';
-import { decodeWholeCalcLiteral, hrCalcOpaqueSpanAt } from './calc-literal';
+import {
+  decodeWholeCalcLiteral,
+  hrBracketDepthDelta,
+  hrCalcOpaqueSpanAt,
+  isCalcCloseBracket,
+  isCalcCloseParen,
+  isCalcOpenBracket,
+  isCalcOpenParen,
+} from './calc-literal';
 import {
   type GrammarEntry,
   type GrammarParam,
@@ -103,10 +111,12 @@ function splitTopLevelCommas(s: string): string[] {
     const lit = hrCalcOpaqueSpanAt(s, i, ',');
     if (lit) { cur += s.slice(i, i + lit); i += lit - 1; continue; }
     const c = s[i];
-    if (c === '(') paren++;
-    else if (c === ')') { if (paren > 0) paren--; }
-    else if (c === '[') bracket++;
-    else if (c === ']') { if (bracket > 0) bracket--; }
+    // Every form FileMaker reads as a parenthesis or bracket counts
+    // (`Left （ "abc" , 2 ）` is one item).
+    if (isCalcOpenParen(c)) paren++;
+    else if (isCalcCloseParen(c)) { if (paren > 0) paren--; }
+    else if (isCalcOpenBracket(c)) bracket++;
+    else if (isCalcCloseBracket(c)) { if (bracket > 0) bracket--; }
     else if (c === '{') brace++;
     else if (c === '}') { if (brace > 0) brace--; }
     if (c === ',' && paren === 0 && bracket === 0 && brace === 0) {
@@ -168,10 +178,12 @@ function splitListEntries(s: string): string[] {
     const lit = hrCalcOpaqueSpanAt(s, i, ',');
     if (lit) { cur += s.slice(i, i + lit); i += lit - 1; continue; }
     const c = s[i];
-    if (c === '(') paren++;
-    else if (c === ')') { if (paren > 0) paren--; }
-    else if (c === '[') bracket++;
-    else if (c === ']') { if (bracket > 0) bracket--; }
+    // Every form FileMaker reads as a parenthesis or bracket counts
+    // (`Left （ "abc" , 2 ）` is one item).
+    if (isCalcOpenParen(c)) paren++;
+    else if (isCalcCloseParen(c)) { if (paren > 0) paren--; }
+    else if (isCalcOpenBracket(c)) bracket++;
+    else if (isCalcCloseBracket(c)) { if (bracket > 0) bracket--; }
     else if (c === '{') brace++;
     else if (c === '}') { if (brace > 0) brace--; }
     if (c === ',' && paren === 0 && bracket === 0 && brace === 0) {
@@ -252,8 +264,10 @@ function parseFieldSubscript(ref: string): [string, number, string] {
       i += span;
       continue;
     }
-    if (ref[i] === '[') depth++;
-    else if (ref[i] === ']' && --depth === 0) {
+    // The subscript's own `[ ]` are ASCII; the calculation inside may use `［ ］` too.
+    const delta = hrBracketDepthDelta(ref, i, depth);
+    depth += delta;
+    if (delta < 0 && depth === 0) {
       close = i;
       break;
     }

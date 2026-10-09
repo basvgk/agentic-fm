@@ -21,8 +21,13 @@
 
 import {
   calcLiteralSpanAt,
+  hrBracketDepthDelta,
   hrCalcOpaqueSpanAt,
   hrUnterminatedCalcCommentAt,
+  isCalcCloseBracket,
+  isCalcCloseParen,
+  isCalcOpenBracket,
+  isCalcOpenParen,
   isUnescapedCalcQuote,
 } from './calc-literal';
 
@@ -290,8 +295,7 @@ function statementEndLine(text: string, lineStart: number[], first: number,
       i = past;
       continue;
     }
-    if (ch === '[') depth++;
-    if (ch === ']') depth--;
+    depth += hrBracketDepthDelta(text, i, depth);
     i++;
   }
   if (depth <= 0) return nLines - 1;
@@ -374,11 +378,9 @@ function findMatchingBracketIn(text: string, openIdx: number, mode: LineCommentE
   while (i < text.length) {
     const past = stepOverOpaque(text, i, mode);
     if (past !== i) { i = past; continue; }
-    if (text[i] === '[') depth++;
-    if (text[i] === ']') {
-      depth--;
-      if (depth === 0) return i;
-    }
+    const delta = hrBracketDepthDelta(text, i, depth);
+    depth += delta;
+    if (delta < 0 && depth === 0) return i;
     i++;
   }
   return -1;
@@ -428,10 +430,12 @@ function splitParams(content: string): string[] {
     }
     const ch = content[i];
 
-    if (ch === '(') parenDepth++;
-    if (ch === ')') parenDepth--;
-    if (ch === '[') bracketDepth++;
-    if (ch === ']') bracketDepth--;
+    // Every form FileMaker reads as a parenthesis or bracket counts:
+    // `Left （ "abc" ; 2 ）` is one argument.
+    if (isCalcOpenParen(ch)) parenDepth++;
+    if (isCalcCloseParen(ch)) parenDepth--;
+    if (isCalcOpenBracket(ch)) bracketDepth++;
+    if (isCalcCloseBracket(ch)) bracketDepth--;
 
     if (ch === ';' && parenDepth === 0 && bracketDepth === 0) {
       params.push(current.trim());

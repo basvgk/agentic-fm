@@ -22,7 +22,15 @@ import json
 import os
 import re
 
-from calc_literal import hr_calc_opaque_span_at, is_unescaped_calc_quote
+from calc_literal import (
+    CALC_CLOSE_BRACKETS,
+    CALC_CLOSE_PARENS,
+    CALC_OPEN_BRACKETS,
+    CALC_OPEN_PARENS,
+    hr_bracket_depth_delta,
+    hr_calc_opaque_span_at,
+    is_unescaped_calc_quote,
+)
 from catalog_emit import (
     EmptyResolver,
     convert_step_with_catalog,
@@ -89,12 +97,10 @@ def _find_matching_bracket(text: str, open_idx: int) -> int:
                         end = k - 1
                 i = end
                 continue
-            if text[i] == "[":
-                depth += 1
-            elif text[i] == "]":
-                depth -= 1
-                if depth == 0:
-                    return i
+            delta = hr_bracket_depth_delta(text, i, depth)
+            depth += delta
+            if delta < 0 and depth == 0:
+                return i
             i += 1
     return -1
 
@@ -111,13 +117,13 @@ def _split_params(content: str) -> list[str]:
             i += span
             continue
         c = content[i]
-        if c == "(":
+        if c in CALC_OPEN_PARENS:
             paren += 1
-        elif c == ")":
+        elif c in CALC_CLOSE_PARENS:
             paren -= 1
-        elif c == "[":
+        elif c in CALC_OPEN_BRACKETS:
             bracket += 1
-        elif c == "]":
+        elif c in CALC_CLOSE_BRACKETS:
             bracket -= 1
         if c == ";" and paren == 0 and bracket == 0:
             params.append(cur.strip())

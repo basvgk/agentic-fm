@@ -47,7 +47,15 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from calc_literal import decode_whole_calc_literal, hr_calc_opaque_span_at
+from calc_literal import (
+    CALC_CLOSE_BRACKETS,
+    CALC_CLOSE_PARENS,
+    CALC_OPEN_BRACKETS,
+    CALC_OPEN_PARENS,
+    decode_whole_calc_literal,
+    hr_bracket_depth_delta,
+    hr_calc_opaque_span_at,
+)
 from catalog_grammar import (
     CatalogEntry,
     StepParam,
@@ -197,14 +205,16 @@ def _split_top_level_commas(s: str) -> list[str]:
             i += lit
             continue
         c = s[i]
-        if c == "(":
+        # Every form FileMaker reads as a parenthesis or bracket counts
+        # (``Left （ "abc" , 2 ）`` is one item).
+        if c in CALC_OPEN_PARENS:
             paren += 1
-        elif c == ")":
+        elif c in CALC_CLOSE_PARENS:
             if paren > 0:
                 paren -= 1
-        elif c == "[":
+        elif c in CALC_OPEN_BRACKETS:
             bracket += 1
-        elif c == "]":
+        elif c in CALC_CLOSE_BRACKETS:
             if bracket > 0:
                 bracket -= 1
         elif c == "{":
@@ -287,14 +297,16 @@ def _split_list_entries(s: str) -> list[str]:
             i += lit
             continue
         c = s[i]
-        if c == "(":
+        # Every form FileMaker reads as a parenthesis or bracket counts
+        # (``Left （ "abc" , 2 ）`` is one item).
+        if c in CALC_OPEN_PARENS:
             paren += 1
-        elif c == ")":
+        elif c in CALC_CLOSE_PARENS:
             if paren > 0:
                 paren -= 1
-        elif c == "[":
+        elif c in CALC_OPEN_BRACKETS:
             bracket += 1
-        elif c == "]":
+        elif c in CALC_CLOSE_BRACKETS:
             if bracket > 0:
                 bracket -= 1
         elif c == "{":
@@ -383,13 +395,13 @@ def _parse_field_subscript(ref: str) -> tuple[str, int, str]:
         if span:
             i += span
             continue
-        if ref[i] == "[":
-            depth += 1
-        elif ref[i] == "]":
-            depth -= 1
-            if depth == 0:
-                close = i
-                break
+        # The subscript's own ``[ ]`` are ASCII; the calculation inside may use
+        # ``［ ］`` too.
+        delta = hr_bracket_depth_delta(ref, i, depth)
+        depth += delta
+        if delta < 0 and depth == 0:
+            close = i
+            break
         i += 1
     if close != len(ref) - 1:
         return ref, 0, ""

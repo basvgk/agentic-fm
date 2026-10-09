@@ -39,7 +39,9 @@ Calculation comments, measured against FileMaker Pro 26.0.2:
 * A comment opens only outside a literal (``"a /* b"`` is the text ``a /* b``).
 
 The human-readable splitters use a narrower comment rule (``hr_calc_comment_span_at``),
-because a step line mixes calculations with bare values such as file paths.
+because a step line mixes calculations with bare values such as file paths. Their
+parenthesis and bracket depth reads every form FileMaker reads as one
+(``CALC_OPEN_PARENS`` and its siblings, ``hr_bracket_depth_delta``, below).
 Stdlib only.
 """
 
@@ -289,3 +291,33 @@ def hr_sep(token: str, sep: str) -> str:
     if not hr_needs_line_break_after(token, sep):
         return sep
     return "\n" + sep.lstrip(" ")
+
+
+# FileMaker reads ``﹙`` and ``（`` as ``(``, ``﹚`` and ``）`` as ``)``, ``［`` as ``[``
+# and ``］`` as ``]`` in a calculation, pairing them freely with the ASCII forms
+# (``Left （ "abc" ; 2 ）`` is ``ab``, ``Let ( ［ a = 1 ; b = 2 ] ; a + b )`` is 3;
+# measured against FileMaker Pro 26.0.2 and 26.0.3). A paste stores them as ASCII.
+# Inside a literal they are ordinary text.
+CALC_OPEN_PARENS = frozenset("(\ufe59\uff08")
+CALC_CLOSE_PARENS = frozenset(")\ufe5a\uff09")
+CALC_OPEN_BRACKETS = frozenset("[\uff3b")
+CALC_CLOSE_BRACKETS = frozenset("]\uff3d")
+
+
+def hr_bracket_depth_delta(s: str, at: int, depth: int) -> int:
+    """Depth change (+1, -1 or 0) for the bracket at *at* in a step-line scan that
+    tracks a step's own ``[ ]`` (or a field subscript's) with the calculation inside,
+    *depth* brackets being open before *at*. The outer brackets are human-readable
+    syntax and ASCII only; inside them the calculation's brackets count in every
+    form, so ``［`` opens only once a bracket is open and ``］`` closes only a
+    bracket nested inside the outer one: a stray ``］`` never closes the step."""
+    ch = s[at]
+    if ch == "[":
+        return 1
+    if ch == "]":
+        return -1
+    if depth > 0 and ch in CALC_OPEN_BRACKETS:
+        return 1
+    if depth > 1 and ch in CALC_CLOSE_BRACKETS:
+        return -1
+    return 0

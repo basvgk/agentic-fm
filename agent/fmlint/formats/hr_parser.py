@@ -10,7 +10,16 @@ Parses HR format lines like:
 
 import re
 
-from ..literals import hr_opaque_span_at, is_double_delimiter, literal_span_at
+from ..literals import (
+    CALC_CLOSE_BRACKETS,
+    CALC_CLOSE_PARENS,
+    CALC_OPEN_BRACKETS,
+    CALC_OPEN_PARENS,
+    hr_bracket_depth_delta,
+    hr_opaque_span_at,
+    is_double_delimiter,
+    literal_span_at,
+)
 from ..types import ParsedHRLine
 
 # Every scanner below steps over calculation text literals and comments whole with
@@ -127,10 +136,7 @@ def _statement_end_line(text: str, line_start: list, first: int, mode: int, trac
                 past = eol
             i = past
             continue
-        if ch == "[":
-            depth += 1
-        elif ch == "]":
-            depth -= 1
+        depth += hr_bracket_depth_delta(text, i, depth)
         i += 1
     if depth <= 0:
         return n_lines - 1
@@ -311,13 +317,10 @@ def _find_matching_bracket_in(text: str, open_idx: int, mode: int) -> int:
         if past != i:
             i = past
             continue
-        ch = text[i]
-        if ch == "[":
-            depth += 1
-        elif ch == "]":
-            depth -= 1
-            if depth == 0:
-                return i
+        delta = hr_bracket_depth_delta(text, i, depth)
+        depth += delta
+        if delta < 0 and depth == 0:
+            return i
         i += 1
     return -1
 
@@ -347,13 +350,15 @@ def _split_params(content: str) -> list:
             i += span
             continue
         ch = content[i]
-        if ch == "(":
+        # Every form FileMaker reads as a parenthesis or bracket counts:
+        # ``Left （ "abc" ; 2 ）`` is one argument.
+        if ch in CALC_OPEN_PARENS:
             paren_depth += 1
-        elif ch == ")":
+        elif ch in CALC_CLOSE_PARENS:
             paren_depth -= 1
-        elif ch == "[":
+        elif ch in CALC_OPEN_BRACKETS:
             bracket_depth += 1
-        elif ch == "]":
+        elif ch in CALC_CLOSE_BRACKETS:
             bracket_depth -= 1
 
         if ch == ";" and paren_depth == 0 and bracket_depth == 0:
