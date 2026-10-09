@@ -18,6 +18,7 @@ from ..literals import (
     hr_bracket_depth_delta,
     hr_opaque_span_at,
     is_double_delimiter,
+    line_comment_open_len,
     literal_span_at,
 )
 from ..types import ParsedHRLine
@@ -28,6 +29,8 @@ from ..types import ParsedHRLine
 # outside a literal ``/* … */`` (nesting) and ``// …`` (to the end of the line) are
 # comments, so a ``;``, ``[``, ``]`` or quote inside ``"a\" ; b"``, ``“c ; d”`` or
 # ``/* e ; ] */`` is content, not structure.
+# Comment openers and closers are read in every slash/star form FileMaker reads
+# (``／＊ … ＊／``, ``⁄∗``, ``／／``); the disabled-step prefix ``//`` stays ASCII.
 
 # How a ``//`` line comment ends while looking for a step's closing ``]``:
 # AT_LINE_END -- the calculation grammar, tried first: a ``]`` inside the comment is
@@ -45,7 +48,7 @@ def _step_over_opaque(text: str, i: int, mode: int) -> int:
     if not span:
         return i
     end = i + span
-    if mode == YIELDS_TO_FINAL_BRACKET and not literal_span_at(text, i) and text[i + 1] == "/":
+    if mode == YIELDS_TO_FINAL_BRACKET and not literal_span_at(text, i) and line_comment_open_len(text, i):
         k = end
         while k > i + 2 and text[k - 1] in " \t":
             k -= 1

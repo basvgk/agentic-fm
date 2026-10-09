@@ -16,10 +16,13 @@
  * or a comment is content, not structure. HR's comment rule is narrower than
  * FileMaker's: an opener glued to a word or path character (`filewin://srv`) is
  * plain text, and an unmatched block-comment opener is plain text (reported by
- * hrToXml as a warning).
+ * hrToXml as a warning). Comment openers and closers are read in every
+ * slash/star form FileMaker reads (`／＊ … ＊／`, `⁄∗`, `／／`); the disabled-step
+ * prefix `//` is HR syntax and stays ASCII.
  */
 
 import {
+  calcLineCommentOpenLen,
   calcLiteralSpanAt,
   hrBracketDepthDelta,
   hrCalcOpaqueSpanAt,
@@ -212,7 +215,8 @@ function stepOverOpaque(s: string, i: number, mode: LineCommentEnd, stops = ''):
   const span = hrCalcOpaqueSpanAt(s, i, stops);
   if (!span) return i;
   let end = i + span;
-  if (mode === LineCommentEnd.YieldsToFinalBracket && !calcLiteralSpanAt(s, i) && s[i + 1] === '/') {
+  if (mode === LineCommentEnd.YieldsToFinalBracket && !calcLiteralSpanAt(s, i) &&
+      calcLineCommentOpenLen(s, i)) {
     let k = end;
     while (k > i + 2 && (s[k - 1] === ' ' || s[k - 1] === '\t')) k--;
     if (k > i + 2 && s[k - 1] === ']') end = k - 1;

@@ -37,6 +37,8 @@ Calculation comments, measured against FileMaker Pro 26.0.2:
   (``1 /* "*/" */ + 2`` is error 1206), ``//`` inside a block comment and ``/*``
   inside a line comment are plain text.
 * A comment opens only outside a literal (``"a /* b"`` is the text ``a /* b``).
+* ``/`` and ``*`` each have three compatibility forms that work in every one of
+  those positions (``CALC_SLASHES``, ``CALC_STARS``): ``1 ／＊ c ; d ＊／ + 2`` is 3.
 
 The human-readable splitters use a narrower comment rule (``hr_calc_comment_span_at``),
 because a step line mixes calculations with bare values such as file paths. Their
@@ -150,32 +152,54 @@ def decode_whole_calc_literal(s: str) -> str | None:
 # --- calculation comments ----------------------------------------------------
 
 
+# FileMaker reads ``⁄`` (U+2044), ``∕`` (U+2215) and ``／`` (U+FF0F) as ``/`` and ``∗``
+# (U+2217), ``﹡`` (U+FE61) and ``＊`` (U+FF0A) as ``*`` in every comment position
+# (measured against FileMaker Pro 26.0.2 and 26.0.3): any slash then any star opens a
+# block comment (``1 ／＊ c ; d ＊／ + 2`` is 3), any star then any slash closes one,
+# the forms nest together, and any two slashes open a line comment. A paste stores
+# the outer delimiters as ASCII. Outside a comment they are the division and
+# multiplication operators (``6 ／ 3`` is 2).
+CALC_SLASHES = frozenset("/\u2044\u2215\uff0f")
+CALC_STARS = frozenset("*\u2217\ufe61\uff0a")
+
+
+def calc_line_comment_open_len(s: str, at: int) -> int:
+    """Length (2) of a line-comment opener (two slash forms) at *at*, 0 when none."""
+    first, second = s[at : at + 1], s[at + 1 : at + 2]
+    return 2 if first in CALC_SLASHES and second in CALC_SLASHES else 0
+
+
+def calc_block_comment_open_len(s: str, at: int) -> int:
+    """Length (2) of a block-comment opener (a slash form, then a star form) at
+    *at*, 0 when none."""
+    first, second = s[at : at + 1], s[at + 1 : at + 2]
+    return 2 if first in CALC_SLASHES and second in CALC_STARS else 0
+
+
 def calc_comment_len(s: str, at: int) -> tuple[int, bool]:
     """Length of the calculation comment that opens at ``at`` and whether it closes.
 
-    ``(0, False)`` when no ``/*`` or ``//`` starts there (the caller has established
-    that ``at`` is outside a literal). A block comment runs past its matching ``*/``
-    (block comments nest), or to the end of ``s`` when it has none (not closed). A
-    line comment runs up to, not including, the next CR or LF (or to the end); it is
-    always closed.
+    ``(0, False)`` when no ``/*`` or ``//``, in any of their forms, starts there (the
+    caller has established that ``at`` is outside a literal). A block comment runs
+    past its matching ``*/`` (block comments nest), or to the end of ``s`` when it
+    has none (not closed). A line comment runs up to, not including, the next CR or
+    LF (or to the end); it is always closed.
     """
     n = len(s)
-    if at + 1 >= n or s[at] != "/":
-        return 0, False
-    if s[at + 1] == "/":
+    if calc_line_comment_open_len(s, at):
         i = at + 2
         while i < n and s[i] not in "\r\n":
             i += 1
         return i - at, True
-    if s[at + 1] != "*":
+    if not calc_block_comment_open_len(s, at):
         return 0, False
     depth = 1
     i = at + 2
     while i + 1 < n:
-        if s[i] == "/" and s[i + 1] == "*":
+        if s[i] in CALC_SLASHES and s[i + 1] in CALC_STARS:
             depth += 1
             i += 2
-        elif s[i] == "*" and s[i + 1] == "/":
+        elif s[i] in CALC_STARS and s[i + 1] in CALC_SLASHES:
             i += 2
             depth -= 1
             if depth == 0:
@@ -186,7 +210,17 @@ def calc_comment_len(s: str, at: int) -> tuple[int, bool]:
 
 
 # A comment opens in human-readable text only after one of these (or at the start).
-_HR_COMMENT_MAY_FOLLOW = frozenset(' \t\r\n()[]{};,&+=<>^"“”')
+_HR_COMMENT_MAY_FOLLOW = frozenset(
+    ' \t\r\n\v\f()[]{};,&+=<>^"“”'
+    # The other forms FileMaker reads as whitespace, a parenthesis, a bracket, an
+    # argument separator or ``&`` (``1　／＊ c ＊／`` after U+3000 opens).
+    "\u0085\u00a0\u1680\u180e"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u200b"
+    "\u2028\u2029\u202f\u205f\u2060\u3000\ufeff"
+    "\ufe59\uff08\ufe5a\uff09\uff3b\uff3d"
+    "\u060c\u061b\u3001\ufe50\ufe51\ufe54\uff0c\uff1b\uff64"
+    "\ufe60\uff06"
+)
 
 
 def hr_calc_comment_may_open_after(s: str, at: int) -> bool:
@@ -222,15 +256,16 @@ def hr_calc_comment_span_at(s: str, at: int, stops: str = "") -> int:
     holds. XML->HR writes a line break after a comment whose text holds such a
     character (``hr_needs_line_break_after``), so its own output never depends on it.
     """
-    if at + 1 >= len(s) or s[at] != "/" or s[at + 1] not in "/*":
+    line = calc_line_comment_open_len(s, at)
+    if not line and not calc_block_comment_open_len(s, at):
         return 0
     if not hr_calc_comment_may_open_after(s, at):
         return 0
     span, closed = calc_comment_len(s, at)
     if not closed:
         return 0
-    if s[at + 1] == "/" and at + span == len(s) and stops:
-        for j in range(at + 2, len(s)):
+    if line and at + span == len(s) and stops:
+        for j in range(at + line, len(s)):
             if s[j] in stops:
                 return j - at
     return span
@@ -239,7 +274,7 @@ def hr_calc_comment_span_at(s: str, at: int, stops: str = "") -> int:
 def hr_unterminated_calc_comment_at(s: str, at: int) -> bool:
     """True when an unmatched ``/*`` (one ``hr_calc_comment_span_at`` declines only
     because it never closes) opens at ``at``."""
-    if at + 1 >= len(s) or s[at] != "/" or s[at + 1] != "*":
+    if calc_line_comment_open_len(s, at) or not calc_block_comment_open_len(s, at):
         return False
     if not hr_calc_comment_may_open_after(s, at):
         return False
@@ -274,7 +309,7 @@ def hr_needs_line_break_after(token: str, sep: str) -> bool:
             continue
         c = hr_calc_comment_span_at(token, i)
         if c:
-            if token[i + 1] == "/" and i + c == n:
+            if calc_line_comment_open_len(token, i) and i + c == n:
                 text = token[i + 2 :]
                 own = sep.strip(" ")[:1] or "]"
                 return any(ch in text for ch in ";]") or own in text

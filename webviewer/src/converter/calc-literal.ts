@@ -33,6 +33,14 @@
  *  - Inside a comment nothing is structure: a quote opens no literal, `//` inside
  *    a block comment and `/*` inside a line comment are plain text.
  *  - A comment opens only outside a literal.
+ *  - `/` and `*` each have three compatibility forms that work in every one of
+ *    those positions (measured against FileMaker Pro 26.0.2 and 26.0.3): `⁄`
+ *    (U+2044), `∕` (U+2215) and `／` (U+FF0F) are slashes, `∗` (U+2217), `﹡`
+ *    (U+FE61) and `＊` (U+FF0A) are stars. Any slash then any star opens a block
+ *    comment (`1 ／＊ c ; d ＊／ + 2` is 3), any star then any slash closes one,
+ *    the forms nest together, and any two slashes open a line comment. A paste
+ *    stores the outer delimiters as ASCII. Outside a comment they are the
+ *    division and multiplication operators (`6 ／ 3` is 2).
  * The HR splitters use a narrower comment rule (`hrCalcCommentSpanAt`), because a
  * step line mixes calculations with bare values such as file paths. Their
  * parenthesis and bracket depth reads every form FileMaker reads as one
@@ -135,26 +143,46 @@ export function decodeWholeCalcLiteral(s: string): string | null {
 // Calculation comments
 // ---------------------------------------------------------------------------
 
+const CALC_SLASHES = '/\u2044\u2215\uFF0F';
+const CALC_STARS = '*\u2217\uFE61\uFF0A';
+
+/** True when `c` is a calculation `/` in any form FileMaker reads as one. */
+export function isCalcSlash(c: string | undefined): boolean {
+  return c !== undefined && c.length === 1 && CALC_SLASHES.includes(c);
+}
+/** True when `c` is a calculation `*` in any form FileMaker reads as one. */
+export function isCalcStar(c: string | undefined): boolean {
+  return c !== undefined && c.length === 1 && CALC_STARS.includes(c);
+}
+/** Length (2) of a line-comment opener (two slash forms) at `at`, 0 when none. */
+export function calcLineCommentOpenLen(s: string, at: number): number {
+  return isCalcSlash(s[at]) && isCalcSlash(s[at + 1]) ? 2 : 0;
+}
+/** Length (2) of a block-comment opener (a slash form, then a star form) at `at`, 0 when none. */
+export function calcBlockCommentOpenLen(s: string, at: number): number {
+  return isCalcSlash(s[at]) && isCalcStar(s[at + 1]) ? 2 : 0;
+}
+
 /**
  * Length of the calculation comment that opens at `at`, and whether it closes
- * (`{ len: 0 }` when no `/*` or `//` starts there; the caller has established
+ * (`{ len: 0 }` when no `/*` or `//`, in any of their forms, starts there; the caller has established
  * that `at` is outside a literal). A block comment runs past its matching close
  * (block comments nest), or to the end of `s` when it has none. A line comment
  * runs up to, not including, the next CR or LF; it is always closed.
  */
 export function calcCommentLen(s: string, at: number): { len: number; closed: boolean } {
-  if (at + 1 >= s.length || s[at] !== '/') return { len: 0, closed: false };
-  if (s[at + 1] === '/') {
-    let i = at + 2;
+  const line = calcLineCommentOpenLen(s, at);
+  if (line) {
+    let i = at + line;
     while (i < s.length && s[i] !== '\n' && s[i] !== '\r') i++;
     return { len: i - at, closed: true };
   }
-  if (s[at + 1] !== '*') return { len: 0, closed: false };
+  if (!calcBlockCommentOpenLen(s, at)) return { len: 0, closed: false };
   let depth = 1;
   let i = at + 2;
   while (i + 1 < s.length) {
-    if (s[i] === '/' && s[i + 1] === '*') { depth++; i += 2; }
-    else if (s[i] === '*' && s[i + 1] === '/') {
+    if (isCalcSlash(s[i]) && isCalcStar(s[i + 1])) { depth++; i += 2; }
+    else if (isCalcStar(s[i]) && isCalcSlash(s[i + 1])) {
       i += 2;
       if (--depth === 0) return { len: i - at, closed: true };
     } else i++;
@@ -162,8 +190,19 @@ export function calcCommentLen(s: string, at: number): { len: number; closed: bo
   return { len: s.length - at, closed: false };
 }
 
-/** A comment opens in HR text only after one of these (or at the start). */
-const HR_COMMENT_MAY_FOLLOW = ' \t\r\n()[]{};,&+=<>^"“”';
+/**
+ * A comment opens in HR text only after one of these (or at the start): ASCII
+ * whitespace and punctuation, the literal delimiters, and the other forms
+ * FileMaker reads as whitespace, a parenthesis, a bracket, an argument
+ * separator or `&` (`1　／＊ c ＊／` after U+3000, `Left （／＊ c ＊／ "a" ; 1 ）`).
+ */
+const HR_COMMENT_MAY_FOLLOW =
+  ' \t\r\n\v\f()[]{};,&+=<>^"“”' +
+  '\u0085\u00A0\u1680\u180E\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u200B' +
+  '\u2028\u2029\u202F\u205F\u2060\u3000\uFEFF' +
+  '\uFE59\uFF08\uFE5A\uFF09\uFF3B\uFF3D' +
+  '\u060C\u061B\u3001\uFE50\uFE51\uFE54\uFF0C\uFF1B\uFF64' +
+  '\uFE60\uFF06';
 
 /**
  * True when a comment opener at `at` is not glued to a word or path character.
@@ -179,7 +218,8 @@ export function hrCalcCommentMayOpenAfter(s: string, at: number): boolean {
 
 /**
  * Length of the comment an HR splitter steps over at `at` (0 when none):
- * `calcCommentLen` under the HR rule. An unmatched block comment is not a
+ * `calcCommentLen` under the HR rule, its opener in any slash/star form
+ * (`1 ／＊ c ; d ＊／ + 2` is one calculation). An unmatched block comment is not a
  * comment (FileMaker rejects it, and reading it as one would swallow the rest of
  * the step; `hrUnterminatedCalcCommentAt` reports it).
  *
@@ -194,11 +234,12 @@ export function hrCalcCommentMayOpenAfter(s: string, at: number): boolean {
  * character (`hrNeedsLineBreakAfter`), so its own output never depends on it.
  */
 export function hrCalcCommentSpanAt(s: string, at: number, stops = ''): number {
-  if (at + 1 >= s.length || s[at] !== '/' || (s[at + 1] !== '/' && s[at + 1] !== '*')) return 0;
+  const line = calcLineCommentOpenLen(s, at);
+  if (!line && !calcBlockCommentOpenLen(s, at)) return 0;
   if (!hrCalcCommentMayOpenAfter(s, at)) return 0;
   const { len, closed } = calcCommentLen(s, at);
   if (!closed) return 0;
-  if (s[at + 1] === '/' && at + len === s.length && stops) {
+  if (line && at + len === s.length && stops) {
     for (let j = at + 2; j < s.length; j++) if (stops.includes(s[j])) return j - at;
   }
   return len;
@@ -206,7 +247,7 @@ export function hrCalcCommentSpanAt(s: string, at: number, stops = ''): number {
 
 /** True when an unmatched block-comment opener (one `hrCalcCommentSpanAt` declines only because it never closes) opens at `at`. */
 export function hrUnterminatedCalcCommentAt(s: string, at: number): boolean {
-  if (at + 1 >= s.length || s[at] !== '/' || s[at + 1] !== '*') return false;
+  if (calcLineCommentOpenLen(s, at) || !calcBlockCommentOpenLen(s, at)) return false;
   if (!hrCalcCommentMayOpenAfter(s, at)) return false;
   return !calcCommentLen(s, at).closed;
 }
@@ -235,7 +276,7 @@ export function hrNeedsLineBreakAfter(token: string, sep: string): boolean {
     if (lit) { i += lit; continue; }
     const c = hrCalcCommentSpanAt(token, i);
     if (c) {
-      if (token[i + 1] === '/' && i + c === token.length) {
+      if (calcLineCommentOpenLen(token, i) && i + c === token.length) {
         const text = token.slice(i + 2);
         const own = sep.trim()[0] ?? ']';
         return text.includes(';') || text.includes(']') || text.includes(own);
