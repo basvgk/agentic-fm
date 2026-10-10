@@ -57,6 +57,69 @@ def _step_over_opaque(text: str, i: int, mode: int) -> int:
     return end
 
 
+_DELIMS = '"\u201c\u201d'
+
+
+def _ends_in_display_form_close(text: str, lit_open: int, line_end: int) -> int:
+    """FileMaker draws a literal text parameter as ``“`` + value + ``”`` and never
+    escapes the value, so a value holding an odd number of quotes (``He said “hi``)
+    shows as ``… ; “He said “hi” ]``: read with the literal grammar, its last
+    delimiter opens a literal that never closes and swallows the step's ``]`` (and,
+    in a script, every later line). The display form ends with that closing
+    delimiter, optional blanks and the step's ``]``. Returns the ``]``'s offset when
+    the text of one line, from the dangling literal's opening delimiter at
+    *lit_open* to *line_end*, ends that way (trailing blanks and a CR allowed), else
+    -1. The delimiter may be escaped (``“a\\”`` is the value ``a\\``) or be the
+    literal's own opener."""
+    k = line_end
+    while k > lit_open and text[k - 1] in " \t\r":
+        k -= 1
+    if k <= lit_open or text[k - 1] != "]":
+        return -1
+    close = k - 1
+    k = close
+    while k > lit_open and text[k - 1] in " \t":
+        k -= 1
+    return close if k > lit_open and text[k - 1] in _DELIMS else -1
+
+
+def _literal_closes(text: str, i: int) -> bool:
+    """True when the literal opening at *i* closes before the end of *text*."""
+    j = i + 1
+    while j < len(text):
+        if is_double_delimiter(text, j):
+            return True
+        j += 1
+    return False
+
+
+def _find_display_form_close(text: str, open_idx: int) -> int:
+    """The display-form reading of a statement whose ``[`` at *open_idx* found no
+    matching ``]``: the first literal opened at the step's own bracket level (not
+    inside a calculation bracket) that never closes, starts on the statement's last
+    line, and runs to a line ending in a delimiter and ``]``
+    (``_ends_in_display_form_close``). Returns that ``]``, or -1."""
+    depth = 0
+    i = open_idx
+    while i < len(text):
+        if depth == 1 and is_double_delimiter(text, i):
+            if not _literal_closes(text, i):
+                if "\n" in text[i:]:
+                    return -1
+                return _ends_in_display_form_close(text, i, len(text))
+            i += literal_span_at(text, i)
+            continue
+        past = _step_over_opaque(text, i, AT_LINE_END)
+        if past != i:
+            i = past
+            continue
+        depth += hr_bracket_depth_delta(text, i, depth)
+        if depth <= 0:
+            return -1
+        i += 1
+    return -1
+
+
 def parse_hr(text: str) -> list:
     """Parse HR script text into a list of ParsedHRLine objects."""
     raw_lines = text.split("\n")
@@ -127,6 +190,13 @@ def _statement_end_line(text: str, line_start: list, first: int, mode: int, trac
             continue
         if depth > 0:
             past = _step_over_opaque(text, i, mode)
+            # FileMaker's display form (_ends_in_display_form_close): a literal at the
+            # step's own level that runs past this line's end, on a line ending in a
+            # delimiter and ``]``, ends the statement on this line.
+            if past != i and depth == 1 and is_double_delimiter(text, i):
+                eol = text.find("\n", i)
+                if eol != -1 and past > eol and _ends_in_display_form_close(text, i, eol) >= 0:
+                    return line
             if past != i:
                 line += text.count("\n", i, past)
                 i = past
@@ -276,10 +346,14 @@ def _parse_line(raw: str, line_number: int) -> ParsedHRLine:
 
     # Extract step name and bracket content
     bracket_idx = _find_top_level_bracket(work_text)
+    display_form_quote = False
 
     if bracket_idx >= 0:
         step_name = work_text[:bracket_idx].strip()
         close_bracket = _find_matching_bracket(work_text, bracket_idx)
+        if close_bracket < 0:
+            close_bracket = _find_display_form_close(work_text, bracket_idx)
+            display_form_quote = close_bracket >= 0
         # Split the untrimmed content: a line break before the closing ``]`` ends a
         # ``//`` comment (XML->HR writes one after a comment that holds a ``;``), and
         # trimming it would hand that comment to the one-line reading.
@@ -297,7 +371,7 @@ def _parse_line(raw: str, line_number: int) -> ParsedHRLine:
     return ParsedHRLine(
         raw=raw, line_number=line_number, disabled=disabled,
         step_name=step_name, bracket_content=bracket_content,
-        params=params, indent=indent,
+        params=params, indent=indent, display_form_quote=display_form_quote,
     )
 
 

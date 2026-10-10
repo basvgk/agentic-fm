@@ -23,6 +23,8 @@
 
 import {
   calcLineCommentOpenLen,
+  isCalcQuote,
+  skipCalcLiteral,
   calcLiteralSpanAt,
   hrBracketDepthDelta,
   hrCalcOpaqueSpanAt,
@@ -55,6 +57,12 @@ export interface ParsedLine {
   indent: number;
   /** An unmatched block-comment opener outside every literal: FileMaker rejects the calc (error 1205); the splitters read it as plain text. */
   unterminatedCalcComment?: boolean;
+  /**
+   * The step's `]` was found only by reading a literal that never closes as
+   * FileMaker's display form (an unescaped quote inside `“…”`): the statement
+   * ended at the line's last `]`. hrToXml warns.
+   */
+  displayFormQuote?: boolean;
 }
 
 // --- Comment line breaks ---
@@ -161,11 +169,16 @@ export function parseLine(raw: string, lineNumber: number): ParsedLine {
   let bracketContent = '';
   let content = '';
   let params: string[] = [];
+  let displayFormQuote = false;
 
   if (bracketIdx >= 0) {
     stepName = workText.substring(0, bracketIdx).trim();
     // Extract content between outermost [ and ]
-    const closeBracket = findMatchingBracket(workText, bracketIdx);
+    let closeBracket = findMatchingBracket(workText, bracketIdx);
+    if (closeBracket < 0) {
+      closeBracket = findDisplayFormClose(workText, bracketIdx);
+      displayFormQuote = closeBracket >= 0;
+    }
     // Split the untrimmed content: a line break before the closing `]` ends a
     // `//` comment (XML→HR writes one after a comment that holds a `;`), and
     // trimming it would hand that comment to the one-line reading.
@@ -183,6 +196,7 @@ export function parseLine(raw: string, lineNumber: number): ParsedLine {
     stepName, bracketContent, params, indent,
   };
   if (hasUnterminatedCalcComment(content)) parsed.unterminatedCalcComment = true;
+  if (displayFormQuote) parsed.displayFormQuote = true;
   return parsed;
 }
 
@@ -286,6 +300,13 @@ function statementEndLine(text: string, lineStart: number[], first: number,
     }
     if (depth > 0) {
       const past = stepOverOpaque(text, i, mode);
+      // FileMaker's display form (endsInDisplayFormClose): a literal at the
+      // step's own level that runs past this line's end, on a line ending in a
+      // delimiter and `]`, ends the statement on this line.
+      if (past !== i && depth === 1 && isUnescapedCalcQuote(text, i)) {
+        const eol = text.indexOf('\n', i);
+        if (eol !== -1 && past > eol && endsInDisplayFormClose(text, i, eol) >= 0) return line;
+      }
       if (past !== i) {
         for (let j = i; j < past; j++) if (text[j] === '\n') line++;
         i = past;
@@ -397,6 +418,56 @@ function findMatchingBracketIn(text: string, openIdx: number, mode: LineCommentE
 function findMatchingBracket(text: string, openIdx: number): number {
   const idx = findMatchingBracketIn(text, openIdx, LineCommentEnd.AtLineEnd);
   return idx >= 0 ? idx : findMatchingBracketIn(text, openIdx, LineCommentEnd.YieldsToFinalBracket);
+}
+
+/**
+ * FileMaker draws a literal text parameter as `“` + value + `”` and never
+ * escapes the value, so a value holding an odd number of quotes (`He said “hi`)
+ * shows as `… ; “He said “hi” ]`: read with the literal grammar, its last
+ * delimiter opens a literal that never closes and swallows the step's `]` (and,
+ * in a script, every later line). The display form ends with that closing
+ * delimiter, optional blanks and the step's `]`. Returns the `]`'s offset when
+ * the text of one line, from the dangling literal's opening delimiter at
+ * `litOpen` to `lineEnd`, ends that way (trailing blanks and a CR allowed), else
+ * -1. The delimiter may be escaped (`“a\”` is the value `a\`) or be the
+ * literal's own opener.
+ */
+function endsInDisplayFormClose(s: string, litOpen: number, lineEnd: number): number {
+  let k = lineEnd;
+  while (k > litOpen && (s[k - 1] === ' ' || s[k - 1] === '\t' || s[k - 1] === '\r')) k--;
+  if (k <= litOpen || s[k - 1] !== ']') return -1;
+  const close = k - 1;
+  k = close;
+  while (k > litOpen && (s[k - 1] === ' ' || s[k - 1] === '\t')) k--;
+  return k > litOpen && isCalcQuote(s[k - 1]) ? close : -1;
+}
+
+/**
+ * The display-form reading of a statement whose `[` at `openIdx` found no
+ * matching `]`: the first literal opened at the step's own bracket level (not
+ * inside a calculation bracket) that never closes, starts on the statement's
+ * last line, and runs to a line ending in a delimiter and `]`
+ * (endsInDisplayFormClose). Returns that `]`, or -1.
+ */
+function findDisplayFormClose(text: string, openIdx: number): number {
+  let depth = 0;
+  let i = openIdx;
+  while (i < text.length) {
+    if (depth === 1 && isUnescapedCalcQuote(text, i)) {
+      const lit = skipCalcLiteral(text, i);
+      if (!lit.closed) {
+        return text.indexOf('\n', i) === -1 ? endsInDisplayFormClose(text, i, text.length) : -1;
+      }
+      i = lit.end;
+      continue;
+    }
+    const past = stepOverOpaque(text, i, LineCommentEnd.AtLineEnd);
+    if (past !== i) { i = past; continue; }
+    depth += hrBracketDepthDelta(text, i, depth);
+    if (depth <= 0) return -1;
+    i++;
+  }
+  return -1;
 }
 
 /** True when an unmatched block-comment opener lies outside every literal and comment of `content`. */

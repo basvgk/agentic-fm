@@ -79,6 +79,14 @@ export function hrToXml(hrText: string, context?: FMContext | null): ConversionR
       });
     }
 
+    // A disclosed fallback: the step's `]` was found only by reading an
+    // unbalanced quote as FileMaker's display form (parser.ts).
+    if (line.displayFormQuote) {
+      parseWarnings.push({
+        line: line.lineNumber,
+        message: `Unbalanced quote at line ${line.lineNumber} in "${line.stepName} [...]": read the way FileMaker displays text, so the step ends at the ] on that line. Escape a quote inside text with a backslash (\\") to make it unambiguous.`,
+      });
+    }
     if (line.unterminatedCalcComment) {
       parseWarnings.push({
         line: line.lineNumber,
