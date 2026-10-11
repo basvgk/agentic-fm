@@ -348,3 +348,81 @@ export function hrBracketDepthDelta(s: string, at: number, depth: number): numbe
   if (depth > 1 && isCalcCloseBracket(c)) return -1;
   return 0;
 }
+
+// --- quoted literal text versus calculation ----------------------------------
+
+// Whitespace FileMaker accepts between calculation tokens (TAB, LF, VT, FF, CR,
+// SPACE, U+00A0, U+1680, U+180E, U+2000-U+200B, U+205F, U+3000).
+const CALC_SPACES =
+  '\t\n\v\f\r   ᠎ 　' +
+  '           ​';
+// Argument separators FileMaker reads as `;`.
+const CALC_SEPARATORS = ';,،؛、﹐﹑﹔，；､';
+// Operators that join two operands: the `&` forms, `+ - * / ^ = < >`, `≠ ≤ ≥`.
+const CALC_JOIN_OPERATORS = '&﹠＆+-*/^=<>≠≤≥';
+
+function calcWordAt(s: string, at: number, w: string): boolean {
+  if (s.slice(at, at + w.length).toLowerCase() !== w) return false;
+  const letter = (c: string | undefined) => !!c && /[A-Za-z]/.test(c);
+  return !letter(s[at - 1]) && !letter(s[at + w.length]);
+}
+
+/** Whether `gap` (the text between two literals) joins them as calculation
+ *  operands, and the parenthesis/bracket depth after it. See
+ *  `readsAsQuotedLiteralText`. */
+function calcGapJoinsOperands(gap: string, depth: number): { ok: boolean; depth: number } {
+  const before = depth;
+  for (const c of gap) {
+    if (isCalcOpenParen(c) || isCalcOpenBracket(c)) depth++;
+    else if (isCalcCloseParen(c) || isCalcCloseBracket(c)) depth--;
+  }
+  let a = 0;
+  while (a < gap.length && isOneOf(CALC_SPACES, gap[a])) a++;
+  let z = gap.length;
+  while (z > a && isOneOf(CALC_SPACES, gap[z - 1])) z--;
+  if (a >= z) return { ok: false, depth };
+  const first = gap[a];
+  const last = gap[z - 1];
+  const startOk =
+    isOneOf(CALC_JOIN_OPERATORS, first) || isCalcCloseParen(first) || isCalcCloseBracket(first) ||
+    (before > 0 && isOneOf(CALC_SEPARATORS, first)) ||
+    ['and', 'or', 'xor'].some((w) => calcWordAt(gap, a, w));
+  if (!startOk) return { ok: false, depth };
+  const endOk =
+    isOneOf(CALC_JOIN_OPERATORS, last) || isCalcOpenParen(last) || isCalcOpenBracket(last) ||
+    isOneOf(CALC_SEPARATORS, last) ||
+    ['and', 'or', 'xor', 'not'].some((w) => z - a >= w.length && calcWordAt(gap, z - w.length, w));
+  return { ok: endOk, depth };
+}
+
+/**
+ * Whether `t` (one trimmed HR token) reads as quoted literal text rather than a
+ * calculation. FileMaker displays a literal text parameter between quotes and never
+ * escapes it: Perform AppleScript's text `a "b";c] d` shows as `"a "b";c] d"`, while
+ * a calculation shows as written (`"say " & $x`). True for one whole literal and for
+ * FileMaker's display form: a token that opens with a delimiter and whose literals
+ * are not joined as calculation operands (plain text between two literals, or a
+ * literal that never closes). False for anything that does not open with a
+ * delimiter, ends in calculation text, or joins every literal with an operator.
+ * Displayed text whose quotes happen to spell a valid calculation (`x" & "y` shows
+ * as `"x" & "y"`) cannot be told apart and reads as the calculation.
+ */
+export function readsAsQuotedLiteralText(t: string): boolean {
+  if (!t || !isOneOf(CALC_QUOTES, t[0])) return false;
+  let depth = 0;
+  let joined = false;
+  let i = 0;
+  for (;;) {
+    const { end: past, closed } = skipCalcLiteral(t, i);
+    if (!closed) return true;
+    if (past >= t.length) return !joined;
+    let j = past;
+    while (j < t.length && !isOneOf(CALC_QUOTES, t[j])) j++;
+    if (j >= t.length) return false;
+    const g = calcGapJoinsOperands(t.slice(past, j), depth);
+    depth = g.depth;
+    if (!g.ok) return true;
+    joined = true;
+    i = j;
+  }
+}

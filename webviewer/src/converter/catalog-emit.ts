@@ -28,6 +28,7 @@ import {
   isCalcCloseParen,
   isCalcOpenBracket,
   isCalcOpenParen,
+  readsAsQuotedLiteralText,
 } from './calc-literal';
 import {
   type GrammarEntry,
@@ -40,6 +41,7 @@ import {
   candidateHrLabels,
   hrParamOrder,
   rendersBareInHr,
+  shapeRoutedValues,
   groupQuoteValue,
   groupUnquoteValue,
 } from './catalog-grammar';
@@ -707,6 +709,45 @@ function matchParamValues(entry: GrammarEntry, hrParams: string[]): string[] {
         }
         if (resolved[pi]) break;
       }
+    }
+  }
+
+  // Shape-routed governing discriminator (shapeRoutedValues): FileMaker's line shows
+  // only the revealed companion, so its shape is the only evidence of the value.
+  // Perform AppleScript prints Text mode as the quoted literal (`[ "a "b";c] d" ]`,
+  // unescaped) and Calculation mode as the calculation (`[ "say " & $x ]`). A bare
+  // token naming one of the two values at the companion's position selects it
+  // explicitly (rendered when the companion's shape alone would read as the other
+  // value). Otherwise the token there selects the value revealing the hrQuoted
+  // companion when it reads as quoted literal text, else the other value. No token
+  // leaves the enum at its default.
+  for (let pi = 0; pi < entry.params.length; pi++) {
+    if (values[pi] !== '') continue;
+    const routed = shapeRoutedValues(entry, entry.params[pi]);
+    if (!routed) continue;
+    // The companion renders at the discriminator's HR slot, so it takes the bare
+    // token after those of the positional params rendered before it.
+    let before = 0;
+    for (const qi of hrParamOrder(entry)) {
+      if (qi === pi) break;
+      const q = entry.params[qi];
+      if (resolved[qi] || !rendersBareInHr(q) || governingDiscriminatorFor(entry, q)) continue;
+      before++;
+    }
+    for (let i = 0; i < hrParams.length; i++) {
+      if (consumed[i]) continue;
+      if (before > 0) {
+        before--;
+        continue;
+      }
+      const t = trim(hrParams[i]);
+      if (ciEquals(t, routed.quoted) || ciEquals(t, routed.other)) {
+        consumed[i] = true;
+        values[pi] = ciEquals(t, routed.quoted) ? routed.quoted : routed.other;
+      } else if (t) {
+        values[pi] = readsAsQuotedLiteralText(t) ? routed.quoted : routed.other;
+      }
+      break;
     }
   }
 

@@ -517,7 +517,7 @@
   },
   "miscellaneous/Perform AppleScript.xml": {
     "hr": "Perform AppleScript [ Calculation ; \"tell application \\\"Notes\\\" to open\" ]",
-    "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"67\" name=\"Perform AppleScript\">\n    <ContentType value=\"Calculation\"/>\n    <Calculation><![CDATA[\"tell application \\\"Notes\\\" to open\"]]></Calculation>\n    <Text></Text>\n  </Step>\n</fmxmlsnippet>"
+    "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"67\" name=\"Perform AppleScript\">\n    <ContentType value=\"Calculation\"/>\n    <Calculation><![CDATA[\"tell application \\\"Notes\\\" to open\"]]></Calculation>\n  </Step>\n</fmxmlsnippet>"
   },
   "miscellaneous/Perform JavaScript in Web Viewer.xml": {
     "hr": "Perform JavaScript in Web Viewer [ Object Name: $object ; Function Name: \"myFunction\" ; Parameters: $parameter1 ]",

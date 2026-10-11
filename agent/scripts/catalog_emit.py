@@ -55,6 +55,7 @@ from calc_literal import (
     decode_whole_calc_literal,
     hr_bracket_depth_delta,
     hr_calc_opaque_span_at,
+    reads_as_quoted_literal_text,
 )
 from catalog_grammar import (
     CatalogEntry,
@@ -68,6 +69,7 @@ from catalog_grammar import (
     is_governing_discriminator,
     param_key,
     renders_bare_in_hr,
+    shape_routed_values,
     value_reveals_companion,
 )
 
@@ -840,6 +842,46 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
                         break
                 if resolved[pi]:
                     break
+
+    # Shape-routed governing discriminator (shape_routed_values): FileMaker's line
+    # shows only the revealed companion, so its shape is the only evidence of the
+    # value. Perform AppleScript prints Text mode as the quoted literal
+    # (``[ "a "b";c] d" ]``, unescaped) and Calculation mode as the calculation
+    # (``[ "say " & $x ]``). A bare token naming one of the two values at the
+    # companion's position selects it explicitly (rendered when the companion's
+    # shape alone would read as the other value). Otherwise the token there selects
+    # the value revealing the ``hrQuoted`` companion when it reads as quoted literal
+    # text, else the other value. No token leaves the enum at its default.
+    for pi, param in enumerate(entry.params):
+        if values[pi] != "":
+            continue
+        routed = shape_routed_values(entry, param)
+        if routed is None:
+            continue
+        quoted_value, other_value = routed
+        # The companion renders at the discriminator's HR slot, so it takes the bare
+        # token after those of the positional params rendered before it.
+        before = 0
+        for qi in hr_param_order(entry):
+            if qi == pi:
+                break
+            q = entry.params[qi]
+            if resolved[qi] or not renders_bare_in_hr(q) or governing_discriminator_for(entry, q):
+                continue
+            before += 1
+        for i in range(len(hr_params)):
+            if consumed[i]:
+                continue
+            if before > 0:
+                before -= 1
+                continue
+            t = _trim(hr_params[i])
+            if _ci_equals(t, quoted_value) or _ci_equals(t, other_value):
+                consumed[i] = True
+                values[pi] = quoted_value if _ci_equals(t, quoted_value) else other_value
+            elif t:
+                values[pi] = quoted_value if reads_as_quoted_literal_text(t) else other_value
+            break
 
     # Pass 2 — positional for the remaining bare-rendering params, in HR order.
     pos = 0

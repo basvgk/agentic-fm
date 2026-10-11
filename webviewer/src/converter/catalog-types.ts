@@ -160,6 +160,10 @@ export interface StepParam {
    *  token whatever quotes, `;` or `]` it holds; HR→XML decodes it. An empty value
    *  renders no token, as FileMaker does. Set only where FM quotes the value (verified live). */
   hrQuoted?: boolean;
+  /** The delimiter an hrQuoted param is written with: unset (default) is FileMaker's
+   *  curly `“…”`; `"straight"` is `"…"`, where FileMaker shows the literal
+   *  straight-quoted (Perform AppleScript's text). */
+  hrQuoteStyle?: string;
   /** Governing enum branches: enum value → what it reveals / how it renders */
   discriminatorValues?: Record<string, DiscriminatorValue>;
   /** String form: names the sibling element that governs this param's shape */

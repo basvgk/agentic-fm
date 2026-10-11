@@ -5323,21 +5323,38 @@
         "enumValues": [
           "Calculation",
           "Text"
-        ]
+        ],
+        "discriminatorValues": {
+          "Calculation": {
+            "reveal": [
+              "Calculation"
+            ]
+          },
+          "Text": {
+            "reveal": [
+              "Text"
+            ]
+          }
+        },
+        "notes": "FileMaker prints no ContentType token: Text mode shows the literal text straight-quoted and unescaped (`Perform AppleScript [ \"a \"b\";c] d\" ]`), Calculation mode shows the calculation as written, and an empty step of either mode shows `[ ]`. Reading HR, the token's shape selects the mode: one quoted literal, or text a quote does not join as calculation operands, is Text; anything else is Calculation. A calculation that is a single text literal is written with its mode named (`[ Calculation ; \"tell application \\\"Notes\\\" to open\" ]`); FileMaker's own line for it carries no token and reads back as Text holding that literal's text, which runs the same AppleScript."
       },
       {
         "xmlElement": "Calculation",
         "type": "calculation",
         "hrLabel": null,
         "required": false,
-        "note": "Used when ContentType is Calculation"
+        "omitWhenEmpty": true,
+        "note": "Used when ContentType is Calculation. FileMaker writes no <Calculation> when it is empty or the mode is Text."
       },
       {
         "xmlElement": "Text",
         "type": "text",
         "hrLabel": null,
+        "hrQuoted": true,
+        "hrQuoteStyle": "straight",
+        "omitWhenEmpty": true,
         "required": false,
-        "note": "Used when ContentType is Text (literal AppleScript)"
+        "note": "Used when ContentType is Text (literal AppleScript). FileMaker displays it straight-quoted and writes no <Text> when it is empty."
       }
     ],
     "hrSignature": "[ <applescript or calculation> ]",

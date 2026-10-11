@@ -22,7 +22,15 @@
  */
 
 import type { StepCatalogEntry } from './catalog-types';
-import { hrSep, isCalcBackslash, isCalcQuote, isCalcEscape, quoteCalcLiteral, skipCalcLiteral } from './calc-literal';
+import {
+  hrSep,
+  isCalcBackslash,
+  isCalcQuote,
+  isCalcEscape,
+  quoteCalcLiteral,
+  readsAsQuotedLiteralText,
+  skipCalcLiteral,
+} from './calc-literal';
 
 // ---------------------------------------------------------------------------
 // DOM helpers — ElementTree `.find` / `.findall` / `.text` semantics over a
@@ -247,6 +255,9 @@ export interface GrammarParam {
   // text literal (quoteCalcLiteral) and decoded on HR→XML. Generic; set only where
   // FileMaker quotes the value.
   hrQuoted: boolean | null;
+  // The delimiter an hrQuoted param is written with: null = curly `“…”` (default);
+  // 'straight' = `"…"` where FileMaker shows straight quotes (Perform AppleScript).
+  hrQuoteStyle: string | null;
   omitWhenEmpty: boolean | null;
   discriminator: string | null;
   discriminatorValues: Record<string, DiscriminatorBranch>;
@@ -343,6 +354,7 @@ function buildParam(d: Record<string, unknown>): GrammarParam {
     hrBare: (d.hrBare as boolean) ?? null,
     hrLabeled: (d.hrLabeled as boolean) ?? null,
     hrQuoted: (d.hrQuoted as boolean) ?? null,
+    hrQuoteStyle: (d.hrQuoteStyle as string) ?? null,
     omitWhenEmpty: (d.omitWhenEmpty as boolean) ?? null,
     discriminator: (d.discriminator as string) ?? null,
     discriminatorValues,
@@ -980,7 +992,9 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
     // hrQuoted: FileMaker displays this literal text quoted (`“x”`). Write it as one
     // escaped literal so an embedded quote, `;` or `]` cannot open a literal or end
     // the param/step on the way back.
-    if (val && param.hrQuoted) val = quoteCalcLiteral(val);
+    if (val && param.hrQuoted) {
+      val = param.hrQuoteStyle === 'straight' ? quoteCalcLiteral(val, '"', '"') : quoteCalcLiteral(val);
+    }
     // A grouped text param carries its label; step-level free text stays bare
     // unless the catalog opts it in with hrLabeled (Delete File's "Target file:").
     if (val && (param.parentElement || param.hrLabeled) && label) val = label + ': ' + val;
@@ -1051,6 +1065,34 @@ function paramToken(entry: GrammarEntry, param: GrammarParam, val: string): HrTo
 }
 
 /** A governing discriminator's HR tokens. Port of RenderDiscriminatorGroupTokens. */
+/**
+ * A SHAPE-ROUTED governing discriminator: exactly two of its values render no token
+ * of their own and each reveal ONE bare companion, one of them `hrQuoted`.
+ * FileMaker's line then shows only the companion (Perform AppleScript: Text mode
+ * prints the quoted literal, Calculation mode the calculation), so the reader tells
+ * the values apart by the token's shape (`readsAsQuotedLiteralText`). Returns
+ * `{ quoted, other }`, or null. Port of ShapeRoutedValues.
+ */
+export function shapeRoutedValues(
+  entry: GrammarEntry,
+  discrim: GrammarParam,
+): { quoted: string; other: string } | null {
+  if (!isGoverningDiscriminator(discrim)) return null;
+  let quoted = '';
+  let other = '';
+  let routed = 0;
+  for (const [value, spec] of Object.entries(discrim.discriminatorValues)) {
+    if (spec.hrToken || spec.labeled || spec.reveal.length !== 1) continue;
+    const c = entry.params.find((q) => paramKey(q) === spec.reveal[0]);
+    if (!c || !rendersBareInHr(c)) continue;
+    routed++;
+    if (c.hrQuoted) quoted = value;
+    else other = value;
+  }
+  if (routed !== 2 || !quoted || !other) return null;
+  return { quoted, other };
+}
+
 function renderDiscriminatorGroupTokens(
   entry: GrammarEntry,
   step: Element,
@@ -1077,7 +1119,18 @@ function renderDiscriminatorGroupTokens(
   for (const elem of branch.reveal) {
     for (const c of entry.params) {
       if (paramKey(c) !== elem) continue;
-      parts.push(paramToken(entry, c, computeParamHr(entry, step, c)));
+      const tok = paramToken(entry, c, computeParamHr(entry, step, c));
+      // Shape-routed: when the companion's token would read back as the other value
+      // (a calculation that is one text literal reads as quoted text), name the
+      // value explicitly before it. FileMaker's own line prints no such token.
+      if (
+        tok.text &&
+        shapeRoutedValues(entry, param) !== null &&
+        readsAsQuotedLiteralText(tok.text.trim()) !== !!c.hrQuoted
+      ) {
+        parts.push({ text: value, positional: false, holdsSlot: false });
+      }
+      parts.push(tok);
       break;
     }
   }

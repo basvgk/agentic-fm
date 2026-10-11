@@ -35,6 +35,7 @@ from calc_literal import (
     hr_sep,
     is_calc_escape,
     quote_calc_literal,
+    reads_as_quoted_literal_text,
     skip_calc_literal,
 )
 
@@ -205,6 +206,10 @@ class StepParam:
     # XML decodes it. An empty value renders no token, as FileMaker does. Set only
     # where FM quotes the value (verified live).
     hr_quoted: bool | None = None
+    # The delimiter an hr_quoted param is written with: None (default) is
+    # FileMaker's curly ``“…”``; ``"straight"`` is ``"…"``, where FileMaker shows
+    # the literal straight-quoted (Perform AppleScript's text).
+    hr_quote_style: str | None = None
     omit_when_empty: bool | None = None
     emit_empty_default: bool | None = None
     # Governing discriminator: string form names a sibling; map form carries branches.
@@ -251,6 +256,7 @@ class StepParam:
             hr_bare=d.get("hrBare"),
             hr_labeled=d.get("hrLabeled"),
             hr_quoted=d.get("hrQuoted"),
+            hr_quote_style=d.get("hrQuoteStyle"),
             omit_when_empty=d.get("omitWhenEmpty"),
             emit_empty_default=d.get("emitEmptyDefault"),
             discriminator=d.get("discriminator"),
@@ -1239,7 +1245,7 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
         # as one escaped literal so an embedded quote, ``;`` or ``]`` cannot open a
         # literal or end the param/step on the way back.
         if val and param.hr_quoted:
-            val = quote_calc_literal(val)
+            val = quote_calc_literal(val, '"', '"') if param.hr_quote_style == "straight" else quote_calc_literal(val)
         # A grouped text param carries its label; step-level free text stays bare
         # unless the catalog opts it in with hr_labeled (Delete File's "Target file:").
         if val and (param.parent_element or param.hr_labeled) and label:
@@ -1310,6 +1316,34 @@ def _param_token(entry: CatalogEntry, param: StepParam, val: str) -> HrToken:
     return (val, positional, empty_holds_slot(entry, param))
 
 
+def shape_routed_values(entry: CatalogEntry, discrim: StepParam) -> tuple[str, str] | None:
+    """A SHAPE-ROUTED governing discriminator: exactly two of its values render no
+    token of their own and each reveal ONE bare companion, one of them
+    ``hrQuoted``. FileMaker's line then shows only the companion (Perform
+    AppleScript: Text mode prints the quoted literal, Calculation mode the
+    calculation), so the reader tells the values apart by the token's shape
+    (``reads_as_quoted_literal_text``). Returns ``(quoted_value, other_value)``,
+    or None. Port of ShapeRoutedValues."""
+    if not is_governing_discriminator(discrim):
+        return None
+    quoted = other = ""
+    routed = 0
+    for value, spec in discrim.discriminator_values.items():
+        if spec.hr_token or spec.labeled or len(spec.reveal) != 1:
+            continue
+        c = next((q for q in entry.params if param_key(q) == spec.reveal[0]), None)
+        if c is None or not renders_bare_in_hr(c):
+            continue
+        routed += 1
+        if c.hr_quoted:
+            quoted = value
+        else:
+            other = value
+    if routed != 2 or not quoted or not other:
+        return None
+    return quoted, other
+
+
 def render_discriminator_group_tokens(
     entry: CatalogEntry, step: ET.Element, param: StepParam
 ) -> list[HrToken]:
@@ -1333,7 +1367,18 @@ def render_discriminator_group_tokens(
         for c in entry.params:
             if param_key(c) != elem:
                 continue
-            parts.append(_param_token(entry, c, compute_param_hr(entry, step, c)))
+            tok = _param_token(entry, c, compute_param_hr(entry, step, c))
+            # Shape-routed: when the companion's token would read back as the other
+            # value (a calculation that is one text literal reads as quoted text),
+            # name the value explicitly before it. FileMaker's own line prints no
+            # such token; it is ambiguous there.
+            if (
+                tok[0]
+                and shape_routed_values(entry, param) is not None
+                and reads_as_quoted_literal_text(tok[0].strip()) != bool(c.hr_quoted)
+            ):
+                parts.append((value, False, False))
+            parts.append(tok)
             break
     return parts
 

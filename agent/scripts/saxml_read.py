@@ -782,7 +782,7 @@ def _extract_simple(
                 # An hrQuoted param's token is one escaped text literal (the form
                 # the HR renderer writes and the emitter decodes), so a raw value
                 # holding quotes is not unwrapped on the way through.
-                return quote_calc_literal(raw) if raw and param.hr_quoted else raw
+                return _quoted_text_token(param, raw) if param.hr_quoted else raw
             # File-path steps carry the path as <UniversalPathList><ObjectList>
             # <Location>… rather than a <Text> node.
             loc = sp.find(".//Location")
@@ -1040,6 +1040,16 @@ def _ptypes(step_el: ET.Element, t: str) -> list[ET.Element]:
     return [sp for sp in step_el.findall("ParameterValues/Parameter") if sp.get("type") == t]
 
 
+def _quoted_text_token(param: StepParam | None, raw: str) -> str:
+    """An ``hrQuoted`` text param's HR token: one escaped text literal in the
+    param's delimiter style (``hrQuoteStyle``), '' for an empty value."""
+    if not raw:
+        return ""
+    if param is not None and param.hr_quote_style == "straight":
+        return quote_calc_literal(raw, '"', '"')
+    return quote_calc_literal(raw)
+
+
 def _bool_tok(sp: ET.Element | None) -> str:
     """A ``<Parameter><Boolean value=…/>`` → 'On'/'Off' ('' when absent)."""
     if sp is None:
@@ -1116,8 +1126,15 @@ def _dec_applescript(entry: CatalogEntry, step_el: ET.Element) -> list[str]:
         ctype = o.get("type", "")  # "Text" (literal) or "Calculation"
         v.set(_enum_tok(v.param(xml="ContentType"), ctype), xml="ContentType")
         calc = _calc_of(o.find("Calculation"))
-        # FM stores BOTH modes' script in <Calculation> (Text mode = the literal).
-        v.set(calc if calc else (o.text or ""), xml="Calculation")
+        # Either mode's script may sit in <Calculation> or as the element's text
+        # (Text mode = the literal). ContentType governs which companion emits, so
+        # the script goes to the one the mode reveals: Text mode's literal is an
+        # hrQuoted param, handed to the emitter in its quoted form.
+        script = calc if calc else (o.text or "")
+        if ctype == "Text":
+            v.set(_quoted_text_token(v.param(xml="Text"), script), xml="Text")
+        else:
+            v.set(script, xml="Calculation")
     return v.list()
 
 

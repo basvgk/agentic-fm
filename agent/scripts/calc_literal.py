@@ -363,3 +363,101 @@ def hr_bracket_depth_delta(s: str, at: int, depth: int) -> int:
     if depth > 1 and ch in CALC_CLOSE_BRACKETS:
         return -1
     return 0
+
+
+# --- quoted literal text versus calculation ----------------------------------
+
+# Whitespace FileMaker accepts between calculation tokens (TAB, LF, VT, FF, CR,
+# SPACE, U+00A0, U+1680, U+180E, U+2000-U+200B, U+205F, U+3000).
+_CALC_SPACES = frozenset(
+    "\t\n\x0b\x0c\r   ᠎ 　" + "".join(chr(c) for c in range(0x2000, 0x200C))
+)
+# Argument separators FileMaker reads as ``;`` and the ``&`` forms.
+_CALC_SEPARATORS = frozenset(";,،؛、﹐﹑﹔，；､")
+_CALC_JOIN_OPERATORS = frozenset("&﹠＆+-*/^=<>≠≤≥")
+_CALC_WORD_OPERATORS_AFTER = ("and", "or", "xor")
+_CALC_WORD_OPERATORS_BEFORE = ("and", "or", "xor", "not")
+
+
+def _calc_word_at(s: str, at: int, w: str) -> bool:
+    if s[at : at + len(w)].lower() != w:
+        return False
+    before = s[at - 1] if at > 0 else ""
+    after = s[at + len(w)] if at + len(w) < len(s) else ""
+    return not (before.isascii() and before.isalpha()) and not (after.isascii() and after.isalpha())
+
+
+def _calc_gap_joins_operands(gap: str, depth: int) -> tuple[bool, int]:
+    """Whether ``gap`` (the text between two literals) joins them as calculation
+    operands, and the parenthesis/bracket depth after it. See
+    ``reads_as_quoted_literal_text``."""
+    before = depth
+    for c in gap:
+        if c in CALC_OPEN_PARENS or c in CALC_OPEN_BRACKETS:
+            depth += 1
+        elif c in CALC_CLOSE_PARENS or c in CALC_CLOSE_BRACKETS:
+            depth -= 1
+    a = 0
+    while a < len(gap) and gap[a] in _CALC_SPACES:
+        a += 1
+    z = len(gap)
+    while z > a and gap[z - 1] in _CALC_SPACES:
+        z -= 1
+    if a >= z:
+        return False, depth
+    first, last = gap[a], gap[z - 1]
+    start_ok = (
+        first in _CALC_JOIN_OPERATORS
+        or first in CALC_CLOSE_PARENS
+        or first in CALC_CLOSE_BRACKETS
+        or (before > 0 and first in _CALC_SEPARATORS)
+        or any(_calc_word_at(gap, a, w) for w in _CALC_WORD_OPERATORS_AFTER)
+    )
+    if not start_ok:
+        return False, depth
+    end_ok = (
+        last in _CALC_JOIN_OPERATORS
+        or last in CALC_OPEN_PARENS
+        or last in CALC_OPEN_BRACKETS
+        or last in _CALC_SEPARATORS
+        or any(z - a >= len(w) and _calc_word_at(gap, z - len(w), w) for w in _CALC_WORD_OPERATORS_BEFORE)
+    )
+    return end_ok, depth
+
+
+def reads_as_quoted_literal_text(t: str) -> bool:
+    """Whether ``t`` (one trimmed HR token) reads as quoted literal text rather
+    than a calculation.
+
+    FileMaker displays a literal text parameter between quotes and never escapes
+    it: Perform AppleScript's text ``a "b";c] d`` shows as ``"a "b";c] d"``, while
+    a calculation shows as written (``"say " & $x``). True for one whole literal
+    and for FileMaker's display form: a token that opens with a delimiter and whose
+    literals are not joined as calculation operands (plain text between two
+    literals, or a literal that never closes). False for anything that does not
+    open with a delimiter, ends in calculation text, or joins every literal with an
+    operator. Displayed text whose quotes happen to spell a valid calculation
+    (``x" & "y`` shows as ``"x" & "y"``) cannot be told apart and reads as the
+    calculation.
+    """
+    if not t or t[0] not in CALC_QUOTES:
+        return False
+    depth = 0
+    joined = False
+    i = 0
+    while True:
+        past, closed, _ = skip_calc_literal(t, i)
+        if not closed:
+            return True
+        if past >= len(t):
+            return not joined
+        j = past
+        while j < len(t) and t[j] not in CALC_QUOTES:
+            j += 1
+        if j >= len(t):
+            return False
+        ok, depth = _calc_gap_joins_operands(t[past:j], depth)
+        if not ok:
+            return True
+        joined = True
+        i = j
