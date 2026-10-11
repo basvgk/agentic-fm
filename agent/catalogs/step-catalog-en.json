@@ -1729,6 +1729,7 @@
         "type": "text",
         "hrLabel": "Target file",
         "hrQuoted": true,
+        "hrLabeled": true,
         "required": true
       }
     ],
@@ -6571,12 +6572,14 @@
         "type": "text",
         "hrLabel": "Source file",
         "hrQuoted": true,
+        "hrLabeled": true,
         "required": true
       },
       {
         "xmlElement": "Calculation",
         "type": "calculation",
         "hrLabel": "New name",
+        "hrLabeled": true,
         "required": true
       }
     ],
@@ -6886,6 +6889,7 @@
         "flagStyle": true,
         "required": false,
         "defaultValue": "False",
+        "hrSlot": 2,
         "note": "FM renders this bare (flag) when On, nothing when Off (live copy-back: state=True -> 'Include details for analysis tools'). flagStyle."
       },
       {
@@ -6896,6 +6900,7 @@
         "flagStyle": true,
         "required": false,
         "defaultValue": "False",
+        "hrSlot": 3,
         "note": "FM 26. Bare flag: FM shows the label only when state=True (live copy-back: 'Save each layout object's binary data under its node'), nothing when False. flagStyle."
       },
       {
@@ -6906,6 +6911,7 @@
         "hrHidden": true,
         "required": false,
         "defaultValue": "False",
+        "hrSlot": 4,
         "note": "FM 26 gate flag FM always serializes (live copy-back: <SpecifyJSONOptions state=\"...\"/>); renders NO HR token (hrHidden). Its True/False state is preserved on round-trip by P7.1 governed-visibility (derived on emit from whether the JSONOptions calc contributed an HR token — Import/Export/Sort Restore precedent), NOT by FM re-canonicalization (live FM keeps whatever state is pasted, unlike Perform SQL's Option). The <SaXML> subtree is emitted by FM regardless of this flag."
       },
       {
@@ -6913,15 +6919,19 @@
         "type": "text",
         "hrLabel": "Destination file",
         "hrQuoted": true,
+        "hrLabeled": true,
         "required": true,
-        "note": "Destination file path for the XML output"
+        "hrSlot": 1,
+        "note": "Destination file path for the XML output. Stored before Window name but displayed after it, labeled (hrSlot, hrLabeled; FM 26.0.3)."
       },
       {
         "xmlElement": "Calculation",
         "type": "calculation",
         "hrLabel": "Window name",
+        "hrLabeled": true,
         "required": true,
-        "note": "Window name of the open file to export"
+        "hrSlot": 0,
+        "note": "Window name of the open file to export. FileMaker draws it first, labeled (hrSlot, hrLabeled; FM 26.0.3)."
       },
       {
         "xmlElement": "Calculation",
@@ -6931,11 +6941,12 @@
         "parentElement": "SaXML",
         "required": false,
         "omitWhenEmpty": true,
+        "hrSlot": 5,
         "visibleWhen": { "param": "SpecifyJSONOptions", "values": ["True"] },
         "note": "FM 26. The catalog-options JSON expression, nested <SaXML><JSONOptions><Calculation> (live copy-back). Rendered 'Specify options as JSON: <calc>' only when SpecifyJSONOptions is True (P7.1 governed-visibility: FM shows this token only when the JSON option is on, and derives SpecifyJSONOptions=True on paste from this calc's presence — Import/Export/Sort Restore precedent). omitWhenEmpty: an unconfigured step emits no empty subtree; FM supplies its default catalog JSONSetElement on paste."
       }
     ],
-    "hrSignature": "[ <Include details for analysis tools> ; <Save each layout object's binary data under its node> ; Destination file: <path> ; Window name: <calc> ; Specify options as JSON: <calc> ]",
+    "hrSignature": "[ Window name: <calc> ; Destination file: <path> ; <Include details for analysis tools> ; <Save each layout object's binary data under its node> ; Specify options as JSON: <calc> ]",
     "blockPair": null,
     "status": "complete",
     "helpUrl": "https://help.claris.com/en/pro-help/content/save-a-copy-as-xml.html"
@@ -7917,6 +7928,7 @@
         "type": "text",
         "hrLabel": "User Dictionary",
         "hrQuoted": true,
+        "hrLabeled": true,
         "required": false,
         "note": "Path to user dictionary file. If omitted, no user dictionary is used."
       }

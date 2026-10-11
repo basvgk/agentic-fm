@@ -324,7 +324,7 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"190\" name=\"Create Data File\">\n    <UniversalPathList>$path</UniversalPathList>\n    <CreateDirectories state=\"True\"/>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Delete File.xml": {
-    "hr": "Delete File [ “$path” ]",
+    "hr": "Delete File [ Target file: “$path” ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"197\" name=\"Delete File\">\n    <UniversalPathList>$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Get Data File Position.xml": {
@@ -368,11 +368,11 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"95\" name=\"Recover File\">\n    <NoInteract state=\"True\"/>\n    <UniversalPathList>$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Rename File.xml": {
-    "hr": "Rename File [ “$path” ; \"new_name\" ]",
+    "hr": "Rename File [ Source file: “$path” ; New name: \"new_name\" ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"199\" name=\"Rename File\">\n    <UniversalPathList>$path</UniversalPathList>\n    <Calculation><![CDATA[\"new_name\"]]></Calculation>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Save a Copy as XML.xml": {
-    "hr": "Save a Copy as XML [ Include details for analysis tools ; “$path” ; Get ( WindowName ) ]",
+    "hr": "Save a Copy as XML [ Window name: Get ( WindowName ) ; Destination file: “$path” ; Include details for analysis tools ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"3\" name=\"Save a Copy as XML\">\n    <Option state=\"True\"/>\n    <OutputEntireBinaryData state=\"False\"/>\n    <SpecifyJSONOptions state=\"False\"/>\n    <UniversalPathList>$path</UniversalPathList>\n    <Calculation><![CDATA[Get ( WindowName )]]></Calculation>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Save a Copy as.xml": {
@@ -796,7 +796,7 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"108\" name=\"Select Dictionaries\"/>\n</fmxmlsnippet>"
   },
   "spelling/Set Dictionary.xml": {
-    "hr": "Set Dictionary [ Spelling Language: US English ; “$userDictionaryPath” ]",
+    "hr": "Set Dictionary [ Spelling Language: US English ; User Dictionary: “$userDictionaryPath” ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"209\" name=\"Set Dictionary\">\n    <MainDictionary value=\"US English\"/>\n    <UniversalPathList>$userDictionaryPath</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "spelling/Spelling Options.xml": {

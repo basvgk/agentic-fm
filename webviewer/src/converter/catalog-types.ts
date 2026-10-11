@@ -146,10 +146,12 @@ export interface StepParam {
    *  rendered without a "Label: " prefix and parsed by position (Show Custom Dialog's
    *  Title/Message). Set only where FileMaker renders bare, verified against live FM. */
   hrBare?: boolean;
-  /** Inverse of `hrBare`: a `calc`/`field`/`script` param FileMaker renders WITH its
+  /** Inverse of `hrBare`: a `calc`/`field`/`script`, step-level `text`/`name` or legacy
+   *  `calculation` param FileMaker renders WITH its
    *  `hrLabel` prefix (and parsed by that label), even though those types print bare by
    *  default. FileMaker labels the same value type per step (Perform Script's name is
-   *  bare; Configure Region Monitor Script's is `Script: "…"`). Needs a non-empty
+   *  bare; Configure Region Monitor Script's is `Script: "…"`; Delete File's path is
+   *  `Target file: “…”`). Needs a non-empty
    *  hrLabel; set only where FileMaker renders the label, verified against live FM. */
   hrLabeled?: boolean;
   /** A literal-text param (`text`/`name`) FileMaker displays wrapped in quotes (Insert

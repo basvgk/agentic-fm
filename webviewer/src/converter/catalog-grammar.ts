@@ -776,7 +776,9 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
     }
   } else if (ptype === 'calculation') {
     val = childText(base, 'Calculation');
-    if (val && param.omitWhenEmpty && label) val = label + ': ' + val;
+    // Optional labeled calcs keep their label; legacy positional calcs stay bare
+    // unless the catalog opts one in with hrLabeled (Rename File's "New name:").
+    if (val && (param.omitWhenEmpty || param.hrLabeled) && label) val = label + ': ' + val;
   } else if (ptype === 'attrGroup') {
     const groupNode = findChild(base, param.xmlElement);
     if (groupNode !== null) {
@@ -979,7 +981,9 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
     // escaped literal so an embedded quote, `;` or `]` cannot open a literal or end
     // the param/step on the way back.
     if (val && param.hrQuoted) val = quoteCalcLiteral(val);
-    if (val && param.parentElement && label) val = label + ': ' + val;
+    // A grouped text param carries its label; step-level free text stays bare
+    // unless the catalog opts it in with hrLabeled (Delete File's "Target file:").
+    if (val && (param.parentElement || param.hrLabeled) && label) val = label + ': ' + val;
   }
 
   return val;
@@ -998,8 +1002,8 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
 export function rendersBareInHr(param: GrammarParam): boolean {
   if (param.hrBare) return true; // per-param opt-in: FileMaker prints it bare
   if (!param.hrLabel) return true;
-  // Inverse of hrBare: a calc/field/script FileMaker renders WITH its label is
-  // matched by that label, never positionally.
+  // Inverse of hrBare: a calc/field/script, step-level text or legacy calculation
+  // FileMaker renders WITH its label is matched by that label, never positionally.
   if (param.hrLabeled) return false;
   if (param.type === 'calc' || param.type === 'field' || param.type === 'script') return true;
   if (param.type === 'layout') return !param.hrLabel;

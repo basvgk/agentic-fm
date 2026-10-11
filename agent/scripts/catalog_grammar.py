@@ -189,11 +189,13 @@ class StepParam:
     hr_slot: int | None = None
     hr_hidden: bool | None = None
     hr_bare: bool | None = None
-    # The exact inverse of ``hr_bare``: render a ``calc``/``field``/``script`` value
+    # The exact inverse of ``hr_bare``: render a ``calc``/``field``/``script``,
+    # step-level ``text``/``name`` or legacy ``calculation`` value
     # WITH its ``hr_label`` prefix and match it by that label, even though those
     # types print bare/positionally by default. FileMaker labels the same value type
     # per step (Perform Script's name is bare; Configure Region Monitor Script's is
-    # ``Script: "…"``). Generic across the three bare-by-default value types; needs a
+    # ``Script: "…"``; Delete File's path is ``Target file: “…”``). Generic across
+    # every bare-by-default value type; needs a
     # non-empty ``hr_label``. Set only where FM renders the label (verified live).
     hr_labeled: bool | None = None
     # A literal-text param (``text``/``name``) FileMaker displays wrapped in quotes
@@ -1011,7 +1013,9 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
             val = label + ": " + val
     elif ptype == "calculation":
         val = _child_text(base, "Calculation")
-        if val and param.omit_when_empty and label:
+        # Optional labeled calcs keep their label; legacy positional calcs stay bare
+        # unless the catalog opts one in with hr_labeled (Rename File's "New name:").
+        if val and (param.omit_when_empty or param.hr_labeled) and label:
             val = label + ": " + val
     elif ptype == "attrGroup":
         group_node = base.find(param.xml_element)
@@ -1236,7 +1240,9 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
         # literal or end the param/step on the way back.
         if val and param.hr_quoted:
             val = quote_calc_literal(val)
-        if val and param.parent_element and label:
+        # A grouped text param carries its label; step-level free text stays bare
+        # unless the catalog opts it in with hr_labeled (Delete File's "Target file:").
+        if val and (param.parent_element or param.hr_labeled) and label:
             val = label + ": " + val
 
     return val
@@ -1257,8 +1263,9 @@ def renders_bare_in_hr(param: StepParam) -> bool:
         return True
     if not param.hr_label:
         return True
-    # Per-param opt-in (inverse of hr_bare): a calc/field/script FileMaker renders
-    # WITH its label is matched by that label, never positionally.
+    # Per-param opt-in (inverse of hr_bare): a calc/field/script, step-level text or
+    # legacy calculation FileMaker renders WITH its label is matched by that label,
+    # never positionally.
     if param.hr_labeled:
         return False
     if param.type in ("calc", "field", "script"):
