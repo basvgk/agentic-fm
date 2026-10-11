@@ -376,7 +376,7 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"3\" name=\"Save a Copy as XML\">\n    <Option state=\"True\"/>\n    <OutputEntireBinaryData state=\"False\"/>\n    <SpecifyJSONOptions state=\"False\"/>\n    <UniversalPathList>$path</UniversalPathList>\n    <Calculation><![CDATA[Get ( WindowName )]]></Calculation>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Save a Copy as.xml": {
-    "hr": "Save a Copy as [ Create folders: On ; Automatically open: Off ; Create email: Off ; copy of current file ; “$path” ]",
+    "hr": "Save a Copy as [ “$path” ; copy of current file ; Create folders: On ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"37\" name=\"Save a Copy as\">\n    <CreateDirectories state=\"True\"/>\n    <AutoOpen state=\"False\"/>\n    <CreateEmail state=\"False\"/>\n    <SaveAsType value=\"Copy\"/>\n    <UniversalPathList>$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "files/Set Data File Position.xml": {

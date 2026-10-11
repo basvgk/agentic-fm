@@ -1044,8 +1044,17 @@ function readsPositionally(entry: GrammarEntry, param: GrammarParam): boolean {
  */
 function emptyHoldsSlot(entry: GrammarEntry, param: GrammarParam): boolean {
   if (!readsPositionally(entry, param)) return false;
+  return !closedVocabEnum(param);
+}
+
+/**
+ * An enum that declares its vocabulary (`enumValues`): the only kind the positional
+ * pass checks a token against, so a token naming one of its values identifies it.
+ * Port of ClosedVocabEnum.
+ */
+export function closedVocabEnum(param: GrammarParam): boolean {
   const enumValues = (param.raw.enumValues as string[] | undefined) ?? [];
-  return !(param.type === 'enum' && enumValues.length > 0);
+  return param.type === 'enum' && enumValues.length > 0;
 }
 
 /** A rendered token, tagged with whether the parser reads it by position. */
@@ -1053,6 +1062,8 @@ interface HrToken {
   text: string;
   positional: boolean;
   holdsSlot: boolean;
+  /** A closed-vocabulary enum's value (closedVocabEnum). */
+  closedVocab?: boolean;
 }
 
 function paramToken(entry: GrammarEntry, param: GrammarParam, val: string): HrToken {
@@ -1061,7 +1072,7 @@ function paramToken(entry: GrammarEntry, param: GrammarParam, val: string): HrTo
     const label = param.hrLabel || '';
     positional = !label || !val.toLowerCase().startsWith((label + ':').toLowerCase());
   }
-  return { text: val, positional, holdsSlot: emptyHoldsSlot(entry, param) };
+  return { text: val, positional, holdsSlot: emptyHoldsSlot(entry, param), closedVocab: closedVocabEnum(param) };
 }
 
 /** A governing discriminator's HR tokens. Port of RenderDiscriminatorGroupTokens. */
@@ -1153,6 +1164,11 @@ export function renderStepHr(entry: GrammarEntry, step: Element): string {
       return;
     }
     if (tok.positional) {
+      // A closed-vocabulary enum's value names its own slot: the parser skips the
+      // free params left out ahead of it (the missing-slot rule in
+      // matchParamValues), so those empty slots are not written, as on
+      // FileMaker's line (Save a Copy as `[ copy of current file ; … ]`).
+      if (tok.closedVocab) pendingEmpty = 0;
       for (; pendingEmpty > 0; pendingEmpty--) parts.push('');
     }
     parts.push(tok.text);

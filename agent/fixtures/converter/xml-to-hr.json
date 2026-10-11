@@ -93,7 +93,7 @@
   "files/Recover File.xml": "Recover File [ With dialog: Off ; “$path” ]",
   "files/Rename File.xml": "Rename File [ Source file: “$path” ; New name: \"new_name\" ]",
   "files/Save a Copy as XML.xml": "Save a Copy as XML [ Window name: Get ( WindowName ) ; Destination file: “$path” ; Include details for analysis tools ]",
-  "files/Save a Copy as.xml": "Save a Copy as [ Create folders: On ; Automatically open: Off ; Create email: Off ; copy of current file ; “$path” ]",
+  "files/Save a Copy as.xml": "Save a Copy as [ “$path” ; copy of current file ; Create folders: On ]",
   "files/Set Data File Position.xml": "Set Data File Position [ File ID: $fileID ; New position: 1024 ]",
   "files/Set Multi-User.xml": "Set Multi-User [ On ]",
   "files/Set Use System Formats.xml": "Set Use System Formats [ Use system formats: On ]",

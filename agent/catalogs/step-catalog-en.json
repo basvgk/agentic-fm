@@ -6813,23 +6813,31 @@
         "hrEnumValues": {
           "True": "On",
           "False": "Off"
-        }
+        },
+        "hrSlot": 4,
+        "note": "FileMaker draws it last, labeled On/Off, with or without a path (hrSlot; FM 26.0.3)."
       },
       {
         "xmlElement": "AutoOpen",
         "type": "flagBoolean",
         "hrLabel": "Automatically open",
         "xmlAttr": "state",
+        "flagStyle": true,
         "required": false,
-        "defaultValue": "False"
+        "defaultValue": "False",
+        "hrSlot": 2,
+        "note": "Bare flag: FileMaker draws 'Automatically open' after the copy type when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
       },
       {
         "xmlElement": "CreateEmail",
         "type": "flagBoolean",
         "hrLabel": "Create email",
         "xmlAttr": "state",
+        "flagStyle": true,
         "required": false,
-        "defaultValue": "False"
+        "defaultValue": "False",
+        "hrSlot": 3,
+        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
       },
       {
         "xmlElement": "SaveAsType",
@@ -6838,12 +6846,20 @@
         "xmlAttr": "value",
         "required": false,
         "defaultValue": "Copy",
+        "enumValues": [
+          "Copy",
+          "CompactedCopy",
+          "Clone",
+          "SelfContainedCopy"
+        ],
         "hrEnumValues": {
           "Copy": "copy of current file",
           "CompactedCopy": "compacted copy (smaller)",
           "Clone": "clone (no records)",
           "SelfContainedCopy": "self-contained copy (single file)"
-        }
+        },
+        "hrSlot": 1,
+        "note": "FileMaker draws the copy type bare, after the path, or first when there is no path (hrSlot; FM 26.0.3). enumValues closes the vocabulary, so a bare token that names no copy type is never read as one."
       },
       {
         "xmlElement": "UniversalPathList",
@@ -6851,10 +6867,11 @@
         "hrLabel": "Output path",
         "hrQuoted": true,
         "required": false,
-        "note": "Text content is the file path (variable or literal). If omitted, Save As dialog is shown."
+        "hrSlot": 0,
+        "note": "Text content is the file path (variable or literal). If omitted, Save As dialog is shown. FileMaker draws it first, quoted and unlabeled (hrSlot; FM 26.0.3)."
       }
     ],
-    "hrSignature": "[ <path> ; <copy type> ; Create folders: <On/Off> ]",
+    "hrSignature": "[ <path> ; <copy type> ; <Automatically open> ; <Create email> ; Create folders: <On/Off> ]",
     "blockPair": null,
     "status": "complete",
     "helpUrl": "https://help.claris.com/en/pro-help/content/save-a-copy-as.html"

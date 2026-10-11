@@ -63,11 +63,13 @@ from catalog_grammar import (
     _group_quote_value,
     _group_unquote_value,
     candidate_hr_labels,
+    closed_vocab_enum,
     governing_discriminator_for,
     hr_param_order,
     is_driven_discriminator,
     is_governing_discriminator,
     param_key,
+    positional_token_fits_param,
     renders_bare_in_hr,
     shape_routed_values,
     value_reveals_companion,
@@ -884,23 +886,56 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
             break
 
     # Pass 2 — positional for the remaining bare-rendering params, in HR order.
-    pos = 0
-    for pi in hr_param_order(entry):
-        if resolved[pi]:
-            continue
-        if not renders_bare_in_hr(entry.params[pi]):
-            continue
+    def positional_target(pi: int) -> bool:
+        if resolved[pi] or not renders_bare_in_hr(entry.params[pi]):
+            return False
         gov = governing_discriminator_for(entry, entry.params[pi])
         if gov is not None:
             gi = entry.params.index(gov)
             gval = (gov.default_value or "") if values[gi] == "" else values[gi]
             if not value_reveals_companion(gov, gval, param_key(entry.params[pi])):
-                continue
+                return False
+        return True
+
+    order = hr_param_order(entry)
+    # Missing optional slot, told apart by vocabulary: with FEWER bare tokens than
+    # positional slots, a token naming a value of a LATER closed-vocabulary enum is
+    # that enum's token, so a free param ahead of it is the one left out (Save a
+    # Copy as with no path: ``[ copy of current file ; Create folders: On ]``).
+    # Only a deficit enables the skip. Mirrors the reference converter.
+    missing_slots = sum(1 for pi in order if positional_target(pi)) - sum(
+        1 for i in range(len(hr_params)) if not consumed[i] and _trim(hr_params[i])
+    )
+
+    def names_later_closed_enum(oi: int, token: str) -> bool:
+        return any(
+            closed_vocab_enum(entry.params[qi])
+            and positional_target(qi)
+            and positional_token_fits_param(entry.params[qi], token)
+            for qi in order[oi + 1 :]
+        )
+
+    pos = 0
+    for oi, pi in enumerate(order):
+        if not positional_target(pi):
+            continue
         while pos < len(hr_params) and consumed[pos]:
             pos += 1
         if pos < len(hr_params):
+            token = _trim(hr_params[pos])
+            # A closed-vocabulary enum only claims a token that names one of its
+            # own values; anything else belongs to a later bare param.
+            if not positional_token_fits_param(entry.params[pi], token):
+                continue
+            if (
+                missing_slots > 0
+                and not closed_vocab_enum(entry.params[pi])
+                and names_later_closed_enum(oi, token)
+            ):
+                missing_slots -= 1
+                continue
             consumed[pos] = True
-            values[pi] = _trim(hr_params[pos])
+            values[pi] = token
             got_token[pi] = True
             resolved[pi] = True
             pos += 1

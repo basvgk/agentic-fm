@@ -1295,17 +1295,37 @@ def reads_positionally(entry: CatalogEntry, param: StepParam) -> bool:
     return renders_bare_in_hr(param)
 
 
+def closed_vocab_enum(param: StepParam) -> bool:
+    """An enum that declares its vocabulary (``enumValues``): the only kind the
+    positional pass checks a token against, so a token naming one of its values
+    identifies it. Port of ClosedVocabEnum."""
+    return param.type == "enum" and bool(param.enum_values)
+
+
+def positional_token_fits_param(param: StepParam, token: str) -> bool:
+    """Whether a positional (bare) token may be assigned to ``param``. A
+    closed-vocabulary enum only claims a token naming one of its values (or its
+    ``hrEnumValues`` display spelling), so a token meant for a later bare param is
+    not swallowed by position. Port of PositionalTokenFitsParam."""
+    if not closed_vocab_enum(param):
+        return True
+    t = token.lower()
+    if any(t == v.lower() for v in param.enum_values):
+        return True
+    return any(label and t == label.lower() for label in param.hr_enum_values.values())
+
+
 def empty_holds_slot(entry: CatalogEntry, param: StepParam) -> bool:
     """Whether an EMPTY value of ``param`` renders as an empty slot when a later
     positional token follows. A closed-vocabulary enum is excluded: the parser only
     hands it a token naming one of its values, so an empty token would not fit."""
     if not reads_positionally(entry, param):
         return False
-    return not (param.type == "enum" and param.enum_values)
+    return not closed_vocab_enum(param)
 
 
-# A rendered token: (text, positional, holds_slot).
-HrToken = tuple[str, bool, bool]
+# A rendered token: (text, positional, holds_slot, closed_vocab).
+HrToken = tuple[str, bool, bool, bool]
 
 
 def _param_token(entry: CatalogEntry, param: StepParam, val: str) -> HrToken:
@@ -1313,7 +1333,7 @@ def _param_token(entry: CatalogEntry, param: StepParam, val: str) -> HrToken:
     if param.type == "repeatGroup" and param.raw.get("hrPositionalKey") and val:
         label = param.hr_label or ""
         positional = not label or not val.lower().startswith((label + ":").lower())
-    return (val, positional, empty_holds_slot(entry, param))
+    return (val, positional, empty_holds_slot(entry, param), closed_vocab_enum(param))
 
 
 def shape_routed_values(entry: CatalogEntry, discrim: StepParam) -> tuple[str, str] | None:
@@ -1354,13 +1374,13 @@ def render_discriminator_group_tokens(
         mapped = param.hr_enum_values.get(value) or value
         label = param.hr_label or ""
         # Unlabeled, pass 1 cannot claim it, so the parser reads it by position.
-        return [(mapped, True, False)] if not label else [(label + ": " + mapped, False, False)]
+        return [(mapped, True, False, False)] if not label else [(label + ": " + mapped, False, False, False)]
     if branch.hr_token:
-        return [(branch.hr_token, False, False)]
+        return [(branch.hr_token, False, False, False)]
     parts: list[HrToken] = []
     if branch.labeled and param.hr_label:
         mapped = param.hr_enum_values.get(value) or value
-        parts.append((param.hr_label + ": " + mapped, False, False))
+        parts.append((param.hr_label + ": " + mapped, False, False, False))
     # A revealed companion is positional like any bare param, so it keeps its
     # empty slot (the caller drops it unless a later positional follows).
     for elem in branch.reveal:
@@ -1377,7 +1397,7 @@ def render_discriminator_group_tokens(
                 and shape_routed_values(entry, param) is not None
                 and reads_as_quoted_literal_text(tok[0].strip()) != bool(c.hr_quoted)
             ):
-                parts.append((value, False, False))
+                parts.append((value, False, False, False))
             parts.append(tok)
             break
     return parts
@@ -1396,12 +1416,18 @@ def render_step_hr(entry: CatalogEntry, step: ET.Element) -> str:
 
     def add(tok: HrToken) -> None:
         nonlocal pending_empty
-        text, positional, holds_slot = tok
+        text, positional, holds_slot, closed_vocab = tok
         if not text:
             if holds_slot:
                 pending_empty += 1
             return
         if positional:
+            # A closed-vocabulary enum's value names its own slot: the parser skips
+            # the free params left out ahead of it (the missing-slot rule in
+            # match_param_values), so those empty slots are not written, as on
+            # FileMaker's line (Save a Copy as ``[ copy of current file ; … ]``).
+            if closed_vocab:
+                pending_empty = 0
             parts.extend([""] * pending_empty)
             pending_empty = 0
         parts.append(text)

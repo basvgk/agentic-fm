@@ -40,6 +40,7 @@ import {
   valueRevealsCompanion,
   candidateHrLabels,
   hrParamOrder,
+  closedVocabEnum,
   rendersBareInHr,
   shapeRoutedValues,
   groupQuoteValue,
@@ -510,9 +511,8 @@ function resolveBoolState(param: GrammarParam, hrValue: string): string {
  * that was previously working.
  */
 function positionalTokenFitsParam(param: GrammarParam, token: string): boolean {
-  if (param.type !== 'enum') return true;
+  if (!closedVocabEnum(param)) return true;
   const enumValues = (param.raw.enumValues as string[] | undefined) ?? [];
-  if (enumValues.length === 0) return true;
   for (const v of enumValues) if (ciEquals(token, v)) return true;
   // hrEnumValues holds FileMaker's DISPLAY spelling of a value; a token in that
   // form is legal input and resolves on emit.
@@ -752,22 +752,49 @@ function matchParamValues(entry: GrammarEntry, hrParams: string[]): string[] {
   }
 
   // Pass 2 — positional for the remaining bare-rendering params, in HR order.
-  let pos = 0;
-  for (const pi of hrParamOrder(entry)) {
-    if (resolved[pi]) continue;
-    if (!rendersBareInHr(entry.params[pi])) continue;
+  const positionalTarget = (pi: number): boolean => {
+    if (resolved[pi]) return false;
+    if (!rendersBareInHr(entry.params[pi])) return false;
     const gov = governingDiscriminatorFor(entry, entry.params[pi]);
     if (gov) {
       const gi = entry.params.indexOf(gov);
       const gval = values[gi] === '' ? (gov.defaultValue ?? '') : values[gi];
-      if (!valueRevealsCompanion(gov, gval, paramKey(entry.params[pi]))) continue;
+      if (!valueRevealsCompanion(gov, gval, paramKey(entry.params[pi]))) return false;
     }
+    return true;
+  };
+  const order = hrParamOrder(entry);
+  // Missing optional slot, told apart by vocabulary: with FEWER bare tokens than
+  // positional slots, a token naming a value of a LATER closed-vocabulary enum is
+  // that enum's token, so a free param ahead of it is the one left out (Save a
+  // Copy as with no path: `[ copy of current file ; Create folders: On ]`). Only a
+  // deficit enables the skip. Mirrors the reference converter.
+  let missingSlots =
+    order.filter((pi) => positionalTarget(pi)).length -
+    hrParams.filter((t, i) => !consumed[i] && trim(t) !== '').length;
+  const namesLaterClosedEnum = (oi: number, token: string): boolean =>
+    order
+      .slice(oi + 1)
+      .some(
+        (qi) =>
+          closedVocabEnum(entry.params[qi]) &&
+          positionalTarget(qi) &&
+          positionalTokenFitsParam(entry.params[qi], token),
+      );
+  let pos = 0;
+  for (let oi = 0; oi < order.length; oi++) {
+    const pi = order[oi];
+    if (!positionalTarget(pi)) continue;
     while (pos < hrParams.length && consumed[pos]) pos++;
     if (pos < hrParams.length) {
       const token = trim(hrParams[pos]);
       // A closed-vocabulary enum only claims a token that names one of its own
       // values; anything else belongs to a later bare param.
       if (!positionalTokenFitsParam(entry.params[pi], token)) continue;
+      if (missingSlots > 0 && !closedVocabEnum(entry.params[pi]) && namesLaterClosedEnum(oi, token)) {
+        missingSlots--;
+        continue;
+      }
       consumed[pos] = true;
       values[pi] = token;
       gotToken[pi] = true;
