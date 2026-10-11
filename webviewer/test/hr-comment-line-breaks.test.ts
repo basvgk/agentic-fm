@@ -102,4 +102,29 @@ describe('comment line breaks in HR', () => {
     expect(xml).not.toContain('UNKNOWN STEP');
     expect(texts(hrToXml('//# a\n  b').xml)).toEqual(['a&#13;b']);
   });
+
+  // HR writes `# ` + the text and the parser drops only that one space, so a
+  // comment's own leading tab, leading spaces and trailing spaces survive
+  // (measured on FileMaker Pro 26.0.3: it stores, copies back and draws them).
+  it.each([
+    '&#9;[1.0.8]', '   History:', 'a  ', '&#9;tab end&#9;', ' one', '  multi first&#13;  second  ',
+    '&#9;', ' &#13; ', '&#13;x',
+  ])('keeps the leading and trailing blanks of %j, enabled and disabled', (t) => {
+    for (const step of [comment(t), disabledComment(t)]) {
+      const { xml, errors } = hrToXml(xmlToHr(snippet(step)));
+      expect(errors).toEqual([]);
+      expect(texts(xml)).toEqual([asEmitted(t)]);
+    }
+  });
+
+  it('drops only the one space after the # an author writes', () => {
+    expect(xmlToHr(snippet(comment('&#9;[1.0.8]')))).toBe('# \t[1.0.8]');
+    const cases: Array<[string, string[]]> = [
+      ['#comment', ['comment']], ['# comment', ['comment']], ['#  comment', [' comment']],
+      ['#\tcomment', ['\tcomment']], ['# comment  ', ['comment  ']], ['//#comment', ['comment']],
+      ['// #  comment', [' comment']], ['# comment\r\nBeep', ['comment']],
+      ['#', []], ['# ', []], ['// # ', []],
+    ];
+    for (const [hr, want] of cases) expect(texts(hrToXml(hr).xml), hr).toEqual(want);
+  });
 });

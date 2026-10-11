@@ -298,17 +298,19 @@ def _comment_hash_offset(trimmed: str) -> int:
 
 
 def _decode_comment_text(raw: str, indent: int, hash_at: int) -> str:
-    """The text a merged comment statement carries: ``#`` (and a disabled comment's
-    ``//``) and the first line's leading blanks dropped, each continuation line's pad
-    turned back into its CR or LF. A one-line comment is trimmed at both ends, as
-    before; one that continues keeps every blank inside it. *hash_at* is the ``#``'s
-    offset in *raw*."""
+    """The text a merged comment statement carries: the ``#`` (and a disabled
+    comment's ``//``) and the one space the XML to HR converter writes after the
+    ``#`` dropped, each continuation line's pad turned back into its CR or LF. Every
+    other blank is the comment's own: FileMaker stores and copies back a leading tab,
+    leading spaces and trailing spaces, and draws the comment as ``# `` + its text.
+    ``#text`` (no space) is the comment ``text``; ``#  text`` keeps one leading
+    space. *hash_at* is the ``#``'s offset in *raw*."""
     lead = raw[:indent]
     head, *rest = raw.split("\n")
-    if not rest:
-        return head[hash_at + 1:].strip()
     strip_cr = lambda s: s[:-1] if s.endswith("\r") else s  # noqa: E731
-    text = strip_cr(head[hash_at + 1:]).lstrip(" \t")
+    text = strip_cr(head[hash_at + 1:])
+    if text.startswith(" "):
+        text = text[1:]
     for physical in rest:
         line = strip_cr(physical)
         if is_comment_continuation(line, lead):

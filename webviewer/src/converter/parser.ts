@@ -105,18 +105,20 @@ function commentHashOffset(trimmed: string): number {
 }
 
 /**
- * The comment text a merged comment statement carries: `#` (and a disabled
- * comment's `//`) and the first line's leading blanks dropped, each
- * continuation line's pad turned back into its CR or LF. A one-line comment is
- * trimmed at both ends, as before; one that continues keeps every blank inside
- * it. `hash` is the `#`'s offset in `raw`.
+ * The comment text a merged comment statement carries: the `#` (and a disabled
+ * comment's `//`) and the one space XML->HR writes after the `#` dropped, each
+ * continuation line's pad turned back into its CR or LF. Every other blank is
+ * the comment's own: FileMaker stores and copies back a leading tab, leading
+ * spaces and trailing spaces, and draws the comment as `# ` + its text.
+ * `#text` (no space) is the comment `text`; `#  text` keeps one leading space.
+ * `hash` is the `#`'s offset in `raw`.
  */
 function decodeHrCommentText(raw: string, indent: number, hash: number): string {
   const lead = raw.substring(0, indent);
   const stripCr = (s: string) => (s.endsWith('\r') ? s.slice(0, -1) : s);
   const [head, ...rest] = raw.split('\n');
-  if (rest.length === 0) return head.substring(hash + 1).trim();
-  let text = stripCr(head.substring(hash + 1)).replace(/^[ \t]+/, '');
+  let text = stripCr(head.substring(hash + 1));
+  if (text.startsWith(' ')) text = text.substring(1);
   for (const physical of rest) {
     const line = stripCr(physical);
     if (isHrCommentContinuation(line, lead)) {

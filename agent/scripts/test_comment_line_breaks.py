@@ -116,6 +116,32 @@ def test_disabled_comment_nested_beside_enabled_and_disabled_step():
     assert [(ln.is_comment, ln.disabled, ln.comment_text) for ln in tight] == [(True, True, "a\rb")]
 
 
+def test_leading_and_trailing_blanks_round_trip():
+    """HR writes ``# `` + the text and the parser drops only that one space, so a
+    comment's own leading tab, leading spaces and trailing spaces survive (measured
+    on FileMaker Pro 26.0.3: it stores, copies back and draws them)."""
+    assert _hr(_comment("&#9;[1.0.8]")) == "# \t[1.0.8]"
+    texts = ["&#9;[1.0.8]", "   History:", "a  ", "&#9;tab end&#9;", " one",
+             "  multi first&#13;  second  ", "&#9;", " &#13; ", "&#13;x"]
+    for t in texts:
+        lines = parse_hr(_hr(_comment(t)))
+        assert [(ln.is_comment, ln.comment_text) for ln in lines] == [(True, _fm(t))], t
+        lines = parse_hr(_hr(_disabled_comment(t)))
+        assert [(ln.is_comment, ln.disabled, ln.comment_text) for ln in lines] == [(True, True, _fm(t))], t
+
+
+def test_authored_spacing_after_hash():
+    cases = {
+        "#comment": "comment", "# comment": "comment", "#  comment": " comment",
+        "#\tcomment": "\tcomment", "# comment  ": "comment  ", "//#comment": "comment",
+        "// #  comment": " comment", "#": "", "# ": "", "// # ": "",
+    }
+    for hr, text in cases.items():
+        lines = parse_hr(hr)
+        assert [(ln.is_comment, ln.comment_text) for ln in lines] == [(True, text)], hr
+    crlf = parse_hr("# comment\r\nBeep")
+    assert crlf[0].comment_text == "comment"
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
