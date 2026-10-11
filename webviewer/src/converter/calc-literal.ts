@@ -8,18 +8,23 @@
  * and the group-value quoting on both directions (catalog-grammar.ts). The Python
  * counterpart is `agent/scripts/calc_literal.py`; keep the two in step.
  *
- * Grammar, measured against FileMaker Pro 26.0.2:
- *  - `"`, `“` (U+201C) and `”` (U+201D) are ONE interchangeable delimiter: a
- *    literal opens on any unescaped one and closes on any unescaped one (`"ab”`,
- *    `”ab“` and `“ab"` are all the literal `ab`). FileMaker stores a pasted
- *    curly-delimited literal with straight quotes.
- *  - Inside a literal a backslash escapes the next `"`, `“`, `”`, `\` or `¶`
- *    (`"a\"b"` is `a"b`, `"a\\b"` is `a\b`). Before any other character the
- *    backslash is ordinary content (`"a\nb"` is the four characters `a\nb`).
+ * Grammar, measured against FileMaker Pro 26.0.2 and 26.0.3:
+ *  - `"`, `“` (U+201C), `”` (U+201D), `„` (U+201E), `‟` (U+201F) and `＂`
+ *    (U+FF02) are ONE interchangeable delimiter: a literal opens on any unescaped
+ *    one and closes on any unescaped one (`"ab”`, `”ab“`, `„ab„` and `＂ab"` are
+ *    all the literal `ab`; all 36 open/close pairs behave alike). No other
+ *    character delimits (`‚ ‘ ’ « » 「 」 〝 〞 〟 ＇` are errors). FileMaker stores a
+ *    pasted literal with straight quotes (`„y, z„` comes back as `"y, z"`).
+ *  - Inside a literal a backslash escapes the next delimiter, backslash or `¶`
+ *    (`"a\"b"` is `a"b`, `"a\„b"` is `a„b`, `"a\\b"` is `a\b`). Before any
+ *    other character the backslash is ordinary content (`"a\nb"` is the four
+ *    characters `a\nb`). `＼` (U+FF3C) and `﹨` (U+FE68) are backslashes too:
+ *    `"a＼"b"` is `a"b`, `"a＼＼b"` and `"a\＼b"` are `a＼b`, `"a＼¶b"` is `a¶b`.
  *    FileMaker stores a doubled quote as the backslash form (`"a""b"` comes back
  *    as `"a\"b"`).
  *  - Inside a literal a delimiter immediately followed by another delimiter is the
- *    doubled escape: the second character is content (`"a""b"` is `a"b`).
+ *    doubled escape: the second character is content (`"a""b"` is `a"b`,
+ *    `"a"＂b"` is `a＂b`).
  *  - `'`, `‘` and `’` are never calculation delimiters.
  * A delimiter preceded by an odd backslash run outside a literal does not open one.
  *
@@ -47,34 +52,40 @@
  * (`isCalcOpenParen` and its siblings, `hrBracketDepthDelta`, below).
  */
 
-const CALC_QUOTES = '"“”';
+const CALC_QUOTES = '"\u201C\u201D\u201E\u201F\uFF02';
+const CALC_BACKSLASHES = '\\\uFF3C\uFE68';
 /** Characters a backslash escapes inside a literal. */
-const ESCAPABLE = '"“”\\¶';
+const ESCAPABLE = CALC_QUOTES + CALC_BACKSLASHES + '¶';
 
-/** True when `c` is one of the three calculation literal delimiters. */
+/** True when `c` is one of the six calculation literal delimiters. */
 export function isCalcQuote(c: string | undefined): boolean {
   return c !== undefined && c.length === 1 && CALC_QUOTES.includes(c);
 }
 
-/** True when the character at `at` is preceded by an odd run of backslashes. */
+/** True when `c` is a calculation backslash: `\`, `＼` (U+FF3C) or `﹨` (U+FE68). */
+export function isCalcBackslash(c: string | undefined): boolean {
+  return c !== undefined && c.length === 1 && CALC_BACKSLASHES.includes(c);
+}
+
+/** True when the character at `at` is preceded by an odd run of backslashes (any mix of the three forms). */
 export function isBackslashEscaped(s: string, at: number): boolean {
   let run = 0;
-  while (at > 0 && s[at - 1] === '\\') { run++; at--; }
+  while (at > 0 && isCalcBackslash(s[at - 1])) { run++; at--; }
   return run % 2 === 1;
 }
 
 /**
  * True when `s[at]` is a literal delimiter not preceded by an odd backslash run.
  * In a toggle-style scanner every such character flips in/out of a literal,
- * because the three delimiters pair freely (the doubled escape toggles twice).
+ * because the six delimiters pair freely (the doubled escape toggles twice).
  */
 export function isUnescapedCalcQuote(s: string, at: number): boolean {
   return isCalcQuote(s[at]) && !isBackslashEscaped(s, at);
 }
 
-/** True when the backslash at `at` (inside a literal) escapes the next character. */
+/** True when the backslash (any form) at `at` (inside a literal) escapes the next character. */
 export function isCalcEscape(s: string, at: number): boolean {
-  return s[at] === '\\' && at + 1 < s.length && ESCAPABLE.includes(s[at + 1]);
+  return isCalcBackslash(s[at]) && at + 1 < s.length && ESCAPABLE.includes(s[at + 1]);
 }
 
 /**
@@ -88,7 +99,7 @@ export function skipCalcLiteral(s: string, at: number): { end: number; closed: b
   let i = at + 1;
   while (i < s.length) {
     const c = s[i];
-    if (c === '\\' && isCalcEscape(s, i)) { decoded += s[i + 1]; i += 2; continue; }
+    if (isCalcEscape(s, i)) { decoded += s[i + 1]; i += 2; continue; }
     if (isCalcQuote(c)) {
       if (isCalcQuote(s[i + 1])) { decoded += s[i + 1]; i += 2; continue; }
       return { end: i + 1, closed: true, decoded };
@@ -122,7 +133,7 @@ export function quoteCalcLiteral(v: string, open = '“', close = '”'): string
   for (let i = 0; i < v.length; i++) {
     const c = v[i];
     if (isCalcQuote(c)) out += '\\' + c;
-    else if (c === '\\' && (i === v.length - 1 || isCalcEscape(v, i))) out += '\\\\';
+    else if (isCalcBackslash(c) && (i === v.length - 1 || isCalcEscape(v, i))) out += '\\' + c;
     else out += c;
   }
   return out + close;
@@ -197,7 +208,7 @@ export function calcCommentLen(s: string, at: number): { len: number; closed: bo
  * separator or `&` (`1　／＊ c ＊／` after U+3000, `Left （／＊ c ＊／ "a" ; 1 ）`).
  */
 const HR_COMMENT_MAY_FOLLOW =
-  ' \t\r\n\v\f()[]{};,&+=<>^"“”' +
+  ' \t\r\n\v\f()[]{};,&+=<>^"“”„‟＂' +
   '\u0085\u00A0\u1680\u180E\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u200B' +
   '\u2028\u2029\u202F\u205F\u2060\u3000\uFEFF' +
   '\uFE59\uFF08\uFE5A\uFF09\uFF3B\uFF3D' +

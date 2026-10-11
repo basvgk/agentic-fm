@@ -2,9 +2,11 @@
 """test_fmlint_literals.py — FMLint string-literal grammar.
 
 Checks ``agent.fmlint.literals`` against literal forms whose meaning was
-measured in FileMaker Pro 26.0.2 (backslash escapes, doubled quotes, curly
-double quotes as interchangeable delimiters), and checks that the calculation
-rules C001/C002/C003 no longer read tokens out of such literals.  Runs under
+measured in FileMaker Pro 26.0.2 and 26.0.3 (backslash escapes in all three
+backslash forms, doubled quotes, the six interchangeable delimiters, comments in
+every slash/star form), and checks that the calculation rules C001/C002/C003 no
+longer read tokens out of such literals or comments and read the fullwidth
+parentheses as parentheses.  Runs under
 pytest, or standalone: ``python3 agent/scripts/test_fmlint_literals.py``.
 """
 
@@ -35,6 +37,18 @@ MASK_CASES = [
     ('“a\\”b”', '“”'),           # a”b (escaped curly quote)
     ('"it‘s (x)"', '""'),                           # single curly quotes are content
     ('‘Note (x)’ & Abs ( 1 )', '‘’ & Abs ( 1 )'),
+    ('„Total (net)„', '„„'),                     # low-9 quotes delimit
+    ('‟ab"', '‟"'),                               # high-reversed-9 pairs with "
+    ('＂Foo ( 1 )＂ & Abs ( 1 )', '＂＂ & Abs ( 1 )'),  # fullwidth quote
+    ('"x„ & Upper ( „y, z„ ) & ＂w＂', '"„ & Upper ( „„ ) & ＂＂'),
+    ('"a＼"b"', '""'),                            # a"b (fullwidth backslash)
+    ('"a﹨"b"', '""'),                            # a"b (small backslash)
+    ('"a\\＼" & Abs ( 1 )', '"" & Abs ( 1 )'),  # even mixed run: the " closes
+    ('"a"＂b" & Upper ( 1 )', '""＂" & Upper ( 1 )'),  # a＂b (doubled delimiter)
+    ('1 /* Foo ( 1 ) */ + 2', '1   + 2'),         # a comment is one space
+    ('1 ／＊ Foo ( "x ) ＊／ + 2', '1   + 2'),     # nothing inside a comment is code
+    ('Abs ( 1 ) // why? Foo (', 'Abs ( 1 )  '),
+    ('"a /* b" & 1', '"" & 1'),                   # an opener inside a literal is text
 ]
 
 UNCLOSED_CASES = [
@@ -44,6 +58,10 @@ UNCLOSED_CASES = [
     ('"open', True),
     ('“open', True),
     ('"a" & "b"', False),
+    ('"a＼"', True),
+    ('„open', True),
+    ('＂a＂ & ‟b„', False),
+    ('1 /* "x */ + 2', False),
 ]
 
 
@@ -69,6 +87,10 @@ def test_no_phantom_tokens_inside_literals():
         'Set Variable [ $x ; Value: "Total (net)" ]',
         'Set Variable [ $x ; Value: "a\\"b" & Upper ( "c" ) ]',
         'Set Variable [ $x ; Value: "a\\\\" & Lower ( "Q" ) ]',
+        'Set Variable [ $x ; Value: „Total (net„ ]',
+        'Set Variable [ $x ; Value: ＂Foo ( 1 )＂ & Upper （ "a" ） ]',
+        'Set Variable [ $x ; Value: "a＼"Foo ( 1 )" ]',
+        'Set Variable [ $x ; Value: 1 ／＊ Foo ( 1 ) ＊／ + 2 ]',
     ]
     for hr in lines:
         assert _rule_hits(hr, {"C001", "C002", "C003"}) == [], hr
@@ -81,6 +103,15 @@ def test_real_calls_outside_literals_still_checked():
     assert [r for r, _ in _rule_hits(hr, {"C002"})] == ["C002"]
     hr = 'Set Variable [ $x ; Value: "a\\" ]'
     assert [r for r, _ in _rule_hits(hr, {"C001"})] == ["C001"]
+    hr = 'Set Variable [ $x ; Value: "a＼" ]'
+    assert [r for r, _ in _rule_hits(hr, {"C001"})] == ["C001"]
+    # FileMaker reads （ ﹙ as ( and ） ﹚ as ), so a call written with them is a call.
+    hr = "Set Variable [ $x ; Value: Bogus （ 1 ） ]"
+    assert _rule_hits(hr, {"C003"}) == [("C003", 'Unknown function "Bogus" in calculation')]
+    hr = "Set Variable [ $x ; Value: Abs﹙1﹚＆Bogus（2）、Abs ( 3 ) ]"
+    assert _rule_hits(hr, {"C003"}) == [("C003", 'Unknown function "Bogus" in calculation')]
+    hr = "Set Variable [ $x ; Value: Upper （ \"a\" ]"
+    assert [r for r, _ in _rule_hits(hr, {"C002"})] == ["C002"]
 
 
 if __name__ == "__main__":

@@ -8,19 +8,25 @@ value splitters (``parametersList`` commas, ``attrGroup``/``repeatGroup`` bodies
 TypeScript counterpart is ``webviewer/src/converter/calc-literal.ts``; keep the two
 in step.
 
-Grammar, measured against FileMaker Pro 26.0.2:
+Grammar, measured against FileMaker Pro 26.0.2 and 26.0.3:
 
-* ``"``, ``“`` (U+201C) and ``”`` (U+201D) are ONE interchangeable delimiter: a
-  literal opens on any unescaped one and closes on any unescaped one (``"ab”``,
-  ``”ab“`` and ``“ab"`` are all the literal ``ab``). FileMaker stores a pasted
-  curly-delimited literal with straight quotes.
-* Inside a literal a backslash escapes the next ``"``, ``“``, ``”``, ``\\`` or ``¶``
-  (``"a\\"b"`` is ``a"b``, ``"a\\\\b"`` is ``a\\b``). Before any other character
-  the backslash is ordinary content (``"a\\nb"`` is the four characters ``a\\nb``).
-  FileMaker stores a doubled quote as the backslash form (``"a""b"`` comes back
-  as ``"a\\"b"``).
+* ``"``, ``“`` (U+201C), ``”`` (U+201D), ``„`` (U+201E), ``‟`` (U+201F) and ``＂``
+  (U+FF02) are ONE interchangeable delimiter (``CALC_QUOTES``): a literal opens on
+  any unescaped one and closes on any unescaped one (``"ab”``, ``”ab“``, ``„ab„``
+  and ``＂ab"`` are all the literal ``ab``; all 36 open/close pairs behave alike).
+  No other character delimits (``‚ ‘ ’ « » 「 」 〝 〞 〟 ＇`` are errors). FileMaker
+  stores a pasted literal with straight quotes (``„y, z„`` comes back as
+  ``"y, z"``).
+* Inside a literal a backslash escapes the next delimiter, backslash or ``¶``
+  (``"a\\"b"`` is ``a"b``, ``"a\\„b"`` is ``a„b``, ``"a\\\\b"`` is ``a\\b``).
+  Before any other character the backslash is ordinary content (``"a\\nb"`` is
+  the four characters ``a\\nb``). ``＼`` (U+FF3C) and ``﹨`` (U+FE68) are
+  backslashes too (``CALC_BACKSLASHES``): ``"a＼"b"`` is ``a"b``, ``"a＼＼b"`` and
+  ``"a\\＼b"`` are ``a＼b``, ``"a＼¶b"`` is ``a¶b``. FileMaker stores a doubled
+  quote as the backslash form (``"a""b"`` comes back as ``"a\\"b"``).
 * Inside a literal a delimiter immediately followed by another delimiter is the
-  doubled escape: the second character is content (``"a""b"`` is ``a"b``).
+  doubled escape: the second character is content (``"a""b"`` is ``a"b``,
+  ``"a"＂b"`` is ``a＂b``).
 * ``'``, ``‘`` and ``’`` are never calculation delimiters.
 
 A delimiter preceded by an odd backslash run outside a literal does not open one.
@@ -49,15 +55,17 @@ Stdlib only.
 
 from __future__ import annotations
 
-CALC_QUOTES = frozenset('"“”')
+CALC_QUOTES = frozenset('"\u201c\u201d\u201e\u201f\uff02')
+CALC_BACKSLASHES = frozenset("\\\uff3c\ufe68")
 # Characters a backslash escapes inside a literal.
-_ESCAPABLE = frozenset('"“”\\¶')
+_ESCAPABLE = CALC_QUOTES | CALC_BACKSLASHES | {"¶"}
 
 
 def is_backslash_escaped(s: str, at: int) -> bool:
-    """True when the character at ``at`` is preceded by an odd run of backslashes."""
+    """True when the character at ``at`` is preceded by an odd run of backslashes
+    (any mix of the ``CALC_BACKSLASHES`` forms)."""
     run = 0
-    while at > 0 and s[at - 1] == "\\":
+    while at > 0 and s[at - 1] in CALC_BACKSLASHES:
         run += 1
         at -= 1
     return run % 2 == 1
@@ -67,14 +75,15 @@ def is_unescaped_calc_quote(s: str, at: int) -> bool:
     """True when ``s[at]`` is a literal delimiter not preceded by an odd backslash run.
 
     In a toggle-style scanner every such character flips in/out of a literal, because
-    the three delimiters pair freely (the doubled escape toggles twice).
+    the six delimiters pair freely (the doubled escape toggles twice).
     """
     return at < len(s) and s[at] in CALC_QUOTES and not is_backslash_escaped(s, at)
 
 
 def is_calc_escape(s: str, at: int) -> bool:
-    """True when the backslash at ``at`` (inside a literal) escapes the next character."""
-    return s[at] == "\\" and at + 1 < len(s) and s[at + 1] in _ESCAPABLE
+    """True when the backslash (any ``CALC_BACKSLASHES`` form) at ``at`` (inside a
+    literal) escapes the next character."""
+    return s[at] in CALC_BACKSLASHES and at + 1 < len(s) and s[at + 1] in _ESCAPABLE
 
 
 def skip_calc_literal(s: str, at: int) -> tuple[int, bool, str]:
@@ -89,7 +98,7 @@ def skip_calc_literal(s: str, at: int) -> tuple[int, bool, str]:
     i = at + 1
     while i < n:
         c = s[i]
-        if c == "\\" and is_calc_escape(s, i):
+        if c in CALC_BACKSLASHES and is_calc_escape(s, i):
             out.append(s[i + 1])
             i += 2
             continue
@@ -128,10 +137,8 @@ def quote_calc_literal(v: str, open_q: str = "“", close_q: str = "”") -> str
     out = [open_q]
     last = len(v) - 1
     for i, c in enumerate(v):
-        if c in CALC_QUOTES:
+        if c in CALC_QUOTES or (c in CALC_BACKSLASHES and (i == last or is_calc_escape(v, i))):
             out.append("\\" + c)
-        elif c == "\\" and (i == last or is_calc_escape(v, i)):
-            out.append("\\\\")
         else:
             out.append(c)
     out.append(close_q)
@@ -211,7 +218,7 @@ def calc_comment_len(s: str, at: int) -> tuple[int, bool]:
 
 # A comment opens in human-readable text only after one of these (or at the start).
 _HR_COMMENT_MAY_FOLLOW = frozenset(
-    ' \t\r\n\v\f()[]{};,&+=<>^"“”'
+    ' \t\r\n\v\f()[]{};,&+=<>^"“”„‟＂'
     # The other forms FileMaker reads as whitespace, a parenthesis, a bracket, an
     # argument separator or ``&`` (``1　／＊ c ＊／`` after U+3000 opens).
     "\u0085\u00a0\u1680\u180e"

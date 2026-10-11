@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from typing import Any, Union
 
 from calc_literal import (
+    CALC_BACKSLASHES,
     CALC_QUOTES,
     hr_sep,
     is_calc_escape,
@@ -624,10 +625,10 @@ def _join_with_comma(items: list[str]) -> str:
 # --- group-value quoting (attr / text kinds) --------------------------------
 # A group body (``k1=v1, k2=v2`` / ``entry | entry``) is split back by splitters
 # that step over calculation text literals (``calc_literal``), so a quoted value is
-# written as one: an embedded ``"`` is doubled, an embedded ``“``/``”`` (itself a
-# delimiter) and any backslash that would otherwise escape the next character, or
-# the closing quote, are backslash-escaped. A value needs quoting when it carries
-# a top-level comma, any of the three delimiters, or leading/trailing whitespace
+# written as one: an embedded ``"`` is doubled, any other delimiter (``“ ” „ ‟ ＂``)
+# and any backslash form (``\ ＼ ﹨``) that would otherwise escape the next character,
+# or the closing quote, are backslash-escaped. A value needs quoting when it carries
+# a top-level comma, any of the six delimiters, or leading/trailing whitespace
 # (Execute SQL's tab ``FieldDelimiter``). ``calc`` children are never quoted: a
 # well-formed calculation is already literal/paren-nested.
 def _needs_group_quote(v: str) -> bool:
@@ -647,10 +648,8 @@ def _group_quote_value(v: str) -> str:
     for i, c in enumerate(v):
         if c == '"':
             out.append('""')
-        elif c in CALC_QUOTES:  # “ or ”
+        elif c in CALC_QUOTES or (c in CALC_BACKSLASHES and (i == last or is_calc_escape(v, i))):
             out.append("\\" + c)
-        elif c == "\\" and (i == last or is_calc_escape(v, i)):
-            out.append("\\\\")
         else:
             out.append(c)
     out.append('"')

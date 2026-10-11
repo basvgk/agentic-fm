@@ -4,24 +4,28 @@ Lint rules that scan calculations for tokens (function calls, parentheses,
 operators, entities, variable names) must ignore anything inside a text
 literal.  A plain ``"[^"]*"`` regex is not enough, because FileMaker's literal
 grammar has three features that regex misses (measured against FileMaker Pro
-26.0.2):
+26.0.2 and 26.0.3):
 
 * A backslash escapes the next quote: ``"a\\"b"`` is the three characters
   ``a"b``, and ``"a\\\\b"`` is ``a\\b``.  A quote preceded by an odd run of
-  backslashes is content, not a delimiter.  The doubled form ``"a""b"`` also
+  backslashes is content, not a delimiter.  ``＼`` (U+FF3C) and ``﹨`` (U+FE68)
+  are backslashes too: ``"a＼"b"`` is ``a"b``.  The doubled form ``"a""b"`` also
   yields ``a"b``; masking it as two adjacent literals is equivalent.
-* The curly double quotes are delimiters too, and they are interchangeable
-  with the straight quote: ``“Total (net)”``, ``”ab“``, ``"ab”`` and
-  ``“ab"`` each evaluate to a literal, and ``"x“ & Upper ( "y" ) & ”z"`` is
-  ``"x" & Upper ( "y" ) & "z"``.  A backslash escapes a curly quote as well
-  (``“a\\”b”`` is ``a”b``).
+* Six characters delimit a literal, and they are interchangeable: ``"``, the
+  curly ``“`` and ``”``, the low and high-reversed ``„`` (U+201E) and ``‟``
+  (U+201F), and the fullwidth ``＂`` (U+FF02).  ``“Total (net)”``, ``”ab“``,
+  ``"ab”``, ``„ab„`` and ``＂ab"`` each evaluate to a literal, and
+  ``"x„ & Upper ( „y, z„ ) & ＂w＂`` is ``"x" & Upper ( "y, z" ) & "w"``.  A
+  backslash escapes any of them (``“a\\”b”`` is ``a”b``).
 * Curly single quotes are not calculation delimiters (``‘ab’`` is an error),
   but human-readable script text uses ``‘…’`` to wrap opaque text parameters,
   so a ``‘`` outside any literal is treated as opening a region that runs to
   the next ``’``.  Inside a double-quoted literal both are ordinary content.
 
 ``mask_string_literals`` keeps each literal's delimiters and drops its
-interior, so callers' regexes see ``""`` (or ``“”``) where a literal was.
+interior, so callers' regexes see ``""`` (or ``“”``) where a literal was.  It
+also replaces each calculation comment (``hr_comment_span_at``, below) with one
+space, so a name or parenthesis inside a comment is never read as code.
 
 The human-readable step-line splitters (``formats/hr_parser.py``) also step over
 calculation comments with ``hr_opaque_span_at``: outside a literal ``/* … */``
@@ -35,7 +39,8 @@ parenthesis and bracket depth reads every form FileMaker reads as one
 converters' copy of this grammar is ``agent/scripts/calc_literal.py``.
 """
 
-_DOUBLE_DELIMS = frozenset('"“”')  # "  “  ”
+_DOUBLE_DELIMS = frozenset('"\u201c\u201d\u201e\u201f\uff02')  # "  “  ”  „  ‟  ＂
+_BACKSLASHES = frozenset("\\\uff3c\ufe68")  # \  ＼  ﹨
 _SINGLE_OPEN = "‘"   # ‘
 _SINGLE_CLOSE = "’"  # ’
 
@@ -43,18 +48,19 @@ _NONE, _DOUBLE, _SINGLE = 0, 1, 2
 
 
 def _is_escaped(text, idx):
-    """True when the character at *idx* is preceded by an odd run of backslashes."""
+    """True when the character at *idx* is preceded by an odd run of backslashes
+    (any mix of ``\\``, ``＼`` and ``﹨``)."""
     run = 0
-    while idx > 0 and text[idx - 1] == "\\":
+    while idx > 0 and text[idx - 1] in _BACKSLASHES:
         run += 1
         idx -= 1
     return run % 2 == 1
 
 
 def is_double_delimiter(text, idx):
-    """True when ``text[idx]`` is an unescaped ``"``, ``“`` or ``”``.
+    """True when ``text[idx]`` is an unescaped literal delimiter (``" “ ” „ ‟ ＂``).
 
-    The three pair freely, so in a toggle-style scanner every such character flips
+    The six pair freely, so in a toggle-style scanner every such character flips
     in or out of a double-quoted literal (a doubled ``""`` toggles twice).
     """
     return text[idx] in _DOUBLE_DELIMS and not _is_escaped(text, idx)
@@ -64,26 +70,41 @@ def _scan(text):
     """Return (masked_text, final_state) for *text*."""
     out = []
     state = _NONE
-    for i, ch in enumerate(text):
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
         if state == _DOUBLE:
             if ch in _DOUBLE_DELIMS and not _is_escaped(text, i):
                 out.append(ch)
                 state = _NONE
+            i += 1
             continue
         if state == _SINGLE:
             if ch == _SINGLE_CLOSE:
                 out.append(ch)
                 state = _NONE
+            i += 1
             continue
         if ch in _DOUBLE_DELIMS and not _is_escaped(text, i):
             out.append(ch)
             state = _DOUBLE
+            i += 1
+            continue
+        # A comment is one space: nothing inside it is code, and a quote inside
+        # it opens no literal.
+        span = hr_comment_span_at(text, i, ";")
+        if span:
+            out.append(" ")
+            i += span
             continue
         if ch == _SINGLE_OPEN:
             out.append(ch)
             state = _SINGLE
+            i += 1
             continue
         out.append(ch)
+        i += 1
     return "".join(out), state
 
 
@@ -171,7 +192,7 @@ def comment_len(text, idx):
 
 
 _COMMENT_MAY_FOLLOW = frozenset(
-    ' \t\r\n\v\f()[]{};,&+=<>^"“”'
+    ' \t\r\n\v\f()[]{};,&+=<>^"“”„‟＂'
     # The other forms FileMaker reads as whitespace, a parenthesis, a bracket, an
     # argument separator or ``&`` (``1　／＊ c ＊／`` after U+3000 opens).
     "\u0085\u00a0\u1680\u180e"

@@ -22,7 +22,7 @@
  */
 
 import type { StepCatalogEntry } from './catalog-types';
-import { hrSep, isCalcQuote, isCalcEscape, quoteCalcLiteral, skipCalcLiteral } from './calc-literal';
+import { hrSep, isCalcBackslash, isCalcQuote, isCalcEscape, quoteCalcLiteral, skipCalcLiteral } from './calc-literal';
 
 // ---------------------------------------------------------------------------
 // DOM helpers — ElementTree `.find` / `.findall` / `.text` semantics over a
@@ -155,10 +155,10 @@ function joinWithComma(items: string[]): string {
 // Group-value quoting (attr / text kinds). A group body (`k1=v1, k2=v2` /
 // `entry | entry`) is split back by splitters that step over calculation text
 // literals (calc-literal.ts), so a quoted value is written as one: an embedded
-// `"` is doubled, an embedded `“`/`”` (itself a delimiter) and any backslash that
-// would otherwise escape the next character, or the closing quote, are
-// backslash-escaped. A value needs quoting when it carries a top-level comma, any
-// of the three delimiters, or leading/trailing whitespace (Execute SQL's tab
+// `"` is doubled, any other delimiter (`“ ” „ ‟ ＂`) and any backslash form
+// (`\ ＼ ﹨`) that would otherwise escape the next character, or the closing
+// quote, are backslash-escaped. A value needs quoting when it carries a top-level
+// comma, any of the six delimiters, or leading/trailing whitespace (Execute SQL's tab
 // `FieldDelimiter`). `calc` children are never quoted: a well-formed calculation
 // is already literal/paren-nested.
 function needsGroupQuote(v: string): boolean {
@@ -176,8 +176,8 @@ export function groupQuoteValue(v: string): string {
   for (let i = 0; i < v.length; i++) {
     const c = v[i];
     if (c === '"') out += '""';
-    else if (isCalcQuote(c)) out += '\\' + c; // “ or ”
-    else if (c === '\\' && (i === v.length - 1 || isCalcEscape(v, i))) out += '\\\\';
+    else if (isCalcQuote(c)) out += '\\' + c; // “ ” „ ‟ ＂
+    else if (isCalcBackslash(c) && (i === v.length - 1 || isCalcEscape(v, i))) out += '\\' + c;
     else out += c;
   }
   return out + '"';
