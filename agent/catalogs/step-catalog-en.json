@@ -3744,6 +3744,7 @@
         "xmlAttr": "state",
         "required": false,
         "defaultValue": "True",
+        "hrSlot": 0,
         "notes": "Flag-style: shown as \"Select\" when True, omitted when False"
       },
       {
@@ -3751,17 +3752,19 @@
         "type": "calc",
         "hrLabel": null,
         "required": false,
-        "notes": "The calculated result to insert"
+        "hrSlot": 2,
+        "notes": "The calculated result to insert. Stored before the target but displayed after it (hrSlot)."
       },
       {
         "xmlElement": "Field",
         "type": "fieldOrVariable",
         "hrLabel": "Target",
         "required": false,
-        "notes": "Dual-format: <Field table=\"\" id=\"0\" name=\"\"/> for field, or <Text/><Field></Field> for variable. Supports repetition attribute. When omitted, uses active field. Emitted after Calculation to match FM element order."
+        "hrSlot": 1,
+        "notes": "Dual-format: <Field table=\"\" id=\"0\" name=\"\"/> for field, or <Text/><Field></Field> for variable. Supports repetition attribute. When omitted, uses active field. Emitted after Calculation to match FM element order; hrSlot keeps FileMaker's HR order Select ; Target ; calc for field and variable targets alike (FM 26.0.3)."
       }
     ],
-    "hrSignature": "[ Select ; calc ; Target: Table::Field| ]",
+    "hrSignature": "[ Select ; Target: Table::Field| ; calc ]",
     "blockPair": null,
     "status": "complete",
     "helpUrl": "https://help.claris.com/en/pro-help/content/insert-calculated-result.html"

@@ -59,7 +59,7 @@
   "editing/Undo-Redo.xml": "Undo/Redo [ Undo ]",
   "fields/Export Field Contents.xml": "Export Field Contents [ Create folders: On ; Automatically open: Off ; Create email: Off ; “$path” ]",
   "fields/Insert Audio_Video.xml": "Insert Audio/Video [ “$path” ; Reference ]",
-  "fields/Insert Calculated Result.xml": "Insert Calculated Result [ Select ; \"calculation\" ; Target: $variable ]",
+  "fields/Insert Calculated Result.xml": "Insert Calculated Result [ Select ; Target: $variable ; \"calculation\" ]",
   "fields/Insert Current Date.xml": "Insert Current Date [ Select ; Target: $variable ]",
   "fields/Insert Current Time.xml": "Insert Current Time [ Select ; Target: $variable ]",
   "fields/Insert Current User Name.xml": "Insert Current User Name [ Select ; Target: $variable ]",

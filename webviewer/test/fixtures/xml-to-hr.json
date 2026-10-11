@@ -240,7 +240,7 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"159\" name=\"Insert Audio/Video\">\n    <UniversalPathList type=\"Reference\">$path</UniversalPathList>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Insert Calculated Result.xml": {
-    "hr": "Insert Calculated Result [ Select ; \"calculation\" ; Target: $variable ]",
+    "hr": "Insert Calculated Result [ Select ; Target: $variable ; \"calculation\" ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"77\" name=\"Insert Calculated Result\">\n    <SelectAll state=\"True\"/>\n    <Calculation><![CDATA[\"calculation\"]]></Calculation>\n    <Text/>\n    <Field>$variable</Field>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Insert Current Date.xml": {
