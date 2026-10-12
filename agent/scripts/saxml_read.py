@@ -1503,22 +1503,33 @@ def _cb_page_format(entry: CatalogEntry, param: StepParam, step_el: ET.Element) 
     return _grp(*[(k, v) for k, v in defaults.items()])
 
 
-# ── Insert from Device (DeviceOptions) — nested <Options type><Parameter> ─────
-@_cbuild("Insert from Device", "DeviceOptions")
-def _cb_device_options(entry: CatalogEntry, param: StepParam, step_el: ET.Element) -> str:
+# ── Insert from Device — device type + nested <Options type><Parameter> ───────
+@_decoder("Insert from Device")
+def _dec_insert_from_device(entry: CatalogEntry, step_el: ET.Element) -> list[str]:
+    """The device type is the outer ``<List name>``; each device option is a nested
+    ``<Options><Parameter type="X"><List name="Y"/>`` naming the catalog param whose
+    xmlElement is X (Camera / Resolution / LightMode …), set to Y. An option no
+    catalog param names is refused rather than dropped."""
+    v = _Vals(entry)
+    sparams = _params(step_el)
+    consumed = [False] * len(sparams)
+    claimed: set[int] = set()
     lst = _ptype(step_el, "List")
     inner = lst.find("List") if lst is not None else None
+    if inner is not None:
+        v.set(inner.get("name", ""), xml="InsertFrom")
+    for i, p in enumerate(entry.params):
+        if p.type == "fieldOrVariable" and not p.parent_element:
+            v.set(_extract_simple(entry, p, sparams, consumed, claimed), index=i)
     opts = inner.find("Options") if inner is not None else None
-    if opts is None:
-        return ""
-    groups = []
-    # Each <Parameter type="X"><List name="Y"/> → group X=(choice=Y).
-    for sp in opts.findall("Parameter"):
+    for sp in opts.findall("Parameter") if opts is not None else []:
         gname = sp.get("type", "")
         gl = sp.find("List")
-        if gl is not None and gname:
-            groups.append(f"{gname}=(choice={gl.get('name', '')})")
-    return ", ".join(groups)
+        p = v.param(xml=gname)
+        if p is None or p.type != "enum" or not p.parent_element or gl is None:
+            raise UnsupportedSaXML(f"Insert from Device: no catalog option for {gname!r}")
+        v.set(gl.get("name", ""), xml=gname)
+    return v.list()
 
 
 # ── Insert File (DialogOptions) — <Options type=…> siblings → the group ───────

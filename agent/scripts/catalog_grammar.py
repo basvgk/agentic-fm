@@ -210,6 +210,10 @@ class StepParam:
     # FileMaker's curly ``“…”``; ``"straight"`` is ``"…"``, where FileMaker shows
     # the literal straight-quoted (Perform AppleScript's text).
     hr_quote_style: str | None = None
+    # Governing discriminator: the separator FileMaker draws BETWEEN the labeled
+    # companions a value reveals when it is not the step's `` ; `` (Insert from
+    # Device: ``Camera: Back; Resolution: Full; Flash: Auto``). Render-only.
+    hr_reveal_separator: str | None = None
     omit_when_empty: bool | None = None
     emit_empty_default: bool | None = None
     # Governing discriminator: string form names a sibling; map form carries branches.
@@ -257,6 +261,7 @@ class StepParam:
             hr_labeled=d.get("hrLabeled"),
             hr_quoted=d.get("hrQuoted"),
             hr_quote_style=d.get("hrQuoteStyle"),
+            hr_reveal_separator=d.get("hrRevealSeparator"),
             omit_when_empty=d.get("omitWhenEmpty"),
             emit_empty_default=d.get("emitEmptyDefault"),
             discriminator=d.get("discriminator"),
@@ -1016,7 +1021,9 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
                 else ""
             )
         elif val and label:
-            val = label + ": " + val
+            # P5.2d: the label may vary with a sibling enum's value (hrLabelWhen;
+            # Insert from Device's ``Flash:`` / ``Flashlight:``).
+            val = effective_hr_label(entry, step, param) + ": " + val
     elif ptype == "calculation":
         val = _child_text(base, "Calculation")
         # Optional labeled calcs keep their label; legacy positional calcs stay bare
@@ -1383,10 +1390,32 @@ def render_discriminator_group_tokens(
         parts.append((param.hr_label + ": " + mapped, False, False, False))
     # A revealed companion is positional like any bare param, so it keeps its
     # empty slot (the caller drops it unless a later positional follows).
+    # hr_reveal_separator: consecutive labeled (non-positional) companion tokens
+    # merge into one, joined the way FileMaker draws them; the parser splits on
+    # ``;`` regardless, so the merge is render-only.
+    first_companion = len(parts)
+    sep = param.hr_reveal_separator or ""
+
+    def push_companion(tok: HrToken) -> None:
+        # An empty token that holds no slot renders nothing; dropping it keeps the
+        # companions on either side adjacent for the merge.
+        if not tok[0] and not tok[2]:
+            return
+        if (sep and tok[0] and not tok[1] and len(parts) > first_companion
+                and parts[-1][0] and not parts[-1][1]):
+            last = parts[-1]
+            parts[-1] = (last[0] + hr_sep(last[0], sep) + tok[0], last[1], last[2], last[3])
+            return
+        parts.append(tok)
+
     for elem in branch.reveal:
         for c in entry.params:
             if param_key(c) != elem:
                 continue
+            # An internal flag renders no token, revealed or not; its value is
+            # derived on HR -> XML.
+            if c.hr_hidden:
+                break
             tok = _param_token(entry, c, compute_param_hr(entry, step, c))
             # Shape-routed: when the companion's token would read back as the other
             # value (a calculation that is one text literal reads as quoted text),
@@ -1398,7 +1427,7 @@ def render_discriminator_group_tokens(
                 and reads_as_quoted_literal_text(tok[0].strip()) != bool(c.hr_quoted)
             ):
                 parts.append((value, False, False, False))
-            parts.append(tok)
+            push_companion(tok)
             break
     return parts
 

@@ -258,6 +258,9 @@ export interface GrammarParam {
   // The delimiter an hrQuoted param is written with: null = curly `“…”` (default);
   // 'straight' = `"…"` where FileMaker shows straight quotes (Perform AppleScript).
   hrQuoteStyle: string | null;
+  // Governing discriminator: the separator FileMaker draws between the labeled
+  // companions a value reveals (Insert from Device `Camera: Back; Resolution: Full`).
+  hrRevealSeparator: string | null;
   omitWhenEmpty: boolean | null;
   discriminator: string | null;
   discriminatorValues: Record<string, DiscriminatorBranch>;
@@ -355,6 +358,7 @@ function buildParam(d: Record<string, unknown>): GrammarParam {
     hrLabeled: (d.hrLabeled as boolean) ?? null,
     hrQuoted: (d.hrQuoted as boolean) ?? null,
     hrQuoteStyle: (d.hrQuoteStyle as string) ?? null,
+    hrRevealSeparator: (d.hrRevealSeparator as string) ?? null,
     omitWhenEmpty: (d.omitWhenEmpty as boolean) ?? null,
     discriminator: (d.discriminator as string) ?? null,
     discriminatorValues,
@@ -784,7 +788,9 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
     if (param.flagStyle) {
       val = val && val !== (param.defaultValue || '') && label ? label : '';
     } else if (val && label) {
-      val = label + ': ' + val;
+      // P5.2d: the label may vary with a sibling enum's value (hrLabelWhen;
+      // Insert from Device's `Flash:` / `Flashlight:`).
+      val = effectiveHrLabel(entry, step, param) + ': ' + val;
     }
   } else if (ptype === 'calculation') {
     val = childText(base, 'Calculation');
@@ -1127,9 +1133,28 @@ function renderDiscriminatorGroupTokens(
   }
   // A revealed companion is positional like any bare param, so it keeps its empty
   // slot (the caller drops it unless a later positional follows).
+  // hrRevealSeparator: consecutive labeled (non-positional) companion tokens merge
+  // into one, joined the way FileMaker draws them; the parser splits on `;`
+  // regardless, so the merge is render-only.
+  const firstCompanion = parts.length;
+  const sep = param.hrRevealSeparator || '';
+  const pushCompanion = (tok: HrToken): void => {
+    // An empty token that holds no slot renders nothing; dropping it keeps the
+    // companions on either side adjacent for the merge.
+    if (!tok.text && !tok.holdsSlot) return;
+    const last = parts[parts.length - 1];
+    if (sep && tok.text && !tok.positional && parts.length > firstCompanion && last.text && !last.positional) {
+      last.text = last.text + hrSep(last.text, sep) + tok.text;
+      return;
+    }
+    parts.push(tok);
+  };
   for (const elem of branch.reveal) {
     for (const c of entry.params) {
       if (paramKey(c) !== elem) continue;
+      // An internal flag renders no token, revealed or not; its value is derived
+      // on HR→XML.
+      if (c.hrHidden) break;
       const tok = paramToken(entry, c, computeParamHr(entry, step, c));
       // Shape-routed: when the companion's token would read back as the other value
       // (a calculation that is one text literal reads as quoted text), name the
@@ -1141,7 +1166,7 @@ function renderDiscriminatorGroupTokens(
       ) {
         parts.push({ text: value, positional: false, holdsSlot: false });
       }
-      parts.push(tok);
+      pushCompanion(tok);
       break;
     }
   }

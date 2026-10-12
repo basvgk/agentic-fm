@@ -403,7 +403,7 @@ def test_repetition_renders_as_subscript_in_group_entries():
         '<InsertFrom value="Barcode"/><Text/><Field>$out</Field><DeviceOptions>'
         '<ScanFrom type="Field"><Field table="Invoices" id="31" repetition="2" name="Description"></Field>'
         '</ScanFrom><Barcodes types="4194303"/></DeviceOptions></Step></fmxmlsnippet>')
-    assert "source=Invoices::Description[2]" in device
+    assert "Scan from: Invoices::Description[2]" in device
 
 
 def test_repetition_renders_as_subscript_at_step_level():
@@ -433,8 +433,7 @@ def test_repetition_subscript_emits_attribute_in_group_entries():
     assert '<Field table="Invoices" id="0" repetition="2" name="Description"/>' in out
     out = _emit_hr(
         by_name,
-        "Insert from Device [ Type: Barcode ; Target: $out ; Device: "
-        "ScanFrom=(type=Field, source=Invoices::Description[2]), Barcodes=(types=4194303) ]")
+        "Insert from Device [ $out ; Type: Barcode ; Scan from: Invoices::Description[2] ]")
     assert '<Field table="Invoices" id="0" repetition="2" name="Description"/>' in out
 
 

@@ -164,6 +164,10 @@ export interface StepParam {
    *  curly `“…”`; `"straight"` is `"…"`, where FileMaker shows the literal
    *  straight-quoted (Perform AppleScript's text). */
   hrQuoteStyle?: string;
+  /** Governing discriminator: the separator FileMaker draws BETWEEN the labeled
+   *  companions a value reveals when it is not the step's ` ; ` (Insert from Device:
+   *  `Camera: Back; Resolution: Full; Flash: Auto`). Render-only. */
+  hrRevealSeparator?: string;
   /** Governing enum branches: enum value → what it reveals / how it renders */
   discriminatorValues?: Record<string, DiscriminatorValue>;
   /** String form: names the sibling element that governs this param's shape */

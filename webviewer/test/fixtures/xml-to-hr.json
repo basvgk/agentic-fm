@@ -272,7 +272,7 @@
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"61\" name=\"Insert Text\">\n    <SelectAll state=\"True\"/>\n    <Text>text content</Text>\n    <Field>$variable</Field>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Insert from Device.xml": {
-    "hr": "Insert from Device [ Type: Camera ; Device: Camera=(choice=Back), Resolution=(choice=Full), LightMode=(choice=Auto) ]",
+    "hr": "Insert from Device [ Type: Camera ; Camera: Back; Resolution: Full; Flash: Auto ]",
     "xml": "<?xml version=\"1.0\"?>\n<fmxmlsnippet type=\"FMObjectList\">\n  <Step enable=\"True\" id=\"161\" name=\"Insert from Device\">\n    <InsertFrom value=\"Camera\"/>\n    <DeviceOptions>\n      <Camera choice=\"Back\"/>\n      <Resolution choice=\"Full\"/>\n      <LightMode choice=\"Auto\"/>\n    </DeviceOptions>\n  </Step>\n</fmxmlsnippet>"
   },
   "fields/Insert from Index.xml": {

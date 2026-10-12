@@ -1528,14 +1528,86 @@ def convert_step_with_catalog(
         off_value = "False" if on_value == "True" else "True"
         implied_bool[gi] = on_value if any_content else off_value
 
+    # G10 nested attribute-bearing wrapper: the step-level rule one level down. An
+    # enum or boolean INSIDE a group whose xmlElement names a wrapper other params
+    # nest inside (parentElement "<its parent>/<it>") carries its value as that
+    # wrapper's attribute: Insert from Device writes <ScanFrom type="Field"><Field
+    # .../></ScanFrom> and <MaxDuration state="True"><Calculation>...</Calculation>
+    # </MaxDuration>. FileMaker serializes such a wrapper in every state, child or
+    # not (<ScanFrom type="Camera"/>, <MaxDuration state="False"/>), so it opens at
+    # its own slot and closes self-closed when no child follows. A governed one is
+    # gated like any companion; a hidden boolean takes its derived state.
+    wrapper_attr_by_path: dict[str, str] = {}
+    nested_wrapper_open: dict[int, str] = {}
+    wrapper_paths: set[str] = set()
+    for p in params:
+        prefix = ""
+        for seg in _split_path(p.parent_element or ""):
+            prefix = seg if not prefix else prefix + "/" + seg
+            wrapper_paths.add(prefix)
+    for pi, p in enumerate(params):
+        if not p.parent_element or p.type not in ("enum", "boolean"):
+            continue
+        if _split_element_attr(p.xml_element)[0]:
+            continue
+        path = p.parent_element + "/" + p.xml_element
+        if path not in wrapper_paths:
+            continue
+        skip_param[pi] = True
+        gov = governing_discriminator_for(entry, p)
+        if gov is not None:
+            dval = gov_discrim_value.get(gov.xml_element, gov.default_value or "")
+            if not value_reveals_companion(gov, dval, param_key(p)):
+                continue
+        if p.type == "boolean":
+            v = implied_bool.get(pi) or _resolve_bool_state(p, values[pi])
+        else:
+            v = _resolve_enum_xml_value(p, values[pi])
+        attr = p.xml_attr or ("state" if p.type == "boolean" else "value")
+        if v:
+            wrapper_attr_by_path[path] = " " + attr + '="' + esc_xml(v) + '"'
+        nested_wrapper_open[pi] = path
+
     prev_was_text_element = False
     open_groups: list[str] = []
     # Wrappers actually opened by an emitting child during the loop, so the
     # post-loop G10 standalone pass only injects for wrappers that never opened.
     wrapper_opened: set[str] = set()
+    # len(xml) right after each open wrapper's start tag: a wrapper closed with
+    # nothing written inside it closes self-closed (<ScanFrom type="Camera"/>).
+    open_tag_end: list[int] = []
+
+    def reconcile_wrappers(want: list[str]) -> None:
+        """Keep the shared prefix of the open-wrapper stack, close what we left,
+        open what is new (with any G10 attribute resolved for it)."""
+        nonlocal xml
+        common = 0
+        while common < len(open_groups) and common < len(want) and open_groups[common] == want[common]:
+            common += 1
+        for k in range(len(open_groups), common, -1):
+            if len(xml) == open_tag_end[k - 1]:
+                xml = xml[:-2] + "/>\n"
+            else:
+                xml += "    </" + open_groups[k - 1] + ">\n"
+        del open_groups[common:]
+        del open_tag_end[common:]
+        path = ""
+        for k, seg in enumerate(want):
+            path = seg if not path else path + "/" + seg
+            if k < common:
+                continue
+            wa = wrapper_attr_by_path.get(path, wrapper_attr.get(seg, ""))
+            xml += "    <" + seg + wa + ">\n"
+            open_groups.append(seg)
+            open_tag_end.append(len(xml))
+            wrapper_opened.add(seg)
 
     for pi, param in enumerate(params):
         hr_value = values[pi]
+        if pi in nested_wrapper_open:
+            reconcile_wrappers(_split_path(nested_wrapper_open[pi]))
+            prev_was_text_element = False
+            continue
         if skip_param[pi]:
             continue
 
@@ -1731,24 +1803,12 @@ def convert_step_with_catalog(
             continue
 
         # Reconcile the open-wrapper stack with this param's parentElement path.
-        want = _split_path(param.parent_element or "")
-        common = 0
-        while common < len(open_groups) and common < len(want) and open_groups[common] == want[common]:
-            common += 1
-        for k in range(len(open_groups), common, -1):
-            xml += "    </" + open_groups[k - 1] + ">\n"
-        del open_groups[common:]
-        for k in range(common, len(want)):
-            wa = wrapper_attr.get(want[k], "")
-            xml += "    <" + want[k] + wa + ">\n"
-            open_groups.append(want[k])
-            wrapper_opened.add(want[k])
+        reconcile_wrappers(_split_path(param.parent_element or ""))
 
         xml += piece + "\n"
         prev_was_text_element = is_text_element
 
-    for k in range(len(open_groups), 0, -1):
-        xml += "    </" + open_groups[k - 1] + ">\n"
+    reconcile_wrappers([])
 
     # G10 non-default standalone survival: any G10 wrapper whose enum carried a
     # non-default value but whose lazy-open group never fired (no child emitted)

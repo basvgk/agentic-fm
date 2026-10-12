@@ -67,7 +67,7 @@
   "fields/Insert PDF.xml": "Insert PDF [ “$path” ]",
   "fields/Insert Picture.xml": "Insert Picture [ “$path” ]",
   "fields/Insert Text.xml": "Insert Text [ Select ; Target: $variable ; “text content” ]",
-  "fields/Insert from Device.xml": "Insert from Device [ Type: Camera ; Device: Camera=(choice=Back), Resolution=(choice=Full), LightMode=(choice=Auto) ]",
+  "fields/Insert from Device.xml": "Insert from Device [ Type: Camera ; Camera: Back; Resolution: Full; Flash: Auto ]",
   "fields/Insert from Index.xml": "Insert from Index [ Select ]",
   "fields/Insert from Last Visited.xml": "Insert from Last Visited [ Select ]",
   "fields/Insert from URL.xml": "Insert from URL [ Select ; With dialog: Off ; Target: $file ; $url ; Verify SSL Certificates ; cURL options: \"--flags\" ]",

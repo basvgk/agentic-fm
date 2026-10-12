@@ -1299,12 +1299,86 @@ export function convertStepWithCatalog(
     impliedBool.set(gi, anyContent ? onValue : offValue);
   }
 
+  // G10 nested attribute-bearing wrapper: the step-level rule one level down. An
+  // enum or boolean INSIDE a group whose xmlElement names a wrapper other params
+  // nest inside (parentElement "<its parent>/<it>") carries its value as that
+  // wrapper's attribute: Insert from Device writes <ScanFrom type="Field"><Field
+  // …/></ScanFrom> and <MaxDuration state="True"><Calculation>…</Calculation>
+  // </MaxDuration>. FileMaker serializes such a wrapper in every state, child or
+  // not (<ScanFrom type="Camera"/>, <MaxDuration state="False"/>), so it opens at
+  // its own slot and closes self-closed when no child follows. A governed one is
+  // gated like any companion; a hidden boolean takes its derived state.
+  const wrapperAttrByPath = new Map<string, string>();
+  const nestedWrapperOpen = new Map<number, string>();
+  {
+    const wrapperPaths = new Set<string>();
+    for (const p of params) {
+      let prefix = '';
+      for (const seg of splitPath(p.parentElement ?? '')) {
+        prefix = prefix ? prefix + '/' + seg : seg;
+        wrapperPaths.add(prefix);
+      }
+    }
+    for (let pi = 0; pi < params.length; pi++) {
+      const p = params[pi];
+      if (!p.parentElement || (p.type !== 'enum' && p.type !== 'boolean')) continue;
+      if (splitElementAttr(p.xmlElement)[0]) continue;
+      const path = p.parentElement + '/' + p.xmlElement;
+      if (!wrapperPaths.has(path)) continue;
+      skipParam[pi] = true;
+      const gov = governingDiscriminatorFor(entry, p);
+      if (gov) {
+        const dval = govDiscrimValue.get(gov.xmlElement) ?? (gov.defaultValue ?? '');
+        if (!valueRevealsCompanion(gov, dval, paramKey(p))) continue;
+      }
+      const v =
+        p.type === 'boolean'
+          ? (impliedBool.get(pi) ?? resolveBoolState(p, values[pi]))
+          : resolveEnumXmlValue(p, values[pi]);
+      const attr = p.xmlAttr || (p.type === 'boolean' ? 'state' : 'value');
+      if (v) wrapperAttrByPath.set(path, ` ${attr}="${escXml(v)}"`);
+      nestedWrapperOpen.set(pi, path);
+    }
+  }
+
   let prevWasTextElement = false;
   const openGroups: string[] = [];
+  // xml.length right after each open wrapper's start tag: a wrapper closed with
+  // nothing written inside it closes self-closed (<ScanFrom type="Camera"/>).
+  const openTagEnd: number[] = [];
+  // Keep the shared prefix of the open-wrapper stack, close what we left, open what
+  // is new (with any G10 attribute resolved for it).
+  const reconcileWrappers = (want: string[]): void => {
+    let common = 0;
+    while (common < openGroups.length && common < want.length && openGroups[common] === want[common]) {
+      common++;
+    }
+    for (let k = openGroups.length; k > common; k--) {
+      if (xml.length === openTagEnd[k - 1]) xml = xml.slice(0, -2) + '/>\n';
+      else xml += `    </${openGroups[k - 1]}>\n`;
+    }
+    openGroups.length = common;
+    openTagEnd.length = common;
+    let path = '';
+    for (let k = 0; k < want.length; k++) {
+      path = path ? path + '/' + want[k] : want[k];
+      if (k < common) continue;
+      const wa = wrapperAttrByPath.get(path) ?? wrapperAttr.get(want[k]) ?? '';
+      xml += `    <${want[k]}${wa}>\n`;
+      openGroups.push(want[k]);
+      openTagEnd.push(xml.length);
+    }
+  };
 
   for (let pi = 0; pi < params.length; pi++) {
     const param = params[pi];
     const hrValue = values[pi];
+    const nested = nestedWrapperOpen.get(pi);
+    if (nested !== undefined) {
+      reconcileWrappers(splitPath(nested));
+      prevWasTextElement = false;
+      continue;
+    }
     if (skipParam[pi]) continue;
 
     const isTextElement =
@@ -1505,28 +1579,13 @@ export function convertStepWithCatalog(
     if (piece === '') continue;
 
     // Reconcile the open-wrapper stack with this param's parentElement path.
-    const want = splitPath(param.parentElement ?? '');
-    let common = 0;
-    while (common < openGroups.length && common < want.length && openGroups[common] === want[common]) {
-      common++;
-    }
-    for (let k = openGroups.length; k > common; k--) {
-      xml += `    </${openGroups[k - 1]}>\n`;
-    }
-    openGroups.length = common;
-    for (let k = common; k < want.length; k++) {
-      const wa = wrapperAttr.get(want[k]) ?? '';
-      xml += `    <${want[k]}${wa}>\n`;
-      openGroups.push(want[k]);
-    }
+    reconcileWrappers(splitPath(param.parentElement ?? ''));
 
     xml += piece + '\n';
     prevWasTextElement = isTextElement;
   }
 
-  for (let k = openGroups.length; k > 0; k--) {
-    xml += `    </${openGroups[k - 1]}>\n`;
-  }
+  reconcileWrappers([]);
 
   xml += '  </Step>';
   return xml;
