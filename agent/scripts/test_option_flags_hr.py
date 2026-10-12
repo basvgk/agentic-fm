@@ -58,7 +58,7 @@ def _flags(step: str) -> dict[str, str]:
 
 
 def _state(xml: str, el: str) -> str | None:
-    m = re.search(r'<%s state="(\w+)"' % el, xml)
+    m = re.search(rf'<{el} state="(\w+)"', xml)
     return m.group(1) if m else None
 
 

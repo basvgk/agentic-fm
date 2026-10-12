@@ -1211,7 +1211,7 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
         type_attr = param.raw.get("typeAttr")
         if type_attr:
             field_node = base.find(
-                "Field[@%s='%s']" % (type_attr, param.raw.get("typeValue", ""))
+                "Field[@{}='{}']".format(type_attr, param.raw.get("typeValue", ""))
             )
         else:
             field_node = base.find(param.xml_element)
@@ -1242,7 +1242,7 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
         type_attr = param.raw.get("typeAttr")
         if type_attr:
             field_node = base.find(
-                "Field[@%s='%s']" % (type_attr, param.raw.get("typeValue", ""))
+                "Field[@{}='{}']".format(type_attr, param.raw.get("typeValue", ""))
             )
         else:
             field_node = base.find(param.xml_element)

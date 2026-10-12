@@ -68,9 +68,9 @@ from catalog_grammar import (
     hr_param_order,
     is_driven_discriminator,
     is_governing_discriminator,
-    projection_owner,
     param_key,
     positional_token_fits_param,
+    projection_owner,
     renders_bare_in_hr,
     shape_routed_values,
     value_reveals_companion,
@@ -441,7 +441,7 @@ def _repetition_calc_sibling(calc: str, indent: str) -> str:
 
 
 def _field_ref_xml(
-    resolver: "IdResolver",
+    resolver: IdResolver,
     ref: str,
     extra_attrs: str = "",
     indent: str = "    ",
@@ -969,7 +969,7 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
         kind = _raw_str(pos_field, "kind")
         cap = int(param.raw.get("repeatCount", 0) or 0)
 
-        def fits(tok: str) -> bool:
+        def fits(tok: str, kind: str = kind) -> bool:
             if kind not in ("fieldOrVariable", "field"):
                 return True
             if not tok or tok[0] == '"':
