@@ -34,6 +34,8 @@ import {
   type GrammarEntry,
   type GrammarParam,
   paramKey,
+  groupFieldsOf,
+  projectionOwner,
   isGoverningDiscriminator,
   isDrivenDiscriminator,
   governingDiscriminatorFor,
@@ -867,6 +869,9 @@ function matchParamValues(entry: GrammarEntry, hrParams: string[]): string[] {
   for (let gi = 0; gi < entry.params.length; gi++) {
     const gate = entry.params[gi];
     if (gate.type !== 'enum' || values[gi] !== '') continue;
+    // A display projection's value comes from its token or the group body, never
+    // from its companions (FileMaker's default PDF step has no <PDFSaveType>).
+    if (groupFieldsOf(gate).length > 0) continue;
     const gateKey = paramKey(gate);
     let chosen = '';
     let ambiguous = false;
@@ -881,6 +886,26 @@ function matchParamValues(entry: GrammarEntry, hrParams: string[]): string[] {
       }
     }
     if (!ambiguous && chosen !== '') values[gi] = chosen;
+  }
+
+  // hrEmptySlotWith: an empty token at a param's slot is FileMaker drawing the
+  // sibling it stands for (Save Records as Excel `With dialog: Off ; ; Records
+  // being browsed` is a step with a <Profile> and no path). An attrGroup with no
+  // token of its own takes a body of its attribute defaults.
+  for (let pi = 0; pi < entry.params.length; pi++) {
+    const slotWith = (entry.params[pi].raw.hrEmptySlotWith as string) ?? '';
+    if (!slotWith || !gotToken[pi] || trim(values[pi])) continue;
+    for (let qi = 0; qi < entry.params.length; qi++) {
+      const q = entry.params[qi];
+      if (paramKey(q) !== slotWith) continue;
+      if (q.type === 'attrGroup' && !trim(values[qi])) {
+        values[qi] = rawArr(q.raw, 'fields')
+          .filter((f) => rawStr(f, 'kind') === 'attr' && !rawBool(f, 'optional') && rawStr(f, 'defaultValue'))
+          .map((f) => rawStr(f, 'key') + '=' + groupQuoteValue(rawStr(f, 'defaultValue')))
+          .join(', ');
+      }
+      break;
+    }
   }
 
   return values;
@@ -1079,12 +1104,15 @@ function emitRepeatGroup(param: GrammarParam, hrValue: string, resolver: IdResol
   return out;
 }
 
-function emitAttrGroup(param: GrammarParam, hrValue: string, resolver: IdResolver): string {
-  if (!trim(hrValue) && !param.hrHidden) return '';
-  return emitGroupElement(
-    param.xmlElement, rawArr(param.raw, 'fields'),
-    parseGroupKV(hrValue), '    ', resolver,
-  );
+function emitAttrGroup(
+  param: GrammarParam, hrValue: string, resolver: IdResolver, projected?: Map<string, string>,
+): string {
+  // `projected`: fields a display projection (groupFields) read from its own
+  // token, keyed lower-case; they override the body's and make the group present.
+  if (!trim(hrValue) && !param.hrHidden && !(projected && projected.size > 0)) return '';
+  const kv = parseGroupKV(hrValue);
+  for (const [k, v] of projected ?? []) kv.set(k, v);
+  return emitGroupElement(param.xmlElement, rawArr(param.raw, 'fields'), kv, '    ', resolver);
 }
 
 // ── bitmaskGroup ─────────────────────────────────────────────────────────────
@@ -1256,6 +1284,28 @@ export function convertStepWithCatalog(
     if (v === '') { skipParam[pi] = true; continue; }
     elementAttr.set(elem, (elementAttr.get(elem) ?? '') + ` ${attr}="${escXml(v)}"`);
     skipParam[pi] = true;
+  }
+
+  // attrGroup display projection (groupFields): a projection owns no element;
+  // its token's value (resolved back through hrEnumValues) is split over the
+  // fields it projects and handed to the owning group's emit.
+  const projectedFields = new Map<number, Map<string, string>>();
+  for (let pi = 0; pi < params.length; pi++) {
+    const p = params[pi];
+    const gf = groupFieldsOf(p);
+    if (gf.length === 0) continue;
+    skipParam[pi] = true;
+    if (!trim(values[pi])) continue;
+    const owner = projectionOwner(entry, p);
+    if (owner === null) continue;
+    const oi = params.indexOf(owner);
+    const parts = resolveEnumXmlValue(p, trim(values[pi])).split('|');
+    gf.forEach((key, i) => {
+      const part = parts[i] ?? '';
+      if (!part) return;
+      if (!projectedFields.has(oi)) projectedFields.set(oi, new Map());
+      projectedFields.get(oi)!.set(lowerKey(key), part);
+    });
   }
 
   // Discriminator-driven layout: pre-resolve destination + <Layout> piece.
@@ -1470,7 +1520,7 @@ export function convertStepWithCatalog(
         piece = `    <Calculation>${cdata(hrValue)}</Calculation>`;
       }
     } else if (param.type === 'attrGroup') {
-      piece = emitAttrGroup(param, hrValue, resolver);
+      piece = emitAttrGroup(param, hrValue, resolver, projectedFields.get(pi));
     } else if (param.type === 'bitmaskGroup') {
       piece = emitBitmaskGroup(param, hrValue);
     } else if (param.type === 'repeatGroup') {

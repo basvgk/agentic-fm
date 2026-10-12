@@ -68,6 +68,7 @@ from catalog_grammar import (
     hr_param_order,
     is_driven_discriminator,
     is_governing_discriminator,
+    projection_owner,
     param_key,
     positional_token_fits_param,
     renders_bare_in_hr,
@@ -1007,6 +1008,11 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
     for gi, gate in enumerate(entry.params):
         if gate.type != "enum" or values[gi] != "":
             continue
+        # A display projection's value comes from its token or the group body,
+        # never from its companions (FileMaker's default PDF step has no
+        # <PDFSaveType>).
+        if gate.group_fields:
+            continue
         gate_key = param_key(gate)
         chosen = ""
         ambiguous = False
@@ -1026,6 +1032,25 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
                     break
         if not ambiguous and chosen:
             values[gi] = chosen
+
+    # hrEmptySlotWith: an empty token at a param's slot is FileMaker drawing the
+    # sibling it stands for (Save Records as Excel ``With dialog: Off ; ; Records
+    # being browsed`` is a step with a <Profile> and no path). An attrGroup with
+    # no token of its own takes a body of its attribute defaults.
+    for pi, param in enumerate(entry.params):
+        if not param.hr_empty_slot_with or not got_token[pi] or _trim(values[pi]):
+            continue
+        for qi, q in enumerate(entry.params):
+            if param_key(q) != param.hr_empty_slot_with:
+                continue
+            if q.type == "attrGroup" and not _trim(values[qi]):
+                values[qi] = ", ".join(
+                    _raw_str(f, "key") + "=" + _group_quote_value(_raw_str(f, "defaultValue"))
+                    for f in _raw_arr(q.raw, "fields")
+                    if _raw_str(f, "kind") == "attr" and not _raw_bool(f, "optional")
+                    and _raw_str(f, "defaultValue")
+                )
+            break
 
     return values
 
@@ -1266,12 +1291,16 @@ def _emit_repeat_group(param: StepParam, hr_value: str, resolver: IdResolver) ->
     return out
 
 
-def _emit_attr_group(param: StepParam, hr_value: str, resolver: IdResolver) -> str:
-    if not _trim(hr_value) and not param.hr_hidden:
+def _emit_attr_group(
+    param: StepParam, hr_value: str, resolver: IdResolver, projected: dict[str, str] | None = None
+) -> str:
+    # ``projected``: fields a display projection (groupFields) read from its own
+    # token, keyed lower-case; they override the body's and make the group present.
+    if not _trim(hr_value) and not param.hr_hidden and not projected:
         return ""
-    return _emit_group_element(
-        param.xml_element, _raw_arr(param.raw, "fields"), _parse_group_kv(hr_value), "    ", resolver
-    )
+    kv = _parse_group_kv(hr_value)
+    kv.update(projected or {})
+    return _emit_group_element(param.xml_element, _raw_arr(param.raw, "fields"), kv, "    ", resolver)
 
 
 # ── bitmaskGroup ─────────────────────────────────────────────────────────────
@@ -1484,6 +1513,25 @@ def convert_step_with_catalog(
         element_attr[elem] = element_attr.get(elem, "") + " " + attr + '="' + esc_xml(v) + '"'
         skip_param[pi] = True
 
+    # attrGroup display projection (groupFields): a projection owns no element;
+    # its token's value (resolved back through hrEnumValues) is split over the
+    # fields it projects and handed to the owning group's emit.
+    projected_fields: dict[int, dict[str, str]] = {}
+    for pi, p in enumerate(params):
+        if not p.group_fields:
+            continue
+        skip_param[pi] = True
+        if not _trim(values[pi]):
+            continue
+        owner = projection_owner(entry, p)
+        if owner is None:
+            continue
+        oi = next(i for i, q in enumerate(params) if q is owner)
+        parts = _resolve_enum_xml_value(p, _trim(values[pi])).split("|")
+        for key, part in zip(p.group_fields, parts):
+            if part:
+                projected_fields.setdefault(oi, {})[_lower_key(key)] = part
+
     # Discriminator-driven layout: pre-resolve destination + <Layout> piece.
     discrim_value: dict[str, str] = {}
     layout_piece: dict[int, str] = {}
@@ -1690,7 +1738,7 @@ def convert_step_with_catalog(
             if not param.omit_when_empty or _trim(hr_value):
                 piece = "    <Calculation>" + cdata(hr_value) + "</Calculation>"
         elif param.type == "attrGroup":
-            piece = _emit_attr_group(param, hr_value, resolver)
+            piece = _emit_attr_group(param, hr_value, resolver, projected_fields.get(pi))
         elif param.type == "bitmaskGroup":
             piece = _emit_bitmask_group(param, hr_value)
         elif param.type == "repeatGroup":

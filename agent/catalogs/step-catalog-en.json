@@ -2441,15 +2441,19 @@
           { "key": "FieldNameRow", "kind": "attr", "xmlAttr": "FieldNameRow", "defaultValue": "-1" },
           { "key": "DataType", "kind": "attr", "xmlAttr": "DataType", "defaultValue": "TABS" }
         ],
-        "notes": "Export format profile. DataType: TABS|COMS|DBF |MRGE|HTML|FMPR|XML |XLSX (see shared-enums.md). FieldDelimiter may be a tab (whitespace-quoted in HR).",
-        "hrSlot": 7
+        "notes": "Export format profile. DataType: TABS|COMS|DBF |MRGE|HTML|FMPR|XML |XLSX (see shared-enums.md). FieldDelimiter may be a tab (whitespace-quoted in HR). FileMaker's line never draws it (fmLineHidden; FM 26.0.3).",
+        "fmLineHidden": true,
+        "hrSlot": 8
       },
       {
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
         "hrQuoted": true,
+        "omitWhenEmpty": true,
+        "hrEmptySlotWith": "Profile",
         "required": false,
+        "note": "With no path FileMaker writes no <UniversalPathList>; it then draws an empty slot, even last, exactly when the step has a <Profile>: `Create folders: On ; ; Unicode (UTF-8)`, `Create folders: On ; ]` (hrEmptySlotWith; FM 26.0.3). An empty <UniversalPathList></UniversalPathList> is not the same step: FileMaker then draws no slot.",
         "hrSlot": 3
       },
       {
@@ -2462,7 +2466,31 @@
           { "key": "FormatUsingCurrentLayout", "kind": "attr", "xmlAttr": "FormatUsingCurrentLayout", "defaultValue": "False" },
           { "key": "CharacterSet", "kind": "attr", "xmlAttr": "CharacterSet", "defaultValue": "UTF-8" }
         ],
-        "notes": "FormatUsingCurrentLayout is the 'Apply current layout's data formatting' checkbox. CharacterSet: see shared-enums.md.",
+        "notes": "FormatUsingCurrentLayout is the 'Apply current layout's data formatting' checkbox. CharacterSet: see shared-enums.md. FileMaker draws only the character set, bare, and only when Restore is on (the ExportOptions#CharacterSet projection below); the body prints the rest in the converter's HR and never on FileMaker's line (fmLineHidden; FM 26.0.3).",
+        "fmLineHidden": true,
+        "hrSlot": 7
+      },
+      {
+        "xmlElement": "ExportOptions",
+        "groupFields": ["CharacterSet"],
+        "type": "enum",
+        "hrLabel": null,
+        "visibleWhen": { "param": "Restore", "values": ["True"] },
+        "required": false,
+        "defaultValue": "UTF-8",
+        "enumValues": ["UTF-8", "Unicode", "Windows", "DOS", "Macintosh", "ShiftJIS", "ChineseSimplified", "ChineseTraditional", "EUC-KR"],
+        "hrEnumValues": {
+          "UTF-8": "Unicode (UTF-8)",
+          "Unicode": "Unicode (UTF-16)",
+          "Windows": "Windows (ANSI)",
+          "DOS": "ASCII (DOS)",
+          "Macintosh": "Macintosh",
+          "ShiftJIS": "Japanese (Shift-JIS)",
+          "ChineseSimplified": "Simplified Chinese (GB)",
+          "ChineseTraditional": "Traditional Chinese (Big-5)",
+          "EUC-KR": "Korean (EUC-KR)"
+        },
+        "note": "Display projection of ExportOptions' CharacterSet (groupFields): FileMaker draws the stored character set bare, last, only when Restore is on (`… ; Create email ; Unicode (UTF-8) ]`, all nine values measured, FM 26.0.3). Reading FileMaker's token back keeps the charset, and its presence derives Restore.",
         "hrSlot": 6
       },
       {
@@ -2471,8 +2499,9 @@
         "hrLabel": "Export fields",
         "entryElement": "ExportEntry",
         "required": false,
-        "notes": "fieldList (Cluster 1): ordered export field list. Each entry <ExportEntry><Field/></ExportEntry>. HR token `Export fields: Table::Field, ...`.",
-        "hrSlot": 8
+        "notes": "fieldList (Cluster 1): ordered export field list. Each entry <ExportEntry><Field/></ExportEntry>. HR token `Export fields: Table::Field, ...`. FileMaker's line never draws it (fmLineHidden; FM 26.0.3).",
+        "fmLineHidden": true,
+        "hrSlot": 9
       },
       {
         "xmlElement": "SummaryFields",
@@ -2481,8 +2510,9 @@
         "entryAttr": "GroupByFieldIsSelected",
         "entryAttrDefault": "True",
         "required": false,
-        "notes": "fieldList (Cluster 1): group-by summary fields. Each entry is a direct <Field GroupByFieldIsSelected=\"True\"/>. HR token `Summary fields: Table::Field=True, ...`.",
-        "hrSlot": 9
+        "notes": "fieldList (Cluster 1): group-by summary fields. Each entry is a direct <Field GroupByFieldIsSelected=\"True\"/>. HR token `Summary fields: Table::Field=True, ...`. FileMaker's line never draws it (fmLineHidden; FM 26.0.3).",
+        "fmLineHidden": true,
+        "hrSlot": 10
       }
     ],
     "hrSignature": "Export Records [ With dialog: {On|Off} ; Create folders: {On|Off} ; {path} ; Automatically open ; Create email ; {characterSet} ]",
@@ -7297,7 +7327,8 @@
           { "key": "FieldNameRow", "kind": "attr", "xmlAttr": "FieldNameRow", "defaultValue": "-1" },
           { "key": "IsPredefined", "kind": "attr", "xmlAttr": "IsPredefined", "defaultValue": "-1" }
         ],
-        "note": "attrGroup: <Profile> carries the Excel export format descriptor (DataType XLXE, tab FieldDelimiter, field-name row). Same shape as Execute SQL's <Profile> attrGroup; a tab delimiter is auto-quoted in the HR token (NeedsGroupQuote).",
+        "note": "attrGroup: <Profile> carries the Excel export format descriptor (DataType XLXE, tab FieldDelimiter, field-name row). Same shape as Execute SQL's <Profile> attrGroup; a tab delimiter is auto-quoted in the HR token (NeedsGroupQuote). FileMaker's line never draws it (fmLineHidden; FM 26.0.3).",
+        "fmLineHidden": true,
         "hrSlot": 7
       },
       {
@@ -7306,7 +7337,9 @@
         "hrLabel": "Output path",
         "hrQuoted": true,
         "required": false,
-        "note": "Output file path. If omitted, Save Records as Excel dialog is shown.",
+        "omitWhenEmpty": true,
+        "hrEmptySlotWith": "Profile",
+        "note": "Output file path. If omitted, Save Records as Excel dialog is shown. With no path FileMaker writes no <UniversalPathList>; it then draws an empty slot exactly when the step has a <Profile> (`With dialog: Off ; ; Records being browsed`, hrEmptySlotWith; FM 26.0.3); an empty <UniversalPathList></UniversalPathList> is not the same step (FileMaker then draws neither the slot nor the option flags).",
         "hrSlot": 2
       },
       {
@@ -7315,6 +7348,8 @@
         "hrLabel": "Worksheet",
         "wrapperElement": "WorkSheet",
         "required": false,
+        "fmLineHidden": true,
+        "note": "FileMaker stores it and never draws it on its line (fmLineHidden; FM 26.0.3); the converter's HR prints it so the step round-trips.",
         "hrSlot": 8
       },
       {
@@ -7323,6 +7358,8 @@
         "hrLabel": "Title",
         "wrapperElement": "Title",
         "required": false,
+        "fmLineHidden": true,
+        "note": "FileMaker stores it and never draws it on its line (fmLineHidden; FM 26.0.3); the converter's HR prints it so the step round-trips.",
         "hrSlot": 9
       },
       {
@@ -7331,6 +7368,8 @@
         "hrLabel": "Subject",
         "wrapperElement": "Subject",
         "required": false,
+        "fmLineHidden": true,
+        "note": "FileMaker stores it and never draws it on its line (fmLineHidden; FM 26.0.3); the converter's HR prints it so the step round-trips.",
         "hrSlot": 10
       },
       {
@@ -7339,6 +7378,8 @@
         "hrLabel": "Author",
         "wrapperElement": "Author",
         "required": false,
+        "fmLineHidden": true,
+        "note": "FileMaker stores it and never draws it on its line (fmLineHidden; FM 26.0.3); the converter's HR prints it so the step round-trips.",
         "hrSlot": 11
       },
       {
@@ -7366,6 +7407,8 @@
           "True": "On",
           "False": "Off"
         },
+        "fmLineHidden": true,
+        "note": "FileMaker stores it and never draws it on its line, in either state (fmLineHidden; FM 26.0.3).",
         "hrSlot": 12
       }
     ],
@@ -7530,7 +7573,8 @@
           "True": "Off",
           "False": "On"
         },
-        "hrSlot": 4
+        "visibleWhen": { "param": "PDFOptions#PDFSaveType", "values": ["File"] },
+        "hrSlot": 5
       },
       {
         "xmlElement": "Option",
@@ -7541,7 +7585,8 @@
         "defaultValue": "False",
         "note": "state=True appends to existing PDF instead of creating/overwriting. Bare flag: FileMaker draws 'Append' before the path when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3).",
         "flagStyle": true,
-        "hrSlot": 1
+        "visibleWhen": { "param": "PDFOptions#PDFSaveType", "values": ["File"] },
+        "hrSlot": 2
       },
       {
         "xmlElement": "CreateDirectories",
@@ -7554,7 +7599,8 @@
           "True": "On",
           "False": "Off"
         },
-        "hrSlot": 3
+        "visibleWhen": { "param": "PDFOptions#PDFSaveType", "values": ["File"] },
+        "hrSlot": 4
       },
       {
         "xmlElement": "Restore",
@@ -7575,8 +7621,9 @@
         "required": false,
         "defaultValue": "False",
         "flagStyle": true,
-        "hrSlot": 5,
-        "note": "Bare flag: FileMaker draws 'Automatically open' after 'With dialog' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
+        "hrSlot": 6,
+        "visibleWhen": { "param": "PDFOptions#PDFSaveType", "values": ["File"] },
+        "note": "Bare flag: FileMaker draws 'Automatically open' after 'With dialog' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). Hidden, like every file option, when Save to is Target. With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
       },
       {
         "xmlElement": "CreateEmail",
@@ -7586,8 +7633,9 @@
         "required": false,
         "defaultValue": "False",
         "flagStyle": true,
-        "hrSlot": 6,
-        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
+        "hrSlot": 7,
+        "visibleWhen": { "param": "PDFOptions#PDFSaveType", "values": ["File"] },
+        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). Hidden, like every file option, when Save to is Target. With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
       },
       {
         "xmlElement": "UniversalPathList",
@@ -7596,8 +7644,9 @@
         "hrQuoted": true,
         "omitWhenEmpty": true,
         "required": false,
-        "note": "Output file path. If omitted, Save Records as PDF dialog is shown.",
-        "hrSlot": 2
+        "visibleWhen": { "param": "PDFOptions#PDFSaveType", "values": ["File"] },
+        "note": "Output file path. If omitted, Save Records as PDF dialog is shown. With no path FileMaker draws no slot (`Save to: File ; Create folders: On`); with Save to: Target it draws no path, Append, Create folders, With dialog or option flags although it keeps them (visibleWhen; FM 26.0.3).",
+        "hrSlot": 3
       },
       {
         "xmlElement": "Calculation",
@@ -7605,16 +7654,18 @@
         "hrLabel": "Saved label",
         "omitWhenEmpty": true,
         "required": false,
-        "note": "Stored label/title for the PDF specification. Only present when Restore state=True.",
-        "hrSlot": 7
+        "fmLineHidden": true,
+        "note": "Stored label/title for the PDF specification. FileMaker writes it from the document Title and never draws it on its line (fmLineHidden; FM 26.0.3).",
+        "hrSlot": 10
       },
       {
         "xmlElement": "Field",
         "type": "fieldOrVariable",
-        "hrLabel": "Save to target",
+        "hrLabel": "Target",
         "textMarker": true,
         "required": false,
-        "note": "Container field or variable the PDF is saved into; present only when PDFSaveType=Target. FM marks it with a leading empty <Text/> for both the field-ref and variable forms.",
+        "visibleWhen": { "param": "PDFOptions#PDFSaveType", "values": ["Target"] },
+        "note": "Container field or variable the PDF is saved into; present only when PDFSaveType=Target. FileMaker draws it labeled after Save to (`Save to: Target ; Target: $pdf`; FM 26.0.3). FM accepts a leading empty <Text/> marker on both the field-ref and variable forms; its copy-back keeps it only on the variable form.",
         "hrSlot": 8
       },
       {
@@ -7622,7 +7673,8 @@
         "type": "attrGroup",
         "hrLabel": "Records",
         "required": false,
-        "note": "PDF options subtree shared with Create PDF. source (always) + appearance (BlankRecord only) attrs; PDFSaveType text child; Document/Security/View sub-groups.",
+        "fmLineHidden": true,
+        "note": "PDF options subtree shared with Create PDF. source (always) + appearance (BlankRecord only) attrs; PDFSaveType text child; Document/Security/View sub-groups. FileMaker draws PDFSaveType (`Save to: File`) and source + appearance (`Records being browsed`, `Blank record, with boxes`) as tokens of their own (the PDFOptions#PDFSaveType and PDFOptions#source projections below) and never draws the rest (fmLineHidden; FM 26.0.3).",
         "fields": [
           { "key": "source", "kind": "attr", "xmlAttr": "source", "defaultValue": "RecordsBeingBrowsed" },
           { "key": "appearance", "kind": "attr", "xmlAttr": "appearance", "optional": true },
@@ -7655,10 +7707,39 @@
             { "key": "Show", "kind": "attr", "xmlAttr": "show", "defaultValue": "PagesPanelAndPage" }
           ] }
         ],
+        "hrSlot": 11
+      },
+      {
+        "xmlElement": "PDFOptions",
+        "groupFields": ["PDFSaveType"],
+        "type": "enum",
+        "hrLabel": "Save to",
+        "required": false,
+        "defaultValue": "File",
+        "enumValues": ["File", "Target"],
+        "note": "Display projection of PDFOptions' PDFSaveType (groupFields): FileMaker draws `Save to: File` / `Save to: Target` right after Restore (FM 26.0.3). Gates the file options and the Target field.",
+        "hrSlot": 1
+      },
+      {
+        "xmlElement": "PDFOptions",
+        "groupFields": ["source", "appearance"],
+        "type": "enum",
+        "hrLabel": null,
+        "required": false,
+        "defaultValue": "RecordsBeingBrowsed",
+        "enumValues": ["RecordsBeingBrowsed", "CurrentRecord", "BlankRecord|AsFormatted", "BlankRecord|WithBoxes", "BlankRecord|WithUnderlines"],
+        "hrEnumValues": {
+          "RecordsBeingBrowsed": "Records being browsed",
+          "CurrentRecord": "Current record",
+          "BlankRecord|AsFormatted": "Blank record, as formatted",
+          "BlankRecord|WithBoxes": "Blank record, with boxes",
+          "BlankRecord|WithUnderlines": "Blank record, with underlines"
+        },
+        "note": "Display projection of PDFOptions' source + appearance (groupFields, joined `|`): FileMaker draws the records source bare and last (`Records being browsed`, `Blank record, with boxes`; FM 26.0.3). Not drawn when Restore is off and no path is set with Save to: File, a FileMaker display quirk the converter does not reproduce.",
         "hrSlot": 9
       }
     ],
-    "hrSignature": "[ <Restore> ; <Append> ; <path> ; Create folders: <On/Off> ; With dialog: <On/Off> ; <Automatically open> ; <Create email> ; Saved label: <calc> ; Records: source=<token>, PDFSaveType=<token>, Document=( … ), Security=( … ), View=( … ) ]",
+    "hrSignature": "[ <Restore> ; Save to: <File/Target> ; <Append> ; <path> ; Create folders: <On/Off> ; With dialog: <On/Off> ; <Automatically open> ; <Create email> ; Target: <field or $variable> ; <Records being browsed/Current record/Blank record, …> ; Saved label: <calc> ; Records: Document=( … ), Security=( … ), View=( … ) ]",
     "blockPair": null,
     "status": "complete",
     "helpUrl": "https://help.claris.com/en/pro-help/content/save-records-as-pdf.html"

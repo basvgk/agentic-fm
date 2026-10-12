@@ -312,8 +312,57 @@ export function blockIndent(name: string): { closeBefore: boolean; openAfter: bo
  * `xmlElement`.
  */
 export function paramKey(p: GrammarParam): string {
+  const gf = groupFieldsOf(p);
+  // An attrGroup display projection shares its group's xmlElement.
+  if (gf.length > 0) return p.xmlElement + '#' + gf[0];
   if (p.type === 'namedCalc' && p.wrapperElement) return p.wrapperElement;
   return p.xmlElement;
+}
+
+/**
+ * attrGroup display projection (`groupFields`): the top-level fields (attr /
+ * text) of the sibling attrGroup sharing this param's xmlElement that this enum
+ * is a view of. FileMaker draws Export Records' stored character set
+ * (`Unicode (UTF-8)`) and Save Records as PDF's `Save to: File` / `Blank record,
+ * with boxes` as tokens of their own; several fields join with `|`.
+ */
+export function groupFieldsOf(p: GrammarParam): string[] {
+  const gf = p.raw.groupFields;
+  return Array.isArray(gf) ? (gf as string[]) : [];
+}
+
+/** The attrGroup a display projection is a view of, or null. */
+export function projectionOwner(entry: GrammarEntry, proj: GrammarParam): GrammarParam | null {
+  for (const p of entry.params) {
+    if (p.type === 'attrGroup' && p.xmlElement === proj.xmlElement
+        && (p.parentElement || '') === (proj.parentElement || '')) return p;
+  }
+  return null;
+}
+
+/** A projection's raw value off its owning group element (fields joined `|`). */
+function readProjectedValue(node: Element | null, owner: GrammarParam, proj: GrammarParam): string {
+  if (node === null) return '';
+  const fields = ((owner.raw.fields as Record<string, unknown>[]) ?? []);
+  const vals: string[] = [];
+  for (const key of groupFieldsOf(proj)) {
+    const f = fields.find((x) => x.key === key);
+    if (!f) continue;
+    let v = '';
+    if (f.kind === 'attr') v = node.getAttribute((f.xmlAttr as string) ?? '') ?? '';
+    else if (f.kind === 'text') v = childText(node, (f.childElement as string) ?? '');
+    if (v) vals.push(v);
+  }
+  return vals.join('|');
+}
+
+/** A gate's raw value: readEnumRawValue, or a projection's fields. */
+function readGateRawValue(entry: GrammarEntry, step: Element, p: GrammarParam): string {
+  if (groupFieldsOf(p).length === 0) return readEnumRawValue(step, p, entry.elementAliases);
+  const owner = projectionOwner(entry, p);
+  if (owner === null) return '';
+  const base = !p.parentElement ? step : descendPath(step, p.parentElement, entry.elementAliases);
+  return readProjectedValue(findChild(base, p.xmlElement), owner, p);
 }
 
 function buildDiscriminatorBranch(d: Record<string, unknown>): DiscriminatorBranch {
@@ -494,7 +543,7 @@ function effectiveHrLabel(entry: GrammarEntry, step: Element, param: GrammarPara
   for (const variant of param.hrLabelWhen) {
     for (const q of entry.params) {
       if (paramKey(q) !== variant.param) continue;
-      const v = readEnumRawValue(step, q, entry.elementAliases) || (q.defaultValue || '');
+      const v = readGateRawValue(entry, step, q) || (q.defaultValue || '');
       if (variant.values.includes(v)) return variant.hrLabel || '';
       break;
     }
@@ -507,7 +556,7 @@ function paramVisible(entry: GrammarEntry, step: Element, param: GrammarParam): 
   if (vw === null || !vw.param) return true;
   for (const q of entry.params) {
     if (paramKey(q) !== vw.param) continue;
-    const v = readEnumRawValue(step, q, entry.elementAliases) || (q.defaultValue || '');
+    const v = readGateRawValue(entry, step, q) || (q.defaultValue || '');
     return vw.values.includes(v);
   }
   return true;
@@ -767,7 +816,10 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
   } else if (ptype === 'enum' && isDrivenDiscriminator(entry, param)) {
     // silent companion of a layout param
   } else if (ptype === 'enum') {
-    if (param.enumStyle === 'text') {
+    if (groupFieldsOf(param).length > 0) {
+      const owner = projectionOwner(entry, param);
+      if (owner !== null) val = readProjectedValue(findChild(base, param.xmlElement), owner, param);
+    } else if (param.enumStyle === 'text') {
       val = childText(base, param.xmlElement);
     } else {
       const eattr = isElemAttr ? g11Attr : param.xmlAttr || 'value';
@@ -800,8 +852,19 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
   } else if (ptype === 'attrGroup') {
     const groupNode = findChild(base, param.xmlElement);
     if (groupNode !== null) {
-      const inner = renderGroupElement(groupNode, (param.raw.fields as Record<string, unknown>[]) ?? []);
-      val = !label ? inner : label + ': ' + inner;
+      // A field a visible display projection prints as its own token is left
+      // out of the body; one whose projection is hidden stays.
+      const shown = new Set<string>();
+      for (const q of entry.params) {
+        const gf = groupFieldsOf(q);
+        if (gf.length === 0 || q.xmlElement !== param.xmlElement
+            || (q.parentElement || '') !== (param.parentElement || '')) continue;
+        if (paramVisible(entry, step, q)) gf.forEach((k) => shown.add(k));
+      }
+      const fields = ((param.raw.fields as Record<string, unknown>[]) ?? [])
+        .filter((f) => !shown.has(f.key as string));
+      const inner = renderGroupElement(groupNode, fields);
+      if (inner) val = !label ? inner : label + ': ' + inner;
     }
   } else if (ptype === 'bitmaskGroup') {
     const g = findChild(base, param.xmlElement);
@@ -1187,6 +1250,7 @@ function renderDiscriminatorGroupTokens(
  */
 export function renderStepHr(entry: GrammarEntry, step: Element): string {
   const parts: string[] = [];
+  const fmEmpty = new Set<number>(); // indexes of hrEmptySlotWith empty slots
   let pendingEmpty = 0;
   const add = (tok: HrToken): void => {
     if (!tok.text) {
@@ -1211,9 +1275,38 @@ export function renderStepHr(entry: GrammarEntry, step: Element): string {
     if (isGoverningDiscriminator(param)) {
       for (const tok of renderDiscriminatorGroupTokens(entry, step, param)) add(tok);
     } else {
-      add(paramToken(entry, param, computeParamHr(entry, step, param)));
+      const tok = paramToken(entry, param, computeParamHr(entry, step, param));
+      if (!tok.text && parts.length > 0 && emptySlotSiblingPresent(entry, step, param)) {
+        // FileMaker draws this param's empty slot, even last, when the sibling it
+        // stands for is present (Export Records with no path but a <Profile>:
+        // `Create folders: On ; ]`).
+        for (; pendingEmpty > 0; pendingEmpty--) parts.push('');
+        fmEmpty.add(parts.length);
+        parts.push('');
+        continue;
+      }
+      add(tok);
     }
   }
   if (parts.length === 0) return entry.name;
-  return entry.name + ' [ ' + hrJoin(parts, ' ; ') + hrSep(parts[parts.length - 1], ' ]');
+  // An hrEmptySlotWith slot draws as FileMaker draws it: a bare `;`.
+  let out = entry.name + ' [ ';
+  parts.forEach((item, i) => {
+    if (i) out += fmEmpty.has(i) ? ' ;' : hrSep(parts[i - 1], ' ; ');
+    out += item;
+  });
+  if (fmEmpty.has(parts.length - 1)) return out + ' ]';
+  return out + hrSep(parts[parts.length - 1], ' ]');
+}
+
+/** hrEmptySlotWith: whether the sibling an empty param's slot stands for is present. */
+function emptySlotSiblingPresent(entry: GrammarEntry, step: Element, param: GrammarParam): boolean {
+  const key = (param.raw.hrEmptySlotWith as string) ?? '';
+  if (!key) return false;
+  for (const q of entry.params) {
+    if (paramKey(q) !== key) continue;
+    const base = !q.parentElement ? step : descendPath(step, q.parentElement, entry.elementAliases);
+    return base !== null && aliasedChild(base, q.xmlElement, entry.elementAliases) !== null;
+  }
+  return false;
 }

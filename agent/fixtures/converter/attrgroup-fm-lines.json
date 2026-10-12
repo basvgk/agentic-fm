@@ -1,0 +1,321 @@
+{
+ "_comment": [
+  "Export Records, Save Records as Excel and Save Records as PDF, measured on FileMaker Pro 26.0.3 (macOS, 2026-10-12): each step was pasted into a script, FileMaker's displayed line read, and the step copied back (xml).",
+  "FileMaker draws Export Records' stored character set bare and only with Restore on, Save Records as PDF's PDFSaveType as `Save to: File|Target` and its records source (with the blank-record appearance) bare and last, and an empty path slot on Export Records / Save Records as Excel exactly when the step has a <Profile>. It never draws Profile, the export field order, Excel's Worksheet / Title / Subject / Author / Use field names, or the PDF document options; with Save to: Target it hides the PDF file options too.",
+  "Known FileMaker-only quirks the converters do not reproduce: pdf-restoreF-nopath* (no records source on the line), pdf-file-nopath-ao-cfOff (a no-path PDF hides its option flags, CORE_INSIGHTS #181), and exp-nopath-restoreF (a trailing empty slot, which the HR line reader drops)."
+ ],
+ "cases": [
+  {
+   "id": "exp-cs-UTF-8",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"UTF-8\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ; Unicode (UTF-8) ]"
+  },
+  {
+   "id": "exp-cs-Windows",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"Windows\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ; Windows (ANSI) ]"
+  },
+  {
+   "id": "exp-cs-DOS",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"DOS\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ; ASCII (DOS) ]"
+  },
+  {
+   "id": "exp-cs-Macintosh",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"Macintosh\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ; Macintosh ]"
+  },
+  {
+   "id": "exp-cs-Unicode",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"Unicode\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ; Unicode (UTF-16) ]"
+  },
+  {
+   "id": "exp-cs-ShiftJIS",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"ShiftJIS\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ; Japanese (Shift-JIS) ]"
+  },
+  {
+   "id": "exp-cs-ChineseSimplified",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"ChineseSimplified\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ; Simplified Chinese (GB) ]"
+  },
+  {
+   "id": "exp-cs-ChineseTraditional",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"ChineseTraditional\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ; Traditional Chinese (Big-5) ]"
+  },
+  {
+   "id": "exp-cs-EUC-KR",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"EUC-KR\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ; Korean (EUC-KR) ]"
+  },
+  {
+   "id": "exp-restoreF-utf8",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"False\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"UTF-8\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ]"
+  },
+  {
+   "id": "exp-restoreF-mac",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"False\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"Macintosh\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ]"
+  },
+  {
+   "id": "exp-fmtT",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"True\" CharacterSet=\"UTF-8\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ; Unicode (UTF-8) ]"
+  },
+  {
+   "id": "exp-COMS",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"COMS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"UTF-8\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ; Unicode (UTF-8) ]"
+  },
+  {
+   "id": "exp-XLSX",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FileName=\"\" WorksheetName=\"\" SelectedSheet=\"0\" FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"XLSX\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"UTF-8\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ; Unicode (UTF-8) ]"
+  },
+  {
+   "id": "exp-fields",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><UniversalPathList>$path</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"UTF-8\"/><ExportEntries><ExportEntry><Field table=\"Invoices\" id=\"34\" name=\"Number\"/></ExportEntry><ExportEntry><Field table=\"Invoices\" id=\"6\" name=\"Name\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$path” ; Unicode (UTF-8) ]"
+  },
+  {
+   "id": "exp-nopath",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"UTF-8\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; ; Unicode (UTF-8) ]"
+  },
+  {
+   "id": "exp-nopath-restoreF",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"False\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"TABS\"/><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"UTF-8\"/><ExportEntries><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry><ExportEntry><Field table=\"\" id=\"0\" name=\"\"/></ExportEntry></ExportEntries><SummaryFields><Field GroupByFieldIsSelected=\"True\" table=\"\" id=\"0\" name=\"\"/></SummaryFields></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; ]"
+  },
+  {
+   "id": "xl-base",
+   "step": "Save Records as Excel",
+   "xml": "<Step enable=\"True\" id=\"143\" name=\"Save Records as Excel\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"XLXE\"/><UniversalPathList>$path</UniversalPathList><WorkSheet><Calculation><![CDATA[\"Sheet1\"]]></Calculation></WorkSheet><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><SaveType value=\"BrowsedRecords\"/><UseFieldNames state=\"False\"/></Step>",
+   "fmLine": "Save Records as Excel [ Restore ; With dialog: Off ; “$path” ; Records being browsed ; Create folders: On ]"
+  },
+  {
+   "id": "xl-ufnT",
+   "step": "Save Records as Excel",
+   "xml": "<Step enable=\"True\" id=\"143\" name=\"Save Records as Excel\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"XLXE\"/><UniversalPathList>$path</UniversalPathList><WorkSheet><Calculation><![CDATA[\"Sheet1\"]]></Calculation></WorkSheet><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><SaveType value=\"BrowsedRecords\"/><UseFieldNames state=\"True\"/></Step>",
+   "fmLine": "Save Records as Excel [ Restore ; With dialog: Off ; “$path” ; Records being browsed ; Create folders: On ]"
+  },
+  {
+   "id": "xl-nopath",
+   "step": "Save Records as Excel",
+   "xml": "<Step enable=\"True\" id=\"143\" name=\"Save Records as Excel\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"XLXE\"/><WorkSheet><Calculation><![CDATA[\"Sheet1\"]]></Calculation></WorkSheet><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><SaveType value=\"BrowsedRecords\"/><UseFieldNames state=\"False\"/></Step>",
+   "fmLine": "Save Records as Excel [ Restore ; With dialog: Off ; ; Records being browsed ; Create folders: On ]"
+  },
+  {
+   "id": "xl-nopath-dialogOn",
+   "step": "Save Records as Excel",
+   "xml": "<Step enable=\"True\" id=\"143\" name=\"Save Records as Excel\"><NoInteract state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"XLXE\"/><WorkSheet><Calculation><![CDATA[\"Sheet1\"]]></Calculation></WorkSheet><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><SaveType value=\"BrowsedRecords\"/><UseFieldNames state=\"False\"/></Step>",
+   "fmLine": "Save Records as Excel [ Restore ; With dialog: On ; ; Records being browsed ; Create folders: On ]"
+  },
+  {
+   "id": "xl-restoreF-nopath",
+   "step": "Save Records as Excel",
+   "xml": "<Step enable=\"True\" id=\"143\" name=\"Save Records as Excel\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"False\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"XLXE\"/><WorkSheet><Calculation><![CDATA[\"Sheet1\"]]></Calculation></WorkSheet><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><SaveType value=\"BrowsedRecords\"/><UseFieldNames state=\"False\"/></Step>",
+   "fmLine": "Save Records as Excel [ With dialog: Off ; ; Records being browsed ; Create folders: On ]"
+  },
+  {
+   "id": "xl-restoreF",
+   "step": "Save Records as Excel",
+   "xml": "<Step enable=\"True\" id=\"143\" name=\"Save Records as Excel\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"False\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"XLXE\"/><UniversalPathList>$path</UniversalPathList><WorkSheet><Calculation><![CDATA[\"Sheet1\"]]></Calculation></WorkSheet><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><SaveType value=\"BrowsedRecords\"/><UseFieldNames state=\"False\"/></Step>",
+   "fmLine": "Save Records as Excel [ With dialog: Off ; “$path” ; Records being browsed ; Create folders: On ]"
+  },
+  {
+   "id": "xl-current",
+   "step": "Save Records as Excel",
+   "xml": "<Step enable=\"True\" id=\"143\" name=\"Save Records as Excel\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"XLXE\"/><UniversalPathList>$path</UniversalPathList><WorkSheet><Calculation><![CDATA[\"Sheet1\"]]></Calculation></WorkSheet><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><SaveType value=\"CurrentRecord\"/><UseFieldNames state=\"False\"/></Step>",
+   "fmLine": "Save Records as Excel [ Restore ; With dialog: Off ; “$path” ; Current record ; Create folders: On ]"
+  },
+  {
+   "id": "xl-nocalcs",
+   "step": "Save Records as Excel",
+   "xml": "<Step enable=\"True\" id=\"143\" name=\"Save Records as Excel\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"XLXE\"/><UniversalPathList>$path</UniversalPathList><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><SaveType value=\"BrowsedRecords\"/><UseFieldNames state=\"False\"/></Step>",
+   "fmLine": "Save Records as Excel [ Restore ; With dialog: Off ; “$path” ; Records being browsed ; Create folders: On ]"
+  },
+  {
+   "id": "xl-nopath-ao",
+   "step": "Save Records as Excel",
+   "xml": "<Step enable=\"True\" id=\"143\" name=\"Save Records as Excel\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"True\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"XLXE\"/><WorkSheet><Calculation><![CDATA[\"Sheet1\"]]></Calculation></WorkSheet><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><SaveType value=\"BrowsedRecords\"/><UseFieldNames state=\"False\"/></Step>",
+   "fmLine": "Save Records as Excel [ Restore ; With dialog: Off ; ; Automatically open ; Records being browsed ; Create folders: On ]"
+  },
+  {
+   "id": "pdf-base",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><UniversalPathList>$path</UniversalPathList><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: File ; “$path” ; Create folders: On ; With dialog: Off ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-current",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><UniversalPathList>$path</UniversalPathList><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"CurrentRecord\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: File ; “$path” ; Create folders: On ; With dialog: Off ; Current record ]"
+  },
+  {
+   "id": "pdf-blank-browse",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><UniversalPathList>$path</UniversalPathList><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions appearance=\"AsFormatted\" source=\"BlankRecord\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: File ; “$path” ; Create folders: On ; With dialog: Off ; Blank record, as formatted ]"
+  },
+  {
+   "id": "pdf-blank-boxes",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><UniversalPathList>$path</UniversalPathList><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions appearance=\"WithBoxes\" source=\"BlankRecord\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: File ; “$path” ; Create folders: On ; With dialog: Off ; Blank record, with boxes ]"
+  },
+  {
+   "id": "pdf-blank-under",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><UniversalPathList>$path</UniversalPathList><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions appearance=\"WithUnderlines\" source=\"BlankRecord\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: File ; “$path” ; Create folders: On ; With dialog: Off ; Blank record, with underlines ]"
+  },
+  {
+   "id": "pdf-nopath",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: File ; Create folders: On ; With dialog: Off ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-nopath-append",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: File ; Append ; Create folders: On ; With dialog: Off ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-restoreF",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"False\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><UniversalPathList>$path</UniversalPathList><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Save to: File ; “$path” ; Create folders: On ; With dialog: Off ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-restoreF-nopath",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"False\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Save to: File ; Create folders: On ; With dialog: Off ]"
+  },
+  {
+   "id": "pdf-append",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><UniversalPathList>$path</UniversalPathList><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: File ; Append ; “$path” ; Create folders: On ; With dialog: Off ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-nolabel",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><UniversalPathList>$path</UniversalPathList><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: File ; “$path” ; Create folders: On ; With dialog: Off ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-target-var",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Calculation><![CDATA[\"title\"]]></Calculation><Text/><Field>$pdf</Field><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>Target</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: Target ; Target: $pdf ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-target-field",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Calculation><![CDATA[\"title\"]]></Calculation><Field table=\"Invoices\" id=\"31\" name=\"Description\"/><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>Target</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: Target ; Target: Invoices::Description ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-target-var-restoreF",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"False\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Calculation><![CDATA[\"title\"]]></Calculation><Text/><Field>$pdf</Field><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>Target</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Save to: Target ; Target: $pdf ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-dialogOn",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"False\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><UniversalPathList>$path</UniversalPathList><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: File ; “$path” ; Create folders: On ; With dialog: On ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-nodoc",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><UniversalPathList>$path</UniversalPathList><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Pages AllPages=\"False\"/></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: File ; “$path” ; Create folders: On ; With dialog: Off ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-target-all",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"False\"/><Option state=\"True\"/><CreateDirectories state=\"False\"/><Restore state=\"True\"/><AutoOpen state=\"True\"/><CreateEmail state=\"True\"/><UniversalPathList>$path</UniversalPathList><Calculation><![CDATA[\"title\"]]></Calculation><Text/><Field>$pdf</Field><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>Target</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: Target ; Target: $pdf ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-target-blank",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Calculation><![CDATA[\"title\"]]></Calculation><Text/><Field>$pdf</Field><PDFOptions appearance=\"WithBoxes\" source=\"BlankRecord\"><PDFSaveType>Target</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: Target ; Target: $pdf ; Blank record, with boxes ]"
+  },
+  {
+   "id": "pdf-target-notarget",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>Target</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: Target ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-file-nopath-ao-cfOff",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"False\"/><Option state=\"False\"/><CreateDirectories state=\"False\"/><Restore state=\"True\"/><AutoOpen state=\"True\"/><CreateEmail state=\"False\"/><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Restore ; Save to: File ; Create folders: Off ; With dialog: On ; Records being browsed ]"
+  },
+  {
+   "id": "pdf-restoreF-nopath-current",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"False\"/><CreateDirectories state=\"True\"/><Restore state=\"False\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"CurrentRecord\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Save to: File ; Create folders: On ; With dialog: Off ]"
+  },
+  {
+   "id": "pdf-restoreF-nopath-append",
+   "step": "Save Records as PDF",
+   "xml": "<Step enable=\"True\" id=\"144\" name=\"Save Records as PDF\"><NoInteract state=\"True\"/><Option state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"False\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Calculation><![CDATA[\"title\"]]></Calculation><PDFOptions source=\"RecordsBeingBrowsed\"><PDFSaveType>File</PDFSaveType><Document><Title><Calculation><![CDATA[\"title\"]]></Calculation></Title><Subject><Calculation><![CDATA[\"subject\"]]></Calculation></Subject><Author><Calculation><![CDATA[\"author\"]]></Calculation></Author><Keywords><Calculation><![CDATA[\"keywords\"]]></Calculation></Keywords><Pages AllPages=\"True\"><NumberFrom><Calculation><![CDATA[1]]></Calculation></NumberFrom></Pages></Document><Security allowScreenReader=\"True\" enableCopying=\"True\" controlEditing=\"AnyExceptExtractingPages\" controlPrinting=\"HighResolution\" requireControlEditPassword=\"False\" requireOpenPassword=\"False\"/><View magnification=\"100\" pageLayout=\"SinglePage\" show=\"PagesPanelAndPage\"/></PDFOptions></Step>",
+   "fmLine": "Save Records as PDF [ Save to: File ; Append ; Create folders: On ; With dialog: Off ]"
+  },
+  {
+   "id": "xl-nopath-profileonly",
+   "step": "Save Records as Excel",
+   "xml": "<Step enable=\"True\" id=\"143\" name=\"Save Records as Excel\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><Profile FieldDelimiter=\"&#09;\" IsPredefined=\"-1\" FieldNameRow=\"-1\" DataType=\"XLXE\"/><SaveType value=\"BrowsedRecords\"/><UseFieldNames state=\"False\"/></Step>",
+   "fmLine": "Save Records as Excel [ Restore ; With dialog: Off ; ; Records being browsed ; Create folders: On ]"
+  },
+  {
+   "id": "xl-nopath-noprofile",
+   "step": "Save Records as Excel",
+   "xml": "<Step enable=\"True\" id=\"143\" name=\"Save Records as Excel\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><WorkSheet><Calculation><![CDATA[\"Sheet1\"]]></Calculation></WorkSheet><SaveType value=\"BrowsedRecords\"/><UseFieldNames state=\"False\"/></Step>",
+   "fmLine": "Save Records as Excel [ Restore ; With dialog: Off ; Records being browsed ; Create folders: On ]"
+  },
+  {
+   "id": "exp-nopath-noprofile",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"UTF-8\"/></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; Unicode (UTF-8) ]"
+  },
+  {
+   "id": "exp-noprofile",
+   "step": "Export Records",
+   "xml": "<Step enable=\"True\" id=\"36\" name=\"Export Records\"><NoInteract state=\"True\"/><CreateDirectories state=\"True\"/><Restore state=\"True\"/><AutoOpen state=\"False\"/><CreateEmail state=\"False\"/><UniversalPathList>$p</UniversalPathList><ExportOptions FormatUsingCurrentLayout=\"False\" CharacterSet=\"UTF-8\"/></Step>",
+   "fmLine": "Export Records [ With dialog: Off ; Create folders: On ; “$p” ; Unicode (UTF-8) ]"
+  }
+ ]
+}

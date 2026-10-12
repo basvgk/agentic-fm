@@ -222,6 +222,20 @@ class StepParam:
     visible_when: VisibleWhen | None = None
     hr_label_when: list[HrLabelRule] = field(default_factory=list)
     attr_fields: list[AttrField] = field(default_factory=list)
+    # attrGroup display projection: this enum is a view of these top-level fields
+    # (attr / text) of the sibling attrGroup sharing its xmlElement, rendered and
+    # read as an ordinary enum (FileMaker draws Export Records' stored character
+    # set ``Unicode (UTF-8)`` and Save Records as PDF's ``Save to: File`` /
+    # ``Blank record, with boxes`` as tokens of their own). Several fields join
+    # with ``|`` (``BlankRecord|WithBoxes``). The owning group's body leaves out
+    # the fields a visible projection prints; on emit a projection's value
+    # overrides those fields of the group.
+    group_fields: list[str] = field(default_factory=list)
+    # The param key of a sibling whose presence FileMaker draws as this param's
+    # empty positional slot (Export Records / Save Records as Excel with no path
+    # but a <Profile>: ``Create folders: On ; ; Unicode (UTF-8)``). An empty
+    # token read at that slot makes the sibling present.
+    hr_empty_slot_with: str | None = None
     description: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -269,6 +283,8 @@ class StepParam:
             visible_when=VisibleWhen.from_dict(vw) if vw else None,
             hr_label_when=[HrLabelRule.from_dict(x) for x in d.get("hrLabelWhen", [])],
             attr_fields=[AttrField.from_dict(x) for x in d.get("fields", [])],
+            group_fields=list(d.get("groupFields", [])),
+            hr_empty_slot_with=d.get("hrEmptySlotWith"),
             description=d.get("description"),
             raw=dict(d),
         )
@@ -358,9 +374,43 @@ def param_key(param: StepParam) -> str:
     ``xmlElement == "Calculation"``, so the wrapper disambiguates); any other param
     keys off its ``xmlElement``.
     """
+    if param.group_fields:
+        # An attrGroup display projection shares its group's xmlElement.
+        return param.xml_element + "#" + param.group_fields[0]
     if param.type == "namedCalc" and param.wrapper_element:
         return param.wrapper_element
     return param.xml_element
+
+
+def projection_owner(entry: CatalogEntry, proj: StepParam) -> StepParam | None:
+    """The attrGroup an attrGroup display projection is a view of."""
+    for p in entry.params:
+        if (p.type == "attrGroup" and p.xml_element == proj.xml_element
+                and (p.parent_element or "") == (proj.parent_element or "")):
+            return p
+    return None
+
+
+def read_projected_value(node: ET.Element | None, owner: StepParam, proj: StepParam) -> str:
+    """A projection's raw value off its owning group element: each projected
+    field's attribute / child text, the non-empty ones joined with ``|``."""
+    if node is None:
+        return ""
+    fields = {f.get("key"): f for f in owner.raw.get("fields", []) if isinstance(f, dict)}
+    vals = []
+    for key in proj.group_fields:
+        f = fields.get(key)
+        if not f:
+            continue
+        v = ""
+        if f.get("kind") == "attr":
+            v = node.get(f.get("xmlAttr", ""), "")
+        elif f.get("kind") == "text":
+            c = node.find(f.get("childElement", ""))
+            v = (c.text or "") if c is not None else ""
+        if v:
+            vals.append(v)
+    return "|".join(vals)
 
 
 # ---------------------------------------------------------------------------
@@ -757,12 +807,23 @@ def read_enum_raw_value(
     return el.get(attr, "")
 
 
+def read_gate_raw_value(entry: CatalogEntry, step: ET.Element, p: StepParam) -> str:
+    """A gate's raw value: ``read_enum_raw_value``, or a projection's fields."""
+    if not p.group_fields:
+        return read_enum_raw_value(step, p, entry.element_aliases)
+    owner = projection_owner(entry, p)
+    if owner is None:
+        return ""
+    base = step if not p.parent_element else _descend_path(step, p.parent_element, entry.element_aliases)
+    return read_projected_value(base.find(p.xml_element) if base is not None else None, owner, p)
+
+
 def effective_hr_label(entry: CatalogEntry, step: ET.Element, param: StepParam) -> str:
     for variant in param.hr_label_when:
         for q in entry.params:
             if param_key(q) != variant.param:
                 continue
-            v = read_enum_raw_value(step, q, entry.element_aliases) or (q.default_value or "")
+            v = read_gate_raw_value(entry, step, q) or (q.default_value or "")
             if v in variant.values:
                 return variant.hr_label or ""
             break
@@ -776,7 +837,7 @@ def param_visible(entry: CatalogEntry, step: ET.Element, param: StepParam) -> bo
     for q in entry.params:
         if param_key(q) != vw.param:
             continue
-        v = read_enum_raw_value(step, q, entry.element_aliases) or (q.default_value or "")
+        v = read_gate_raw_value(entry, step, q) or (q.default_value or "")
         return v in vw.values
     return True
 
@@ -998,7 +1059,11 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
     elif ptype == "enum" and is_driven_discriminator(entry, param):
         pass  # silent companion of a layout param
     elif ptype == "enum":
-        if param.enum_style == "text":
+        if param.group_fields:
+            owner = projection_owner(entry, param)
+            if owner is not None:
+                val = read_projected_value(base.find(param.xml_element), owner, param)
+        elif param.enum_style == "text":
             val = _child_text(base, param.xml_element)
         else:
             eattr = g11_attr if is_elem_attr else (param.xml_attr or "value")
@@ -1033,8 +1098,20 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
     elif ptype == "attrGroup":
         group_node = base.find(param.xml_element)
         if group_node is not None:
-            inner = _render_group_element(group_node, param.raw.get("fields", []))
-            val = inner if not label else (label + ": " + inner)
+            # A field a visible display projection prints as its own token is
+            # left out of the body; one whose projection is hidden stays.
+            shown = {
+                k
+                for q in entry.params
+                if q.group_fields and q.xml_element == param.xml_element
+                and (q.parent_element or "") == (param.parent_element or "")
+                and param_visible(entry, step, q)
+                for k in q.group_fields
+            }
+            fields = [f for f in param.raw.get("fields", []) if f.get("key") not in shown]
+            inner = _render_group_element(group_node, fields)
+            if inner:
+                val = inner if not label else (label + ": " + inner)
     elif ptype == "bitmaskGroup":
         g = base.find(param.xml_element)
         styles = param.raw.get("bitmaskStyles", [])
@@ -1447,6 +1524,7 @@ def render_step_hr(entry: CatalogEntry, step: ET.Element) -> str:
     control-flow steps.
     """
     parts: list[str] = []
+    fm_empty: set[int] = set()  # indexes of hrEmptySlotWith empty slots
     pending_empty = 0
 
     def add(tok: HrToken) -> None:
@@ -1479,10 +1557,40 @@ def render_step_hr(entry: CatalogEntry, step: ET.Element) -> str:
             for tok in render_discriminator_group_tokens(entry, step, param):
                 add(tok)
         else:
-            add(_param_token(entry, param, compute_param_hr(entry, step, param)))
+            tok = _param_token(entry, param, compute_param_hr(entry, step, param))
+            if not tok[0] and parts and _empty_slot_sibling_present(entry, step, param):
+                # FileMaker draws this param's empty slot, even last, when the
+                # sibling it stands for is present (Export Records with no path
+                # but a <Profile>: ``Create folders: On ; ]``).
+                parts.extend([""] * pending_empty)
+                pending_empty = 0
+                fm_empty.add(len(parts))
+                parts.append("")
+                continue
+            add(tok)
     if not parts:
         return entry.name
-    return entry.name + " [ " + _hr_join(parts, " ; ") + hr_sep(parts[-1], " ]")
+    # An hrEmptySlotWith slot draws as FileMaker draws it: a bare ``;``.
+    out = entry.name + " [ "
+    for i, item in enumerate(parts):
+        if i:
+            out += " ;" if i in fm_empty else hr_sep(parts[i - 1], " ; ")
+        out += item
+    if len(parts) - 1 in fm_empty:
+        return out + " ]"
+    return out + hr_sep(parts[-1], " ]")
+
+
+def _empty_slot_sibling_present(entry: CatalogEntry, step: ET.Element, param: StepParam) -> bool:
+    """hrEmptySlotWith: whether the sibling an empty param's slot stands for is present."""
+    if not param.hr_empty_slot_with:
+        return False
+    for q in entry.params:
+        if param_key(q) != param.hr_empty_slot_with:
+            continue
+        base = step if not q.parent_element else _descend_path(step, q.parent_element, entry.element_aliases)
+        return base is not None and _aliased_child(base, q.xml_element, entry.element_aliases) is not None
+    return False
 
 
 if __name__ == "__main__":
