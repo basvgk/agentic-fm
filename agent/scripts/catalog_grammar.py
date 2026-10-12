@@ -1188,8 +1188,14 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
                 # Labeled (Go to Related Record's "From table") renders
                 # "Label: name"; label-less (Fine-Tune Model's positional
                 # training table) renders the quoted TO name — the quoted
-                # positional spelling FM uses, mirroring `layout`.
-                val = ('"' + name + '"') if not label else (label + ": " + name)
+                # positional spelling FM uses, mirroring `layout`. hr_quoted: FileMaker draws
+                # the labeled name quoted (Save Records as JSONL's
+                # ``Table: “Invoices”``); write it as one escaped literal.
+                if param.hr_quoted:
+                    q = quote_calc_literal(name)
+                    val = q if not label else (label + ": " + q)
+                else:
+                    val = ('"' + name + '"') if not label else (label + ": " + name)
     elif ptype == "fileReference":
         fr_node = base.find(param.xml_element)
         if fr_node is not None:

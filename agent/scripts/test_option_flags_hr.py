@@ -117,6 +117,32 @@ def test_snapshot_link_prints_filemakers_line():
             assert snippet_to_hr(_snippet(c["xml"])) == [c["fmLine"]]
 
 
+
+# Save Records as JSONL draws no token for its Option; with it on FileMaker draws
+# the source table labeled and quoted after Format for fine-tuning
+# (``Table: “Invoices”``) and writes <Table> only then. A Completion Field that
+# names no field draws as ``<Field Missing>``, which the converters do not print.
+def _jsonl_cases():
+    return [c for c in CASES if c["step"] == "Save Records as JSONL"]
+
+
+def test_save_records_as_jsonl_prints_filemakers_line():
+    for c in _jsonl_cases():
+        if not c["hidesOptions"] and "<Field Missing>" not in c["fmLine"]:
+            assert snippet_to_hr(_snippet(c["xml"])) == [c["fmLine"]]
+
+
+def test_save_records_as_jsonl_line_keeps_option_table_and_path():
+    for c in _jsonl_cases():
+        for line in (c["fmLine"], snippet_to_hr(_snippet(c["xml"]))[0]):
+            xml = _emit(line)
+            assert _state(xml, "Option") == _state(c["xml"], "Option"), line
+            table = re.search(r'<Table id="\d*" name="([^"]*)"/>', c["xml"])
+            got = re.search(r'<Table id="\d*" name="([^"]*)"/>', xml)
+            assert (got and got.group(1)) == (table and table.group(1)), line
+            if "<UniversalPathList>" in c["xml"]:
+                assert "<UniversalPathList>$path</UniversalPathList>" in xml, line
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted(globals().items()):

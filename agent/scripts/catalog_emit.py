@@ -512,6 +512,17 @@ def _text_param_value(param, hr_value: str) -> str:
     return bare if quoted else hr_value
 
 
+def _table_param_value(param, hr_value: str) -> str:
+    """The table name for a ``tableRef`` / ``tableOccurrence`` HR token. An
+    ``hr_quoted`` one (Save Records as JSONL's ``Table: “Invoices”``) was rendered
+    as one escaped literal: decode it, else strip one quote pair."""
+    if param.hr_quoted:
+        t = _trim(hr_value)
+        decoded = decode_whole_calc_literal(t)
+        return decoded if decoded is not None else _unquote_text_value(t)
+    return _unquote(hr_value)
+
+
 def _is_quoted_lone_variable(v: str) -> tuple[bool, str]:
     """True when ``v`` (trimmed, one layer of matching quotes stripped) is a single
     variable token; returns the bare variable as the tuple's second element."""
@@ -1710,13 +1721,13 @@ def convert_step_with_catalog(
                 if not param.omit_when_empty:
                     piece = '    <Table id="" name=""/>'
             else:
-                tid, tname = _resolve_table(_unquote(hr_value))
+                tid, tname = _resolve_table(_table_param_value(param, hr_value))
                 piece = '    <Table id="' + str(tid) + '" name="' + esc_xml(tname) + '"/>'
         elif param.type == "tableOccurrence":
             # An unset present-driven TO (omit_when_empty) emits no <Table> —
             # matching FM's TrainingFile form; otherwise the TO always serializes.
             if _trim(hr_value) or not param.omit_when_empty:
-                tid, tname = _resolve_table(_unquote(hr_value))
+                tid, tname = _resolve_table(_table_param_value(param, hr_value))
                 piece = '    <Table id="' + str(tid) + '" name="' + esc_xml(tname) + '"/>'
         elif param.type == "fileReference":
             if _trim(hr_value):

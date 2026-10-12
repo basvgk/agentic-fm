@@ -943,7 +943,12 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
       // Labeled (Go to Related Record's "From table") renders "Label: name";
       // label-less (Fine-Tune Model's positional training table) renders the
       // quoted TO name — the quoted positional spelling FM uses, like `layout`.
-      if (name) val = !label ? '"' + name + '"' : label + ': ' + name;
+      // hrQuoted: FileMaker draws the labeled name quoted (Save Records as JSONL's
+      // `Table: “Invoices”`); write it as one escaped literal.
+      if (name && param.hrQuoted) {
+        const q = quoteCalcLiteral(name);
+        val = !label ? q : label + ': ' + q;
+      } else if (name) val = !label ? '"' + name + '"' : label + ': ' + name;
     }
   } else if (ptype === 'fileReference') {
     const frNode = findChild(base, param.xmlElement);

@@ -7383,12 +7383,13 @@
     "params": [
       {
         "xmlElement": "Option",
-        "type": "flagBoolean",
+        "type": "boolean",
+        "hrHidden": true,
         "hrLabel": null,
         "xmlAttr": "state",
         "required": false,
         "defaultValue": "False",
-        "note": "state=True enables Table (source table) selection",
+        "note": "state=True enables Table (source table) selection. Renders no HR token of its own: FileMaker draws `Table: “name”` only when True and nothing when False, and writes <Table> only when True (FM 26.0.3). The converter derives the state from whether the Table token is present (governed-visibility boolean).",
         "hrSlot": 0
       },
       {
@@ -7450,10 +7451,18 @@
       },
       {
         "xmlElement": "Table",
-        "type": "tableReference",
+        "type": "tableRef",
         "hrLabel": "Table",
+        "hrQuoted": true,
+        "visibleWhen": {
+          "param": "Option",
+          "values": [
+            "True"
+          ]
+        },
+        "omitWhenEmpty": true,
         "required": false,
-        "note": "Source table. Only present when Option state=True. Sibling before <SaveAsJSONL>.",
+        "note": "Source table. Only present when Option state=True. Sibling before <SaveAsJSONL>. FileMaker draws it labeled and quoted, `Table: “Invoices”`, after Format for fine-tuning (hrQuoted, hrSlot; FM 26.0.3); omitted when unset (omitWhenEmpty).",
         "hrSlot": 2
       },
       {
@@ -7497,7 +7506,7 @@
         "hrSlot": 6
       }
     ],
-    "hrSignature": "[ Format for fine-tuning: <On/Off> ; Table: <name> ; System Prompt: <calc> ; User Prompt: <calc> ; Assistant Prompt: <calc> ; <path> ; <Automatically open> ; <Create email> ; Create folders: <On/Off> ]",
+    "hrSignature": "[ Format for fine-tuning: <On/Off> ; Table: “<name>” ; System Prompt: <calc> ; User Prompt: <calc> ; Assistant Prompt: <calc> ; <path> ; <Automatically open> ; <Create email> ; Create folders: <On/Off> ]",
     "blockPair": null,
     "status": "complete",
     "helpUrl": "https://help.claris.com/en/pro-help/content/save-records-as-jsonl.html"

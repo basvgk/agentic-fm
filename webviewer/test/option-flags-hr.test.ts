@@ -90,3 +90,27 @@ describe('Export / Save Records as option flags HR', () => {
     }
   });
 });
+
+// Save Records as JSONL draws no token for its Option; with it on FileMaker draws
+// the source table labeled and quoted after Format for fine-tuning
+// (`Table: “Invoices”`) and writes <Table> only then. A Completion Field that
+// names no field draws as `<Field Missing>`, which the converters do not print.
+const JSONL_CASES = CASES.filter((c) => c.step === 'Save Records as JSONL');
+const tableName = (xml: string): string | null => /<Table id="\d*" name="([^"]*)"\/>/.exec(xml)?.[1] ?? null;
+
+describe('Save Records as JSONL Option / Table HR', () => {
+  it("prints FileMaker's line", () => {
+    for (const c of JSONL_CASES) {
+      if (!c.hidesOptions && !c.fmLine.includes('<Field Missing>')) expect(xmlToHr(snippet(c.xml))).toBe(c.fmLine);
+    }
+  });
+
+  it.each(JSONL_CASES)('keeps the Option, Table and path ($fmLine)', (c) => {
+    for (const line of [c.fmLine, xmlToHr(snippet(c.xml))]) {
+      const xml = hrToXml(line).xml;
+      expect(state(xml, 'Option'), line).toBe(state(c.xml, 'Option'));
+      expect(tableName(xml), line).toBe(tableName(c.xml));
+      if (c.xml.includes('<UniversalPathList>')) expect(xml, line).toContain('<UniversalPathList>$path</UniversalPathList>');
+    }
+  });
+});

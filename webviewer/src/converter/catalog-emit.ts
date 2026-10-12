@@ -347,6 +347,19 @@ function unquoteTextValue(s: string): string {
 }
 
 /**
+ * The table name for a `tableRef` / `tableOccurrence` HR token. An `hrQuoted` one
+ * (Save Records as JSONL's `Table: “Invoices”`) was rendered as one escaped
+ * literal: decode it, else strip one quote pair.
+ */
+function tableParamValue(param: GrammarParam, hrValue: string): string {
+  if (param.hrQuoted) {
+    const t = trim(hrValue);
+    return decodeWholeCalcLiteral(t) ?? unquoteTextValue(t);
+  }
+  return unquote(hrValue);
+}
+
+/**
  * The raw XML body for a `text`/`name` param's HR token. An `hrQuoted` param was
  * rendered as one escaped text literal: decode it. A token that is not exactly one
  * literal is FileMaker's own unescaped display (`“He said “hi”`) or bare text:
@@ -1483,14 +1496,14 @@ export function convertStepWithCatalog(
         // emits nothing when unset.
         if (!param.omitWhenEmpty) piece = '    <Table id="" name=""/>';
       } else {
-        const rt = resolveTable(unquote(hrValue));
+        const rt = resolveTable(tableParamValue(param, hrValue));
         piece = `    <Table id="${rt.toId}" name="${escXml(rt.toName)}"/>`;
       }
     } else if (param.type === 'tableOccurrence') {
       // An unset present-driven TO (omitWhenEmpty) emits no <Table> — matching
       // FM's TrainingFile form; otherwise the TO always serializes.
       if (trim(hrValue) || !param.omitWhenEmpty) {
-        const rt = resolveTable(unquote(hrValue));
+        const rt = resolveTable(tableParamValue(param, hrValue));
         piece = `    <Table id="${rt.toId}" name="${escXml(rt.toName)}"/>`;
       }
     } else if (param.type === 'fileReference') {
