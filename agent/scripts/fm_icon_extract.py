@@ -366,6 +366,49 @@ def prepare_svg_for_fm(svg_text: str) -> str:
     return "\r\n".join(lines)
 
 
+# An SVG icon stream as FileMaker writes it; the groups split out the size
+# attribute and the hex payload so a replacement can swap just those two.
+_SVG_STREAM_RE = re.compile(
+    r'(<Stream\s+size=")(\d+)(">\s*'
+    r'<Type>SVG </Type>\s*'
+    r'<HexData>)([0-9A-Fa-f\s]+)(</HexData>\s*'
+    r'</Stream>)',
+    re.DOTALL,
+)
+
+
+def replace_icons_in_xml(xml_text: str, replacements: dict[int, str]) -> str:
+    """Replace SVG icons in layout XML text, leaving every other byte as it was.
+
+    Args:
+        xml_text: The layout object XML (fmxmlsnippet LayoutObjectList).
+        replacements: Dict mapping icon index (the order extract_icons reports)
+            to new SVG text.
+
+    Updates each stream's HexData and its size attribute; the GLPH stream is
+    left untouched. The replacement works on the text rather than re-serializing
+    a parsed tree: a serializer writes a carriage return in element text raw,
+    and FileMaker reads a raw CR as a line feed, so a multi-line text object in
+    the same snippet would paste back with its returns changed. Indexes out of
+    range raise IndexError.
+    """
+    matches = list(_SVG_STREAM_RE.finditer(xml_text))
+    for i in replacements:
+        if i < 0 or i >= len(matches):
+            raise IndexError(f"Icon index {i} out of range (0-{len(matches) - 1})")
+
+    # Apply replacements in reverse order to preserve offsets
+    result = xml_text
+    for i in sorted(replacements, reverse=True):
+        m = matches[i]
+        new_svg = replacements[i]
+        new_hex = hex_encode(new_svg)
+        new_size = len(new_svg.encode("utf-8"))
+        replacement = f"{m.group(1)}{new_size}{m.group(3)}{new_hex}{m.group(5)}"
+        result = result[:m.start()] + replacement + result[m.end():]
+    return result
+
+
 def replace_icon_in_xml(xml_text: str, icon_index: int, new_svg_text: str,
                         icons: list[dict] | None = None) -> str:
     """Replace the SVG at the given index in the layout XML with new SVG content.
@@ -373,30 +416,7 @@ def replace_icon_in_xml(xml_text: str, icon_index: int, new_svg_text: str,
     Updates both the HexData and the Stream size attribute.
     The GLPH stream is left untouched.
     """
-    root = ET.fromstring(xml_text)
-
-    svg_streams = []
-    for stream_el in root.iter("Stream"):
-        type_el = stream_el.find("Type")
-        if type_el is not None and type_el.text and type_el.text.strip() == "SVG":
-            svg_streams.append(stream_el)
-
-    if icon_index < 0 or icon_index >= len(svg_streams):
-        raise IndexError(f"Icon index {icon_index} out of range (0-{len(svg_streams) - 1})")
-
-    target = svg_streams[icon_index]
-    new_hex = hex_encode(new_svg_text)
-    new_size = len(new_svg_text.encode("utf-8"))
-
-    target.set("size", str(new_size))
-    hex_el = target.find("HexData")
-    if hex_el is not None:
-        hex_el.text = new_hex
-
-    # Serialize back to string
-    # ElementTree mangles namespaces; use a regex-based approach instead
-    # to preserve the original XML structure as much as possible.
-    return ET.tostring(root, encoding="unicode", xml_declaration=True)
+    return replace_icons_in_xml(xml_text, {icon_index: new_svg_text})
 
 
 def replace_icons_in_file(xml_path: str, replacements: dict[int, str],
@@ -411,39 +431,22 @@ def replace_icons_in_file(xml_path: str, replacements: dict[int, str],
     Returns:
         The modified XML as a string.
     """
-    with open(xml_path, "r", encoding="utf-8") as f:
+    # newline="" keeps a CR in the file as it is instead of translating it.
+    with open(xml_path, "r", encoding="utf-8", newline="") as f:
         xml_text = f.read()
 
-    # We do string-level replacement to preserve the original XML formatting.
-    # Find each SVG stream by scanning for <Type>SVG </Type> and its HexData.
-    pattern = re.compile(
-        r'(<Stream\s+size=")(\d+)(">\s*'
-        r'<Type>SVG </Type>\s*'
-        r'<HexData>)([0-9A-Fa-f\s]+)(</HexData>\s*'
-        r'</Stream>)',
-        re.DOTALL,
-    )
-
-    matches = list(pattern.finditer(xml_text))
-
-    # Apply replacements in reverse order to preserve offsets
-    result = xml_text
-    for i in sorted(replacements.keys(), reverse=True):
-        if i < 0 or i >= len(matches):
+    count = len(_SVG_STREAM_RE.findall(xml_text))
+    in_range = {}
+    for i, svg in replacements.items():
+        if 0 <= i < count:
+            in_range[i] = svg
+        else:
             print(f"WARNING: Skipping out-of-range index {i}", file=sys.stderr)
-            continue
-
-        m = matches[i]
-        new_svg = replacements[i]
-        new_hex = hex_encode(new_svg)
-        new_size = len(new_svg.encode("utf-8"))
-
-        replacement = f"{m.group(1)}{new_size}{m.group(3)}{new_hex}{m.group(5)}"
-        result = result[:m.start()] + replacement + result[m.end():]
+    result = replace_icons_in_xml(xml_text, in_range)
 
     if output_path:
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
+        with open(output_path, "w", encoding="utf-8", newline="") as f:
             f.write(result)
         print(f"Wrote updated XML to {output_path}", file=sys.stderr)
 
