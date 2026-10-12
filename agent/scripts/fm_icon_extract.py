@@ -27,7 +27,6 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-
 # ---------------------------------------------------------------------------
 # SVG analysis helpers
 # ---------------------------------------------------------------------------
@@ -45,8 +44,6 @@ def is_stroke_based(svg_text: str) -> bool:
     except ET.ParseError:
         return False
 
-    ns = {"svg": "http://www.w3.org/2000/svg"}
-
     def _check(el):
         stroke = el.get("stroke", "").lower()
         fill = el.get("fill", "").lower()
@@ -55,9 +52,7 @@ def is_stroke_based(svg_text: str) -> bool:
             return True
         # Check style attribute for inline stroke
         style = el.get("style", "")
-        if "stroke" in style and "fill:none" in style.replace(" ", ""):
-            return True
-        return False
+        return "stroke" in style and "fill:none" in style.replace(" ", "")
 
     # Check root element
     if _check(root):
@@ -304,7 +299,6 @@ def prepare_svg_for_fm(svg_text: str) -> str:
     except ET.ParseError:
         return svg_text
 
-    ns = "http://www.w3.org/2000/svg"
     xlink_ns = "http://www.w3.org/1999/xlink"
 
     # Extract or default viewBox
@@ -318,19 +312,14 @@ def prepare_svg_for_fm(svg_text: str) -> str:
     # Build a clean SVG root
     lines = [
         '<?xml version="1.0" encoding="utf-8"?>',
-        f'<svg version="1.2" xmlns="http://www.w3.org/2000/svg"'
-        f' xmlns:xlink="{xlink_ns}"',
-        f'\t x="0px" y="0px" width="{vb_w}px" height="{vb_h}px"'
-        f' viewBox="{viewbox}">',
+        (f'<svg version="1.2" xmlns="http://www.w3.org/2000/svg"'
+         f' xmlns:xlink="{xlink_ns}"'),
+        (f'\t x="0px" y="0px" width="{vb_w}px" height="{vb_h}px"'
+         f' viewBox="{viewbox}">'),
         '<g class="fm_fill">',
     ]
 
     # Collect all shape elements from the source SVG
-    shape_tags = {"path", "rect", "circle", "ellipse", "polygon", "polyline", "line",
-                  f"{{{ns}}}path", f"{{{ns}}}rect", f"{{{ns}}}circle",
-                  f"{{{ns}}}ellipse", f"{{{ns}}}polygon", f"{{{ns}}}polyline",
-                  f"{{{ns}}}line"}
-
     def _collect_shapes(el):
         """Recursively collect shape elements."""
         shapes = []
