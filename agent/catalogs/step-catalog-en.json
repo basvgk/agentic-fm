@@ -2316,40 +2316,49 @@
         "enumValues": [
           "On",
           "Off"
-        ]
+        ],
+        "hrSlot": 4
       },
       {
         "xmlElement": "AutoOpen",
-        "type": "boolean",
+        "type": "flagBoolean",
         "hrLabel": "Automatically open",
         "xmlAttr": "state",
         "required": false,
-        "defaultValue": "False"
+        "defaultValue": "False",
+        "flagStyle": true,
+        "hrSlot": 2,
+        "note": "Bare flag: FileMaker draws 'Automatically open' after the path when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
       },
       {
         "xmlElement": "CreateEmail",
-        "type": "boolean",
+        "type": "flagBoolean",
         "hrLabel": "Create email",
         "xmlAttr": "state",
         "required": false,
-        "defaultValue": "False"
+        "defaultValue": "False",
+        "flagStyle": true,
+        "hrSlot": 3,
+        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
       },
       {
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
         "hrQuoted": true,
-        "required": false
+        "required": false,
+        "hrSlot": 1
       },
       {
         "xmlElement": "Field",
         "type": "field",
         "hrLabel": null,
         "required": false,
-        "notes": "Supports repetition attribute, shown in HR as [rep]."
+        "notes": "Supports repetition attribute, shown in HR as [rep].",
+        "hrSlot": 0
       }
     ],
-    "hrSignature": "Export Field Contents [ Create folders: {On|Off} ; Automatically open ; Create email ; {path} ; {field} ]",
+    "hrSignature": "Export Field Contents [ {field} ; {path} ; Automatically open ; Create email ; Create folders: {On|Off} ]",
     "blockPair": null,
     "status": "complete",
     "helpUrl": "https://help.claris.com/en/pro-help/content/export-field-contents.html"
@@ -2372,7 +2381,8 @@
         "enumValues": [
           "On",
           "Off"
-        ]
+        ],
+        "hrSlot": 0
       },
       {
         "xmlElement": "CreateDirectories",
@@ -2384,7 +2394,8 @@
         "enumValues": [
           "On",
           "Off"
-        ]
+        ],
+        "hrSlot": 1
       },
       {
         "xmlElement": "Restore",
@@ -2394,23 +2405,30 @@
         "xmlAttr": "state",
         "required": false,
         "defaultValue": "True",
-        "notes": "Renders no HR token of its own; FM shows the stored export order's character set only when True (live copy-back: <ExportOptions CharacterSet> is serialized in BOTH states, so this gates RENDERING, not presence). FM does NOT re-canonicalize it from content — handed False with a non-default charset it kept False and reset the charset — so the converter derives the state from whether the gated companion carries an HR token."
+        "notes": "Renders no HR token of its own; FM shows the stored export order's character set only when True (live copy-back: <ExportOptions CharacterSet> is serialized in BOTH states, so this gates RENDERING, not presence). FM does NOT re-canonicalize it from content — handed False with a non-default charset it kept False and reset the charset — so the converter derives the state from whether the gated companion carries an HR token.",
+        "hrSlot": 2
       },
       {
         "xmlElement": "AutoOpen",
-        "type": "boolean",
+        "type": "flagBoolean",
         "hrLabel": "Automatically open",
         "xmlAttr": "state",
         "required": false,
-        "defaultValue": "False"
+        "defaultValue": "False",
+        "flagStyle": true,
+        "hrSlot": 4,
+        "note": "Bare flag: FileMaker draws 'Automatically open' after the path when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3)."
       },
       {
         "xmlElement": "CreateEmail",
-        "type": "boolean",
+        "type": "flagBoolean",
         "hrLabel": "Create email",
         "xmlAttr": "state",
         "required": false,
-        "defaultValue": "False"
+        "defaultValue": "False",
+        "flagStyle": true,
+        "hrSlot": 5,
+        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3)."
       },
       {
         "xmlElement": "Profile",
@@ -2423,14 +2441,16 @@
           { "key": "FieldNameRow", "kind": "attr", "xmlAttr": "FieldNameRow", "defaultValue": "-1" },
           { "key": "DataType", "kind": "attr", "xmlAttr": "DataType", "defaultValue": "TABS" }
         ],
-        "notes": "Export format profile. DataType: TABS|COMS|DBF |MRGE|HTML|FMPR|XML |XLSX (see shared-enums.md). FieldDelimiter may be a tab (whitespace-quoted in HR)."
+        "notes": "Export format profile. DataType: TABS|COMS|DBF |MRGE|HTML|FMPR|XML |XLSX (see shared-enums.md). FieldDelimiter may be a tab (whitespace-quoted in HR).",
+        "hrSlot": 7
       },
       {
         "xmlElement": "UniversalPathList",
         "type": "text",
         "hrLabel": null,
         "hrQuoted": true,
-        "required": false
+        "required": false,
+        "hrSlot": 3
       },
       {
         "xmlElement": "ExportOptions",
@@ -2442,7 +2462,8 @@
           { "key": "FormatUsingCurrentLayout", "kind": "attr", "xmlAttr": "FormatUsingCurrentLayout", "defaultValue": "False" },
           { "key": "CharacterSet", "kind": "attr", "xmlAttr": "CharacterSet", "defaultValue": "UTF-8" }
         ],
-        "notes": "FormatUsingCurrentLayout is the 'Apply current layout's data formatting' checkbox. CharacterSet: see shared-enums.md."
+        "notes": "FormatUsingCurrentLayout is the 'Apply current layout's data formatting' checkbox. CharacterSet: see shared-enums.md.",
+        "hrSlot": 6
       },
       {
         "xmlElement": "ExportEntries",
@@ -2450,7 +2471,8 @@
         "hrLabel": "Export fields",
         "entryElement": "ExportEntry",
         "required": false,
-        "notes": "fieldList (Cluster 1): ordered export field list. Each entry <ExportEntry><Field/></ExportEntry>. HR token `Export fields: Table::Field, ...`."
+        "notes": "fieldList (Cluster 1): ordered export field list. Each entry <ExportEntry><Field/></ExportEntry>. HR token `Export fields: Table::Field, ...`.",
+        "hrSlot": 8
       },
       {
         "xmlElement": "SummaryFields",
@@ -2459,10 +2481,11 @@
         "entryAttr": "GroupByFieldIsSelected",
         "entryAttrDefault": "True",
         "required": false,
-        "notes": "fieldList (Cluster 1): group-by summary fields. Each entry is a direct <Field GroupByFieldIsSelected=\"True\"/>. HR token `Summary fields: Table::Field=True, ...`."
+        "notes": "fieldList (Cluster 1): group-by summary fields. Each entry is a direct <Field GroupByFieldIsSelected=\"True\"/>. HR token `Summary fields: Table::Field=True, ...`.",
+        "hrSlot": 9
       }
     ],
-    "hrSignature": "Export Records [ With dialog: {On|Off} ; Create folders: {On|Off} ; {path} ; {characterSet} ]",
+    "hrSignature": "Export Records [ With dialog: {On|Off} ; Create folders: {On|Off} ; {path} ; Automatically open ; Create email ; {characterSet} ]",
     "blockPair": null,
     "status": "complete",
     "helpUrl": "https://help.claris.com/en/pro-help/content/export-records.html",
@@ -7003,7 +7026,8 @@
         "hrEnumValues": {
           "True": "Off",
           "False": "On"
-        }
+        },
+        "hrSlot": 1
       },
       {
         "xmlElement": "CreateDirectories",
@@ -7015,7 +7039,8 @@
         "hrEnumValues": {
           "True": "On",
           "False": "Off"
-        }
+        },
+        "hrSlot": 6
       },
       {
         "xmlElement": "Restore",
@@ -7024,7 +7049,9 @@
         "xmlAttr": "state",
         "required": false,
         "defaultValue": "False",
-        "note": "state=True stores/restores output options (path, worksheet, title, subject, author)"
+        "note": "state=True stores/restores output options (path, worksheet, title, subject, author). Bare flag: FileMaker draws 'Restore' first when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3).",
+        "flagStyle": true,
+        "hrSlot": 0
       },
       {
         "xmlElement": "AutoOpen",
@@ -7032,7 +7059,10 @@
         "hrLabel": "Automatically open",
         "xmlAttr": "state",
         "required": false,
-        "defaultValue": "False"
+        "defaultValue": "False",
+        "flagStyle": true,
+        "hrSlot": 3,
+        "note": "Bare flag: FileMaker draws 'Automatically open' after the path when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3)."
       },
       {
         "xmlElement": "CreateEmail",
@@ -7040,7 +7070,10 @@
         "hrLabel": "Create email",
         "xmlAttr": "state",
         "required": false,
-        "defaultValue": "False"
+        "defaultValue": "False",
+        "flagStyle": true,
+        "hrSlot": 4,
+        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3)."
       },
       {
         "xmlElement": "Profile",
@@ -7053,7 +7086,8 @@
           { "key": "FieldNameRow", "kind": "attr", "xmlAttr": "FieldNameRow", "defaultValue": "-1" },
           { "key": "IsPredefined", "kind": "attr", "xmlAttr": "IsPredefined", "defaultValue": "-1" }
         ],
-        "note": "attrGroup: <Profile> carries the Excel export format descriptor (DataType XLXE, tab FieldDelimiter, field-name row). Same shape as Execute SQL's <Profile> attrGroup; a tab delimiter is auto-quoted in the HR token (NeedsGroupQuote)."
+        "note": "attrGroup: <Profile> carries the Excel export format descriptor (DataType XLXE, tab FieldDelimiter, field-name row). Same shape as Execute SQL's <Profile> attrGroup; a tab delimiter is auto-quoted in the HR token (NeedsGroupQuote).",
+        "hrSlot": 7
       },
       {
         "xmlElement": "UniversalPathList",
@@ -7061,35 +7095,40 @@
         "hrLabel": "Output path",
         "hrQuoted": true,
         "required": false,
-        "note": "Output file path. If omitted, Save Records as Excel dialog is shown."
+        "note": "Output file path. If omitted, Save Records as Excel dialog is shown.",
+        "hrSlot": 2
       },
       {
         "xmlElement": "Calculation",
         "type": "namedCalc",
         "hrLabel": "Worksheet",
         "wrapperElement": "WorkSheet",
-        "required": false
+        "required": false,
+        "hrSlot": 8
       },
       {
         "xmlElement": "Calculation",
         "type": "namedCalc",
         "hrLabel": "Title",
         "wrapperElement": "Title",
-        "required": false
+        "required": false,
+        "hrSlot": 9
       },
       {
         "xmlElement": "Calculation",
         "type": "namedCalc",
         "hrLabel": "Subject",
         "wrapperElement": "Subject",
-        "required": false
+        "required": false,
+        "hrSlot": 10
       },
       {
         "xmlElement": "Calculation",
         "type": "namedCalc",
         "hrLabel": "Author",
         "wrapperElement": "Author",
-        "required": false
+        "required": false,
+        "hrSlot": 11
       },
       {
         "xmlElement": "SaveType",
@@ -7101,7 +7140,9 @@
         "hrEnumValues": {
           "BrowsedRecords": "Records being browsed",
           "CurrentRecord": "Current record"
-        }
+        },
+        "hrSlot": 5,
+        "enumValues": ["BrowsedRecords", "CurrentRecord"]
       },
       {
         "xmlElement": "UseFieldNames",
@@ -7113,7 +7154,8 @@
         "hrEnumValues": {
           "True": "On",
           "False": "Off"
-        }
+        },
+        "hrSlot": 12
       }
     ],
     "hrSignature": "[ <Restore> ; With dialog: <On/Off> ; <path> ; <Automatically open> ; <Create email> ; <SaveType> ; Create folders: <On/Off> ]",
@@ -7135,7 +7177,8 @@
         "xmlAttr": "state",
         "required": false,
         "defaultValue": "False",
-        "note": "state=True enables Table (source table) selection"
+        "note": "state=True enables Table (source table) selection",
+        "hrSlot": 0
       },
       {
         "xmlElement": "CreateDirectories",
@@ -7147,7 +7190,8 @@
         "hrEnumValues": {
           "True": "On",
           "False": "Off"
-        }
+        },
+        "hrSlot": 10
       },
       {
         "xmlElement": "FineTuneFormat",
@@ -7159,7 +7203,8 @@
         "hrEnumValues": {
           "True": "On",
           "False": "Off"
-        }
+        },
+        "hrSlot": 1
       },
       {
         "xmlElement": "AutoOpen",
@@ -7167,7 +7212,10 @@
         "hrLabel": "Automatically open",
         "xmlAttr": "state",
         "required": false,
-        "defaultValue": "False"
+        "defaultValue": "False",
+        "flagStyle": true,
+        "hrSlot": 8,
+        "note": "Bare flag: FileMaker draws 'Automatically open' after the path when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
       },
       {
         "xmlElement": "CreateEmail",
@@ -7175,7 +7223,10 @@
         "hrLabel": "Create email",
         "xmlAttr": "state",
         "required": false,
-        "defaultValue": "False"
+        "defaultValue": "False",
+        "flagStyle": true,
+        "hrSlot": 9,
+        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
       },
       {
         "xmlElement": "UniversalPathList",
@@ -7183,14 +7234,16 @@
         "hrLabel": "Output path",
         "hrQuoted": true,
         "required": false,
-        "note": "Output file path. If omitted, Save Records as JSONL dialog is shown."
+        "note": "Output file path. If omitted, Save Records as JSONL dialog is shown.",
+        "hrSlot": 7
       },
       {
         "xmlElement": "Table",
         "type": "tableReference",
         "hrLabel": "Table",
         "required": false,
-        "note": "Source table. Only present when Option state=True. Sibling before <SaveAsJSONL>."
+        "note": "Source table. Only present when Option state=True. Sibling before <SaveAsJSONL>.",
+        "hrSlot": 2
       },
       {
         "xmlElement": "Field",
@@ -7198,7 +7251,9 @@
         "hrLabel": "Completion Field",
         "required": false,
         "omitWhenEmpty": true,
-        "note": "Only when FineTuneFormat state=False (Completion Field mode). omitWhenEmpty makes it present-driven so fine-tune mode (no field) emits no <Field> instead of an empty one. Appears as sibling before <SaveAsJSONL> AND inside it."
+        "note": "Only when FineTuneFormat state=False (Completion Field mode). omitWhenEmpty makes it present-driven so fine-tune mode (no field) emits no <Field> instead of an empty one. Appears as sibling before <SaveAsJSONL> AND inside it. FileMaker draws it labeled, after Table (hrLabeled, hrSlot; FM 26.0.3).",
+        "hrLabeled": true,
+        "hrSlot": 3
       },
       {
         "xmlElement": "Calculation",
@@ -7207,7 +7262,8 @@
         "wrapperElement": "SystemPrompt",
         "parentElement": "SaveAsJSONL",
         "required": false,
-        "note": "Only when FineTuneFormat state=True"
+        "note": "Only when FineTuneFormat state=True",
+        "hrSlot": 4
       },
       {
         "xmlElement": "Calculation",
@@ -7216,7 +7272,8 @@
         "wrapperElement": "UserPrompt",
         "parentElement": "SaveAsJSONL",
         "required": false,
-        "note": "Only when FineTuneFormat state=True"
+        "note": "Only when FineTuneFormat state=True",
+        "hrSlot": 5
       },
       {
         "xmlElement": "Calculation",
@@ -7225,7 +7282,8 @@
         "wrapperElement": "AssistantPrompt",
         "parentElement": "SaveAsJSONL",
         "required": false,
-        "note": "Only when FineTuneFormat state=True"
+        "note": "Only when FineTuneFormat state=True",
+        "hrSlot": 6
       }
     ],
     "hrSignature": "[ Format for fine-tuning: <On/Off> ; Table: <name> ; System Prompt: <calc> ; User Prompt: <calc> ; Assistant Prompt: <calc> ; <path> ; <Automatically open> ; <Create email> ; Create folders: <On/Off> ]",
@@ -7251,7 +7309,8 @@
         "hrEnumValues": {
           "True": "Off",
           "False": "On"
-        }
+        },
+        "hrSlot": 4
       },
       {
         "xmlElement": "Option",
@@ -7260,7 +7319,9 @@
         "xmlAttr": "state",
         "required": false,
         "defaultValue": "False",
-        "note": "state=True appends to existing PDF instead of creating/overwriting"
+        "note": "state=True appends to existing PDF instead of creating/overwriting. Bare flag: FileMaker draws 'Append' before the path when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3).",
+        "flagStyle": true,
+        "hrSlot": 1
       },
       {
         "xmlElement": "CreateDirectories",
@@ -7272,7 +7333,8 @@
         "hrEnumValues": {
           "True": "On",
           "False": "Off"
-        }
+        },
+        "hrSlot": 3
       },
       {
         "xmlElement": "Restore",
@@ -7281,7 +7343,9 @@
         "xmlAttr": "state",
         "required": false,
         "defaultValue": "False",
-        "note": "state=True stores/restores output options"
+        "note": "state=True stores/restores output options. Bare flag: FileMaker draws 'Restore' first when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3).",
+        "flagStyle": true,
+        "hrSlot": 0
       },
       {
         "xmlElement": "AutoOpen",
@@ -7289,7 +7353,10 @@
         "hrLabel": "Automatically open",
         "xmlAttr": "state",
         "required": false,
-        "defaultValue": "False"
+        "defaultValue": "False",
+        "flagStyle": true,
+        "hrSlot": 5,
+        "note": "Bare flag: FileMaker draws 'Automatically open' after 'With dialog' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
       },
       {
         "xmlElement": "CreateEmail",
@@ -7297,7 +7364,10 @@
         "hrLabel": "Create email",
         "xmlAttr": "state",
         "required": false,
-        "defaultValue": "False"
+        "defaultValue": "False",
+        "flagStyle": true,
+        "hrSlot": 6,
+        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
       },
       {
         "xmlElement": "UniversalPathList",
@@ -7306,7 +7376,8 @@
         "hrQuoted": true,
         "omitWhenEmpty": true,
         "required": false,
-        "note": "Output file path. If omitted, Save Records as PDF dialog is shown."
+        "note": "Output file path. If omitted, Save Records as PDF dialog is shown.",
+        "hrSlot": 2
       },
       {
         "xmlElement": "Calculation",
@@ -7314,7 +7385,8 @@
         "hrLabel": "Saved label",
         "omitWhenEmpty": true,
         "required": false,
-        "note": "Stored label/title for the PDF specification. Only present when Restore state=True."
+        "note": "Stored label/title for the PDF specification. Only present when Restore state=True.",
+        "hrSlot": 7
       },
       {
         "xmlElement": "Field",
@@ -7322,7 +7394,8 @@
         "hrLabel": "Save to target",
         "textMarker": true,
         "required": false,
-        "note": "Container field or variable the PDF is saved into; present only when PDFSaveType=Target. FM marks it with a leading empty <Text/> for both the field-ref and variable forms."
+        "note": "Container field or variable the PDF is saved into; present only when PDFSaveType=Target. FM marks it with a leading empty <Text/> for both the field-ref and variable forms.",
+        "hrSlot": 8
       },
       {
         "xmlElement": "PDFOptions",
@@ -7361,10 +7434,11 @@
             { "key": "Layout", "kind": "attr", "xmlAttr": "pageLayout", "defaultValue": "SinglePage" },
             { "key": "Show", "kind": "attr", "xmlAttr": "show", "defaultValue": "PagesPanelAndPage" }
           ] }
-        ]
+        ],
+        "hrSlot": 9
       }
     ],
-    "hrSignature": "[ <Restore> ; <Append> ; With dialog: <On/Off> ; <path> ; Saved label: <calc> ; Records: source=<token>, PDFSaveType=<token>, Document=( … ), Security=( … ), View=( … ) ; Create folders: <On/Off> ]",
+    "hrSignature": "[ <Restore> ; <Append> ; <path> ; Create folders: <On/Off> ; With dialog: <On/Off> ; <Automatically open> ; <Create email> ; Saved label: <calc> ; Records: source=<token>, PDFSaveType=<token>, Document=( … ), Security=( … ), View=( … ) ]",
     "blockPair": null,
     "status": "complete",
     "helpUrl": "https://help.claris.com/en/pro-help/content/save-records-as-pdf.html"
@@ -7386,7 +7460,8 @@
         "hrEnumValues": {
           "True": "On",
           "False": "Off"
-        }
+        },
+        "hrSlot": 3
       },
       {
         "xmlElement": "CreateEmail",
@@ -7394,7 +7469,10 @@
         "hrLabel": "Create email",
         "xmlAttr": "state",
         "required": false,
-        "defaultValue": "False"
+        "defaultValue": "False",
+        "flagStyle": true,
+        "hrSlot": 1,
+        "note": "Bare flag: FileMaker draws 'Create email' after the path when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
       },
       {
         "xmlElement": "SaveType",
@@ -7406,7 +7484,9 @@
         "hrEnumValues": {
           "BrowsedRecords": "Records being browsed",
           "CurrentRecord": "Current record"
-        }
+        },
+        "hrSlot": 2,
+        "enumValues": ["BrowsedRecords", "CurrentRecord"]
       },
       {
         "xmlElement": "UniversalPathList",
@@ -7414,7 +7494,8 @@
         "hrLabel": "Output path",
         "hrQuoted": true,
         "required": false,
-        "note": "Output file path. If omitted, Save Records as Snapshot Link dialog is shown."
+        "note": "Output file path. If omitted, Save Records as Snapshot Link dialog is shown.",
+        "hrSlot": 0
       }
     ],
     "hrSignature": "[ <path> ; <Create email> ; <SaveType> ; Create folders: <On/Off> ]",

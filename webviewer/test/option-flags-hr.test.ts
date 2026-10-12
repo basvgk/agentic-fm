@@ -1,0 +1,92 @@
+/**
+ * The export and Save Records as steps read and print their option flags as
+ * FileMaker draws them.
+ *
+ * FileMaker draws Automatically open and Create email on Export Field Contents,
+ * Export Records and Save Records as Excel / JSONL / PDF / Snapshot Link as bare
+ * flags only when on, right after the path (after With dialog on Save Records as
+ * PDF); Restore (Excel, PDF) and Append (PDF) are bare flags too. The catalog
+ * marks them `flagStyle` and orders the line with `hrSlot`. The cases in
+ * agent/fixtures/converter/option-flags-fm-lines.json were pasted into FileMaker
+ * Pro 26.0.3 and read back: the stored step and the line FileMaker displays.
+ * Mirrors agent/scripts/test_option_flags_hr.py.
+ *
+ * FileMaker's line is lossy where a step has no path: Export Field Contents and
+ * Save Records as JSONL / PDF / Snapshot Link then draw no option flag although
+ * the step keeps them on (`hidesOptions`), so that line converts with them off.
+ */
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { hrToXml, loadCatalog } from '@/converter/hr-to-xml';
+import { xmlToHr } from '@/converter/xml-to-hr';
+import type { StepCatalogEntry } from '@/converter/catalog-types';
+
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
+const rawCatalog = JSON.parse(
+  readFileSync(path.join(REPO_ROOT, 'agent', 'catalogs', 'step-catalog-en.json'), 'utf-8'),
+);
+const entries: StepCatalogEntry[] = rawCatalog.steps ?? rawCatalog;
+loadCatalog(entries);
+
+interface FlagCase {
+  step: string;
+  xml: string;
+  fmLine: string;
+  hidesOptions: boolean;
+}
+const CASES: FlagCase[] = JSON.parse(
+  readFileSync(path.join(REPO_ROOT, 'agent', 'fixtures', 'converter', 'option-flags-fm-lines.json'), 'utf-8'),
+).cases;
+
+const FLAGS: Record<string, string> = {
+  AutoOpen: 'Automatically open',
+  CreateEmail: 'Create email',
+  Restore: 'Restore',
+};
+const PDF_FLAGS: Record<string, string> = { ...FLAGS, Option: 'Append' };
+const FLAG_LABELS = new Set(Object.values(PDF_FLAGS));
+
+const flagsOf = (step: string): string[] => {
+  if (step === 'Save Records as PDF') return Object.keys(PDF_FLAGS);
+  if (step === 'Save Records as Excel') return Object.keys(FLAGS);
+  return ['AutoOpen', 'CreateEmail'];
+};
+
+const state = (xml: string, el: string): string | null =>
+  new RegExp(`<${el} state="(\\w+)"`).exec(xml)?.[1] ?? null;
+
+const snippet = (stepXml: string) => `<fmxmlsnippet type="FMObjectList">${stepXml}</fmxmlsnippet>`;
+
+// The flag tokens and the quoted path, in line order.
+const flagAndPathOrder = (line: string): string[] =>
+  line
+    .slice(line.indexOf('[') + 1, line.lastIndexOf(']'))
+    .split(';')
+    .map((t) => t.trim())
+    .filter((t) => FLAG_LABELS.has(t) || t.startsWith('“'));
+
+describe('Export / Save Records as option flags HR', () => {
+  it.each(CASES)("FileMaker's line converts back with the stored options ($fmLine)", (c) => {
+    const xml = hrToXml(c.fmLine).xml;
+    for (const el of flagsOf(c.step)) {
+      let want = state(c.xml, el);
+      if (c.hidesOptions && want !== null && (el === 'AutoOpen' || el === 'CreateEmail')) want = 'False';
+      expect(state(xml, el), el).toBe(want);
+    }
+  });
+
+  it.each(CASES)('XML→HR prints the options as FileMaker draws them ($fmLine)', (c) => {
+    const line = xmlToHr(snippet(c.xml));
+    for (const label of FLAG_LABELS) expect(line).not.toContain(`${label}:`);
+    if (!c.hidesOptions) expect(flagAndPathOrder(line)).toEqual(flagAndPathOrder(c.fmLine));
+    const back = hrToXml(line).xml;
+    for (const el of flagsOf(c.step)) expect(state(back, el), el).toBe(state(c.xml, el));
+  });
+
+  it("prints Save Records as Snapshot Link exactly as FileMaker's line", () => {
+    for (const c of CASES) {
+      if (c.step === 'Save Records as Snapshot Link' && !c.hidesOptions) expect(xmlToHr(snippet(c.xml))).toBe(c.fmLine);
+    }
+  });
+});
