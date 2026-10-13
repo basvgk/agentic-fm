@@ -525,6 +525,11 @@ function splitParams(content: string): string[] {
 
   if (current.trim()) {
     params.push(current.trim());
+  } else if (params.length > 0) {
+    // An empty slot after the last `;` is one FileMaker drew empty and last
+    // (Export Records with no path but a <Profile>: `Create folders: On ; ]`),
+    // kept like any other empty slot. A bracket holding nothing has no slot.
+    params.push('');
   }
 
   return params;

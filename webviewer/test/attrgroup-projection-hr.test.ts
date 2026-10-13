@@ -42,7 +42,7 @@ const CASES: FmCase[] = JSON.parse(
 // FileMaker-only display quirks the converters do not reproduce (see the fixture).
 const LINE_QUIRKS = new Set([
   'pdf-restoreF-nopath', 'pdf-restoreF-nopath-current', 'pdf-restoreF-nopath-append',
-  'pdf-file-nopath-ao-cfOff', 'exp-nopath-restoreF',
+  'pdf-file-nopath-ao-cfOff',
 ]);
 
 const snippet = (stepXml: string) => `<fmxmlsnippet type="FMObjectList">${stepXml}</fmxmlsnippet>`;

@@ -134,6 +134,8 @@ def _split_params(content: str) -> list[str]:
         i += 1
     if cur.strip():
         params.append(cur.strip())
+    elif params:
+        params.append("")
     return params
 
 

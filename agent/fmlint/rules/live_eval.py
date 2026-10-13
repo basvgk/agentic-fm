@@ -163,7 +163,7 @@ class LiveEvalError(LintRule):
             # The bracket content itself is the expression for most steps
             if ln.params:
                 # For Set Variable, the calc is the last param
-                calc = ln.params[-1].strip()
+                calc = next((p.strip() for p in reversed(ln.params) if p.strip()), "")
                 if calc:
                     calcs.append((ln.line_number, calc))
         return calcs

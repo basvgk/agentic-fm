@@ -2,7 +2,7 @@
  "_comment": [
   "Export Records, Save Records as Excel and Save Records as PDF, measured on FileMaker Pro 26.0.3 (macOS, 2026-10-12): each step was pasted into a script, FileMaker's displayed line read, and the step copied back (xml).",
   "FileMaker draws Export Records' stored character set bare and only with Restore on, Save Records as PDF's PDFSaveType as `Save to: File|Target` and its records source (with the blank-record appearance) bare and last, and an empty path slot on Export Records / Save Records as Excel exactly when the step has a <Profile>. It never draws Profile, the export field order, Excel's Worksheet / Title / Subject / Author / Use field names, or the PDF document options; with Save to: Target it hides the PDF file options too.",
-  "Known FileMaker-only quirks the converters do not reproduce: pdf-restoreF-nopath* (no records source on the line), pdf-file-nopath-ao-cfOff (a no-path PDF hides its option flags, CORE_INSIGHTS #181), and exp-nopath-restoreF (a trailing empty slot, which the HR line reader drops)."
+  "Lines that hide content only in some states (the catalog's fmLineHiddenWhen, applied only by an HR form that mirrors FileMaker's line): pdf-restoreF-nopath* (no records source with Restore off, no path and Save to: File) and pdf-file-nopath-ao-cfOff (a no-path PDF draws no option flags although it keeps them). exp-nopath-restoreF ends in the empty slot FileMaker draws for <Profile>, which the HR line reader keeps."
  ],
  "cases": [
   {

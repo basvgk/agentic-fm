@@ -349,7 +349,7 @@ class N003BooleanVarNaming(LintRule):
             if len(line.params) < 2:
                 continue
             var_name = line.params[0].strip()
-            calc_text = line.params[-1].strip()
+            calc_text = next((p.strip() for p in reversed(line.params) if p.strip()), "")
             if calc_text not in ("True", "False"):
                 continue
             if not var_name:

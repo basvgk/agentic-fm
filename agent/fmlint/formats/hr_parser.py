@@ -451,6 +451,11 @@ def _split_params(content: str) -> list:
 
     if current.strip():
         params.append(current.strip())
+    elif params:
+        # An empty slot after the last ``;`` is one FileMaker drew empty and last
+        # (Export Records with no path but a <Profile>: ``Create folders: On ; ]``),
+        # kept like any other empty slot. A bracket holding nothing has no slot.
+        params.append("")
 
     return params
 

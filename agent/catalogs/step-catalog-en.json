@@ -2328,7 +2328,10 @@
         "defaultValue": "False",
         "flagStyle": true,
         "hrSlot": 2,
-        "note": "Bare flag: FileMaker draws 'Automatically open' after the path when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
+        "fmLineHiddenWhen": [
+          { "param": "UniversalPathList", "empty": true }
+        ],
+        "note": "Bare flag: FileMaker draws 'Automatically open' after the path when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back (fmLineHiddenWhen); the converter's own HR still prints it."
       },
       {
         "xmlElement": "CreateEmail",
@@ -2339,7 +2342,10 @@
         "defaultValue": "False",
         "flagStyle": true,
         "hrSlot": 3,
-        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
+        "fmLineHiddenWhen": [
+          { "param": "UniversalPathList", "empty": true }
+        ],
+        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back (fmLineHiddenWhen); the converter's own HR still prints it."
       },
       {
         "xmlElement": "UniversalPathList",
@@ -7090,7 +7096,10 @@
         "required": false,
         "defaultValue": "False",
         "hrSlot": 2,
-        "note": "Bare flag: FileMaker draws 'Automatically open' after the copy type when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
+        "fmLineHiddenWhen": [
+          { "param": "UniversalPathList", "empty": true }
+        ],
+        "note": "Bare flag: FileMaker draws 'Automatically open' after the copy type when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back (fmLineHiddenWhen); the converter's own HR still prints it."
       },
       {
         "xmlElement": "CreateEmail",
@@ -7101,7 +7110,10 @@
         "required": false,
         "defaultValue": "False",
         "hrSlot": 3,
-        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
+        "fmLineHiddenWhen": [
+          { "param": "UniversalPathList", "empty": true }
+        ],
+        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back (fmLineHiddenWhen); the converter's own HR still prints it."
       },
       {
         "xmlElement": "SaveAsType",
@@ -7470,7 +7482,10 @@
         "defaultValue": "False",
         "flagStyle": true,
         "hrSlot": 8,
-        "note": "Bare flag: FileMaker draws 'Automatically open' after the path when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
+        "fmLineHiddenWhen": [
+          { "param": "UniversalPathList", "empty": true }
+        ],
+        "note": "Bare flag: FileMaker draws 'Automatically open' after the path when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back (fmLineHiddenWhen); the converter's own HR still prints it."
       },
       {
         "xmlElement": "CreateEmail",
@@ -7481,7 +7496,10 @@
         "defaultValue": "False",
         "flagStyle": true,
         "hrSlot": 9,
-        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
+        "fmLineHiddenWhen": [
+          { "param": "UniversalPathList", "empty": true }
+        ],
+        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back (fmLineHiddenWhen); the converter's own HR still prints it."
       },
       {
         "xmlElement": "UniversalPathList",
@@ -7623,7 +7641,10 @@
         "flagStyle": true,
         "hrSlot": 6,
         "visibleWhen": { "param": "PDFOptions#PDFSaveType", "values": ["File"] },
-        "note": "Bare flag: FileMaker draws 'Automatically open' after 'With dialog' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). Hidden, like every file option, when Save to is Target. With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
+        "fmLineHiddenWhen": [
+          { "param": "UniversalPathList", "empty": true }
+        ],
+        "note": "Bare flag: FileMaker draws 'Automatically open' after 'With dialog' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). Hidden, like every file option, when Save to is Target. With no path FileMaker draws no flag but keeps state=True on copy-back (fmLineHiddenWhen); the converter's own HR still prints it."
       },
       {
         "xmlElement": "CreateEmail",
@@ -7635,7 +7656,10 @@
         "flagStyle": true,
         "hrSlot": 7,
         "visibleWhen": { "param": "PDFOptions#PDFSaveType", "values": ["File"] },
-        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). Hidden, like every file option, when Save to is Target. With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
+        "fmLineHiddenWhen": [
+          { "param": "UniversalPathList", "empty": true }
+        ],
+        "note": "Bare flag: FileMaker draws 'Create email' after 'Automatically open' when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). Hidden, like every file option, when Save to is Target. With no path FileMaker draws no flag but keeps state=True on copy-back (fmLineHiddenWhen); the converter's own HR still prints it."
       },
       {
         "xmlElement": "UniversalPathList",
@@ -7735,7 +7759,12 @@
           "BlankRecord|WithBoxes": "Blank record, with boxes",
           "BlankRecord|WithUnderlines": "Blank record, with underlines"
         },
-        "note": "Display projection of PDFOptions' source + appearance (groupFields, joined `|`): FileMaker draws the records source bare and last (`Records being browsed`, `Blank record, with boxes`; FM 26.0.3). Not drawn when Restore is off and no path is set with Save to: File, a FileMaker display quirk the converter does not reproduce.",
+        "fmLineHiddenWhen": [
+          { "param": "Restore", "values": ["False"] },
+          { "param": "UniversalPathList", "empty": true },
+          { "param": "PDFOptions#PDFSaveType", "values": ["File"] }
+        ],
+        "note": "Display projection of PDFOptions' source + appearance (groupFields, joined `|`): FileMaker draws the records source bare and last (`Records being browsed`, `Blank record, with boxes`; FM 26.0.3). Not drawn when Restore is off and no path is set with Save to: File (fmLineHiddenWhen; FM 26.0.3); the converter's own HR still prints it.",
         "hrSlot": 9
       }
     ],
@@ -7773,7 +7802,10 @@
         "defaultValue": "False",
         "flagStyle": true,
         "hrSlot": 1,
-        "note": "Bare flag: FileMaker draws 'Create email' after the path when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back; the converter still prints it."
+        "fmLineHiddenWhen": [
+          { "param": "UniversalPathList", "empty": true }
+        ],
+        "note": "Bare flag: FileMaker draws 'Create email' after the path when state=True, nothing when False (flagStyle, hrSlot; FM 26.0.3). With no path FileMaker draws no flag but keeps state=True on copy-back (fmLineHiddenWhen); the converter's own HR still prints it."
       },
       {
         "xmlElement": "SaveType",

@@ -49,7 +49,7 @@ with open(
 
 # FileMaker-only display quirks the converters do not reproduce (see the fixture).
 LINE_QUIRKS = {"pdf-restoreF-nopath", "pdf-restoreF-nopath-current", "pdf-restoreF-nopath-append",
-               "pdf-file-nopath-ao-cfOff", "exp-nopath-restoreF"}
+               "pdf-file-nopath-ao-cfOff"}
 
 
 def _snippet(step_xml: str) -> str:
