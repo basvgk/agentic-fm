@@ -58,6 +58,7 @@ from calc_literal import (
     reads_as_quoted_literal_text,
 )
 from catalog_grammar import (
+    FIELD_MISSING_SENTINEL,
     CatalogEntry,
     StepParam,
     _group_quote_value,
@@ -440,6 +441,16 @@ def _repetition_calc_sibling(calc: str, indent: str) -> str:
     )
 
 
+def _resolve_field(resolver: IdResolver, ref: str) -> tuple[str, int, str]:
+    """Resolve ``Table::Field``; FileMaker's ``Table::<Field Missing>`` (a table
+    with no field) reads back to its stored form, id 0 and an empty name, never a
+    field literally named ``<Field Missing>``."""
+    sep = ref.find("::")
+    if sep >= 0 and _trim(ref[sep + 2 :]) == FIELD_MISSING_SENTINEL:
+        return _trim(ref[:sep]), 0, ""
+    return resolver.resolve_field(ref)
+
+
 def _field_ref_xml(
     resolver: IdResolver,
     ref: str,
@@ -455,7 +466,7 @@ def _field_ref_xml(
     bare, rep, calc = _parse_field_subscript(_trim(ref))
     if not allow_calc:
         calc = ""
-    table, fid, fname = resolver.resolve_field(bare)
+    table, fid, fname = _resolve_field(resolver, bare)
     return (
         "<Field"
         + extra_attrs
@@ -1138,7 +1149,7 @@ def _emit_find_requests(hr_value: str, resolver: IdResolver) -> str:
             if not field:
                 out += '          <Field table="" id="0" name=""/>\n'
             else:
-                table, fid, fname = resolver.resolve_field(field)
+                table, fid, fname = _resolve_field(resolver, field)
                 out += (
                     '          <Field table="'
                     + esc_xml(table)
@@ -1415,7 +1426,7 @@ def _emit_field_list(param: StepParam, hr_value: str, resolver: IdResolver) -> s
         if eq != -1:
             fieldref = _trim(entry_str[:eq])
             attrval = _trim(entry_str[eq + 1 :])
-        table, fid, fname = resolver.resolve_field(_group_unquote_value(fieldref))
+        table, fid, fname = _resolve_field(resolver, _group_unquote_value(fieldref))
         fattrs = ""
         for ff in field_fixed_attrs:
             fattrs += " " + _raw_str(ff, "xmlAttr") + '="' + esc_xml_attr(_raw_str(ff, "defaultValue")) + '"'

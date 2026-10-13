@@ -586,6 +586,24 @@ def _repetition_calc_of(fld: ET.Element, parent: ET.Element | None) -> str:
     return ""
 
 
+# FileMaker's drawing of a field reference that names a table occurrence but no
+# field: it stores <Field table="T" id="0" name=""/> and draws `T::<Field Missing>`.
+# The emit side reads the sentinel back to the empty name.
+FIELD_MISSING_SENTINEL = "<Field Missing>"
+
+
+def _field_ref_hr(table: str, name: str) -> str:
+    """The HR token of a stored ``<Field table id name/>``, drawn the way FileMaker
+    draws it: ``Table::Field``, the bare name when there is no table, and
+    ``Table::<Field Missing>`` when there is a table but no field. No table and no
+    field is the unconfigured default and yields no token."""
+    if name:
+        return name if not table else table + "::" + name
+    if table:
+        return table + "::" + FIELD_MISSING_SENTINEL
+    return ""
+
+
 def _with_repetition_suffix(ref: str, fld: ET.Element, parent: ET.Element | None = None) -> str:
     """Append FileMaker's ``[N]`` repetition subscript to a field/variable ref.
 
@@ -885,9 +903,9 @@ def _render_group_element(node: ET.Element, fields: list[dict]) -> str:
             if fld is not None:
                 table = fld.get("table", "")
                 name = fld.get("name", "")
-                if name:
-                    parts.append(key + "=" + _with_repetition_suffix(
-                        name if not table else table + "::" + name, fld))
+                ref = _field_ref_hr(table, name)
+                if ref:
+                    parts.append(key + "=" + _with_repetition_suffix(ref, fld))
         elif kind == "script":
             sc = node.find(f.get("element", ""))
             if sc is not None:
@@ -903,8 +921,8 @@ def _render_group_element(node: ET.Element, fields: list[dict]) -> str:
                 else:
                     table = fld.get("table", "")
                     name = fld.get("name", "")
-                    if name:
-                        ref = name if not table else table + "::" + name
+                    ref = _field_ref_hr(table, name)
+                    if ref:
                         parts.append(
                             key + "=" + _group_quote_value(_with_repetition_suffix(ref, fld))
                         )
@@ -982,7 +1000,7 @@ def _render_field_list(container: ET.Element, param: StepParam) -> str:
             return
         table = field_node.get("table", "")
         name = field_node.get("name", "")
-        fieldref = "" if not name else (name if not table else table + "::" + name)
+        fieldref = _field_ref_hr(table, name)
         token = _group_quote_value(fieldref)
         if entry_attr:
             attr_node = field_node if not entry_el else entry_node
@@ -1193,9 +1211,7 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
                     table = fld.get("table", "") if fld is not None else ""
                     name = fld.get("name", "") if fld is not None else ""
                     text = _child_text(cr, "Text")
-                    fieldref = ""
-                    if name:
-                        fieldref = name if not table else table + "::" + name
+                    fieldref = _field_ref_hr(table, name)
                     crits.append(text if not fieldref else (fieldref + ": " + text))
                 joined = " & ".join(crits)
                 if op == "Exclude":
@@ -1224,9 +1240,11 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
             if text and text[0] == "$":
                 val = text
             elif name:
-                val = name if not table else table + "::" + name
+                val = _field_ref_hr(table, name)
             elif text:
                 val = text
+            else:
+                val = _field_ref_hr(table, name)  # Table::<Field Missing>, or none
             val = _with_repetition_suffix(val, field_node, base)
             if val and label:
                 val = label + ": " + val
@@ -1251,9 +1269,7 @@ def compute_param_hr(entry: CatalogEntry, step: ET.Element, param: StepParam) ->
         if field_node is not None:
             table = field_node.get("table", "")
             name = field_node.get("name", "")
-            val = _with_repetition_suffix(
-                name if not table else table + "::" + name, field_node, base
-            )
+            val = _with_repetition_suffix(_field_ref_hr(table, name), field_node, base)
             # hr_labeled: label the field where FileMaker does (inverse of bare).
             if val and param.hr_labeled and label:
                 val = label + ": " + val

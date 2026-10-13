@@ -592,6 +592,25 @@ function repetitionCalcOf(fld: Element): string {
 }
 
 /**
+ * FileMaker's drawing of a field reference that names a table occurrence but no
+ * field: it stores `<Field table="T" id="0" name=""/>` and draws
+ * `T::<Field Missing>`. The emit side reads the sentinel back to the empty name.
+ */
+export const FIELD_MISSING_SENTINEL = '<Field Missing>';
+
+/**
+ * The HR token of a stored `<Field table id name/>`, drawn the way FileMaker
+ * draws it: `Table::Field`, the bare name when there is no table, and
+ * `Table::<Field Missing>` when there is a table but no field. No table and no
+ * field is the unconfigured default and yields no token.
+ */
+function fieldRefHr(table: string, name: string): string {
+  if (name) return !table ? name : table + '::' + name;
+  if (table) return table + '::' + FIELD_MISSING_SENTINEL;
+  return '';
+}
+
+/**
  * Append FileMaker's `[N]` repetition subscript to a field/variable ref.
  *
  * FileMaker serializes a repetition as `repetition="N"` on the `<Field>`
@@ -639,7 +658,8 @@ function renderGroupElement(node: Element, fields: Record<string, unknown>[]): s
       if (fld !== null) {
         const table = fld.getAttribute('table') ?? '';
         const name = fld.getAttribute('name') ?? '';
-        if (name) parts.push(key + '=' + withRepetitionSuffix(!table ? name : table + '::' + name, fld));
+        const ref = fieldRefHr(table, name);
+        if (ref) parts.push(key + '=' + withRepetitionSuffix(ref, fld));
       }
     } else if (kind === 'script') {
       const sc = findChild(node, (f.element as string) ?? '');
@@ -656,10 +676,8 @@ function renderGroupElement(node: Element, fields: Record<string, unknown>[]): s
         } else {
           const table = fld.getAttribute('table') ?? '';
           const name = fld.getAttribute('name') ?? '';
-          if (name) {
-            const ref = !table ? name : table + '::' + name;
-            parts.push(key + '=' + groupQuoteValue(withRepetitionSuffix(ref, fld)));
-          }
+          const ref = fieldRefHr(table, name);
+          if (ref) parts.push(key + '=' + groupQuoteValue(withRepetitionSuffix(ref, fld)));
         }
       }
     } else if (kind === 'group') {
@@ -732,7 +750,7 @@ function renderFieldList(container: Element, param: GrammarParam): string {
     if (fieldNode === null) return;
     const table = fieldNode.getAttribute('table') ?? '';
     const name = fieldNode.getAttribute('name') ?? '';
-    const fieldref = !name ? '' : !table ? name : table + '::' + name;
+    const fieldref = fieldRefHr(table, name);
     let token = groupQuoteValue(fieldref);
     if (entryAttr) {
       const attrNode = !entryEl ? fieldNode : entryNode;
@@ -944,8 +962,7 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
           const table = fld !== null ? fld.getAttribute('table') ?? '' : '';
           const name = fld !== null ? fld.getAttribute('name') ?? '' : '';
           const text = childText(cr, 'Text');
-          let fieldref = '';
-          if (name) fieldref = !table ? name : table + '::' + name;
+          const fieldref = fieldRefHr(table, name);
           crits.push(!fieldref ? text : fieldref + ': ' + text);
         }
         let joined = crits.join(' & ');
@@ -972,8 +989,9 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
       const name = fieldNode.getAttribute('name') ?? '';
       const text = elemText(fieldNode);
       if (text && text[0] === '$') val = text;
-      else if (name) val = !table ? name : table + '::' + name;
+      else if (name) val = fieldRefHr(table, name);
       else if (text) val = text;
+      else val = fieldRefHr(table, name); // Table::<Field Missing>, or none
       val = withRepetitionSuffix(val, fieldNode);
       if (val && label) val = label + ': ' + val;
     }
@@ -995,7 +1013,7 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
     if (fieldNode !== null) {
       const table = fieldNode.getAttribute('table') ?? '';
       const name = fieldNode.getAttribute('name') ?? '';
-      val = withRepetitionSuffix(!table ? name : table + '::' + name, fieldNode);
+      val = withRepetitionSuffix(fieldRefHr(table, name), fieldNode);
       // hrLabeled: label the field where FileMaker does (inverse of bare).
       if (val && param.hrLabeled && label) val = label + ': ' + val;
     }

@@ -31,6 +31,7 @@ import {
   readsAsQuotedLiteralText,
 } from './calc-literal';
 import {
+  FIELD_MISSING_SENTINEL,
   type GrammarEntry,
   type GrammarParam,
   paramKey,
@@ -305,6 +306,22 @@ function repetitionCalcSibling(calc: string, indent: string): string {
 }
 
 /**
+ * Resolve `Table::Field`; FileMaker's `Table::<Field Missing>` (a table with no
+ * field) reads back to its stored form, id 0 and an empty name, never a field
+ * literally named `<Field Missing>`.
+ */
+function resolveFieldRef(
+  resolver: IdResolver,
+  ref: string,
+): { table: string; fieldId: number; fieldName: string } {
+  const sep = ref.indexOf('::');
+  if (sep >= 0 && trim(ref.slice(sep + 2)) === FIELD_MISSING_SENTINEL) {
+    return { table: trim(ref.slice(0, sep)), fieldId: 0, fieldName: '' };
+  }
+  return resolver.resolveField(ref);
+}
+
+/**
  * `<Field table id [repetition] name/>` for a `Table::Field[N]` ref, in
  * FileMaker's attribute order, plus the `<Repetition>` sibling for a calculated
  * `Table::Field[calc]`. The subscript is stripped before name resolution. Group
@@ -320,7 +337,7 @@ function fieldRefXml(
 ): string {
   const [bare, rep, parsedCalc] = parseFieldSubscript(trim(ref));
   const calc = allowCalc ? parsedCalc : '';
-  const rf = resolver.resolveField(bare);
+  const rf = resolveFieldRef(resolver, bare);
   return (
     `<Field${extraAttrs} table="${escXml(rf.table)}" id="${rf.fieldId}"${repetitionAttr(rep, calc)} name="${escXml(rf.fieldName)}"/>` +
     repetitionCalcSibling(calc, indent)
@@ -975,7 +992,7 @@ function emitFindRequests(hrValue: string, resolver: IdResolver): string {
       if (!field) {
         out += '          <Field table="" id="0" name=""/>\n';
       } else {
-        const rf = resolver.resolveField(field);
+        const rf = resolveFieldRef(resolver, field);
         out += `          <Field table="${escXml(rf.table)}" id="${rf.fieldId}" name="${escXml(rf.fieldName)}"/>\n`;
       }
       out += `          <Text>${escXml(text)}</Text>\n`;
@@ -1216,7 +1233,7 @@ function emitFieldList(param: GrammarParam, hrValue: string, resolver: IdResolve
     let attrval = entryAttrDefault;
     const eq = entryStr.indexOf('=');
     if (eq !== -1) { fieldref = trim(entryStr.slice(0, eq)); attrval = trim(entryStr.slice(eq + 1)); }
-    const rf = resolver.resolveField(groupUnquoteValue(fieldref));
+    const rf = resolveFieldRef(resolver, groupUnquoteValue(fieldref));
     let fattrs = '';
     for (const ff of fieldFixedAttrs) {
       fattrs += ` ${rawStr(ff, 'xmlAttr')}="${escXmlAttr(rawStr(ff, 'defaultValue'))}"`;
