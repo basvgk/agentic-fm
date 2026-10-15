@@ -7,11 +7,14 @@ function names, and HTML/XML entities where literal operators belong.
 
 import re
 
-from ..engine import rule, LintRule
+from ..engine import LintRule, rule
+from ..literals import (
+    CALC_CLOSE_PARENS,
+    CALC_OPEN_PARENS,
+    has_unclosed_literal,
+    mask_string_literals,
+)
 from ..types import Diagnostic, Severity
-
-
-_STRIP_STRINGS_RE = re.compile(r'"[^"]*"')
 
 # Steps where bracket content is literal text, not a FM calculation.
 # These must be skipped by rules that analyze calculation expressions.
@@ -25,7 +28,7 @@ NON_CALC_STEPS = {
 
 
 def _strip_strings(text):
-    return _STRIP_STRINGS_RE.sub('""', text)
+    return mask_string_literals(text)
 
 
 def _is_calc_step(ln):
@@ -49,11 +52,7 @@ class UnclosedString(LintRule):
     tier = 1
 
     def _has_unclosed(self, text):
-        count = 0
-        for ch in text:
-            if ch == '"':
-                count += 1
-        return count % 2 != 0
+        return has_unclosed_literal(text)
 
     def check_xml(self, parse_result, catalog, context, config):
         if not parse_result.ok:
@@ -107,9 +106,9 @@ class UnbalancedParens(LintRule):
         stripped = _strip_strings(text)
         depth = 0
         for ch in stripped:
-            if ch == "(":
+            if ch in CALC_OPEN_PARENS:
                 depth += 1
-            elif ch == ")":
+            elif ch in CALC_CLOSE_PARENS:
                 depth -= 1
             if depth < 0:
                 return "Extra closing parenthesis ')' in calculation"
@@ -221,8 +220,13 @@ class KnownFunction(LintRule):
         "textcolorremove", "sortvalues", "uniquevalues",
     }
 
-    # Regex to find function-call-like patterns: word followed by (
-    _FUNC_CALL_RE = re.compile(r'\b([A-Za-z_]\w*)\s*\(')
+    # Regex to find function-call-like patterns: word followed by ( . FileMaker
+    # reads ``﹙`` and ``（`` as ``(`` (``Upper （ "x" ）`` is a call), and accepts
+    # U+180E, U+200B, U+2060 and U+FEFF between a name and its ``(`` beside the
+    # characters ``\s`` matches. Argument separators (``; ,`` and their
+    # compatibility forms such as ``；`` ``，`` ``、``) and ``& ﹠ ＆`` are not word
+    # characters, so ``\b`` already starts a name after any of them.
+    _FUNC_CALL_RE = re.compile(r'\b([A-Za-z_]\w*)[\s\u180e\u200b\u2060\ufeff]*[(\ufe59\uff08]')
 
     # Names to skip (not functions, but look like them)
     _SKIP = {"and", "or", "not", "xor", "true", "false"}

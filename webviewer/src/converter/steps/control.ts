@@ -1,5 +1,7 @@
 import type { ParsedLine } from '../parser';
+import { encodeHrCommentText } from '../parser';
 import { registerHrToXml, registerXmlToHr, stepOpen, stepSelfClose, cdata, escXml } from '../step-registry';
+import { hrSep } from '../calc-literal';
 
 // --- # (comment) ---
 registerHrToXml({
@@ -11,7 +13,7 @@ registerHrToXml({
     }
     return [
       stepOpen('# (comment)', !line.disabled),
-      `    <Text>${text}</Text>`,
+      `    <Text>${escXml(text)}</Text>`,
       '  </Step>',
     ].join('\n');
   },
@@ -20,8 +22,10 @@ registerHrToXml({
 registerXmlToHr({
   xmlStepNames: ['# (comment)'],
   toHR(el: Element): string {
+    // A return in the text continues on an indented line, the way the Script
+    // Workspace draws it (encodeHrCommentText); xmlToHr indents those lines.
     const text = el.querySelector('Text')?.textContent ?? '';
-    return `# ${text}`;
+    return `# ${encodeHrCommentText(text)}`;
   },
 });
 
@@ -43,7 +47,7 @@ registerXmlToHr({
   xmlStepNames: ['If'],
   toHR(el: Element): string {
     const calc = el.querySelector('Calculation')?.textContent ?? '';
-    return calc ? `If [ ${calc} ]` : 'If';
+    return calc ? `If [ ${calc}` + hrSep(calc, ' ]') : 'If';
   },
 });
 
@@ -65,7 +69,7 @@ registerXmlToHr({
   xmlStepNames: ['Else If'],
   toHR(el: Element): string {
     const calc = el.querySelector('Calculation')?.textContent ?? '';
-    return calc ? `Else If [ ${calc} ]` : 'Else If';
+    return calc ? `Else If [ ${calc}` + hrSep(calc, ' ]') : 'Else If';
   },
 });
 
@@ -178,7 +182,7 @@ registerXmlToHr({
   xmlStepNames: ['Exit Loop If'],
   toHR(el: Element): string {
     const calc = el.querySelector('Calculation')?.textContent ?? '';
-    return `Exit Loop If [ ${calc} ]`;
+    return `Exit Loop If [ ${calc}` + hrSep(calc, ' ]');
   },
 });
 
@@ -221,7 +225,7 @@ registerXmlToHr({
   toHR(el: Element): string {
     const calc = el.querySelector('Calculation')?.textContent ?? '';
     // FM's SW label is "Text Result:" — must byte-match snippet_to_hr.py.
-    if (calc) return `Exit Script [ Text Result: ${calc} ]`;
+    if (calc) return `Exit Script [ Text Result: ${calc}` + hrSep(calc, ' ]');
     return 'Exit Script';
   },
 });
@@ -288,7 +292,7 @@ registerXmlToHr({
     // Only show repetition suffix for non-default values (> 1 or expressions)
     const repSuffix = rep && rep.trim() !== '1' ? `[${rep.trim()}]` : '';
     // Keep the explicit "Value:" label — must byte-match snippet_to_hr.py.
-    return `Set Variable [ ${name}${repSuffix} ; Value: ${value} ]`;
+    return `Set Variable [ ${name}${repSuffix} ; Value: ${value}` + hrSep(value, ' ]');
   },
 });
 

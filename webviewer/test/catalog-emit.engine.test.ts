@@ -23,6 +23,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { hrToXml, loadCatalog } from '@/converter/hr-to-xml';
 import { xmlToHr } from '@/converter/xml-to-hr';
+import { parseLine } from '@/converter/parser';
 import type { StepCatalogEntry } from '@/converter/catalog-types';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -115,5 +116,463 @@ describe('cross-file Perform Script (fromFileElement grammar)', () => {
     const out = hrToXml('Perform Script [ "Sandbox" ; Parameter: "hi" ]').xml;
     expect(out).not.toContain('<FileReference');
     expect(out).toContain('<Script ');
+  });
+});
+
+// Field / variable repetitions: `[N]` in HR, `repetition="N"` in XML. FileMaker
+// writes the attribute after `id` and before `name` on a field reference and on
+// the bare <Field> of a variable, only for N > 1 (repetition 1 is no attribute
+// and no subscript). Holds for step-level field / fieldOrVariable params and for
+// the same kinds inside group entries (Show Custom Dialog inputs, Insert from
+// Device's scan source). Shapes captured from FileMaker Pro 26.0.2; mirrors the
+// Python agent/scripts/test_catalog_emit.py cases of the same name.
+describe('field / variable repetitions', () => {
+  const scd = (field: string) =>
+    '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="87" name="Show Custom Dialog">'
+    + '<Title><Calculation><![CDATA["T"]]></Calculation></Title>'
+    + '<Message><Calculation><![CDATA[""]]></Calculation></Message>'
+    + '<Buttons><Button CommitState="True"><Calculation><![CDATA["OK"]]></Calculation></Button>'
+    + '<Button CommitState="False"><Calculation><![CDATA["Cancel"]]></Calculation></Button>'
+    + '<Button CommitState="False"></Button></Buttons><InputFields>'
+    + `<InputField UsePasswordCharacter="False">${field}</InputField>`
+    + '<InputField UsePasswordCharacter="False"><Field table="" id="0" name=""></Field></InputField>'
+    + '<InputField UsePasswordCharacter="False"><Field table="" id="0" name=""></Field></InputField>'
+    + '</InputFields></Step></fmxmlsnippet>';
+
+  it('renders a group entry repetition as a subscript', () => {
+    expect(xmlToHr(scd('<Field repetition="2">$rep</Field>')).trim()).toBe(
+      'Show Custom Dialog [ "T" ; "" ; $rep[2] ]',
+    );
+    expect(
+      xmlToHr(scd('<Field table="Invoices" id="31" repetition="2" name="Description"></Field>')).trim(),
+    ).toBe('Show Custom Dialog [ "T" ; "" ; Invoices::Description[2] ]');
+    expect(
+      xmlToHr(
+        '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="161" name="Insert from Device">'
+        + '<InsertFrom value="Barcode"/><Text/><Field>$out</Field><DeviceOptions>'
+        + '<ScanFrom type="Field"><Field table="Invoices" id="31" repetition="2" name="Description"></Field>'
+        + '</ScanFrom><Barcodes types="4194303"/></DeviceOptions></Step></fmxmlsnippet>',
+      ),
+    ).toContain('Scan from: Invoices::Description[2]');
+  });
+
+  it('renders a step-level repetition as a subscript', () => {
+    expect(
+      xmlToHr(
+        '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="76" name="Set Field">'
+        + '<Calculation><![CDATA[1]]></Calculation>'
+        + '<Field table="Invoices" id="31" repetition="2" name="Description"/></Step></fmxmlsnippet>',
+      ).trim(),
+    ).toBe('Set Field [ Invoices::Description[2] ; 1 ]');
+    expect(
+      xmlToHr(
+        '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="61" name="Insert Text">'
+        + '<SelectAll state="True"/><Text>x</Text><Field repetition="2">$rep</Field></Step></fmxmlsnippet>',
+      ),
+    ).toContain('Target: $rep[2]');
+  });
+
+  it('gives repetition 1 no subscript', () => {
+    expect(xmlToHr(scd('<Field repetition="1">$rep</Field>')).trim()).toBe(
+      'Show Custom Dialog [ "T" ; "" ; $rep ]',
+    );
+  });
+
+  it('emits a group entry subscript as the repetition attribute', () => {
+    expect(hrToXml('Show Custom Dialog [ "T" ; "" ; $rep[2] ]').xml).toContain(
+      '<Field repetition="2">$rep</Field>',
+    );
+    expect(hrToXml('Show Custom Dialog [ "T" ; "" ; Invoices::Description[2] ]').xml).toContain(
+      '<Field table="Invoices" id="0" repetition="2" name="Description"/>',
+    );
+    expect(
+      hrToXml(
+        'Insert from Device [ $out ; Type: Barcode ; Scan from: Invoices::Description[2] ]',
+      ).xml,
+    ).toContain('<Field table="Invoices" id="0" repetition="2" name="Description"/>');
+  });
+
+  it('emits a step-level subscript as the repetition attribute', () => {
+    expect(hrToXml('Set Field [ Invoices::Description[2] ; 1 ]').xml).toContain(
+      '<Field table="Invoices" id="0" repetition="2" name="Description"/>',
+    );
+    expect(hrToXml('Insert Text [ Select ; Target: $rep[2] ; "x" ]').xml).toContain(
+      '<Field repetition="2">$rep</Field>',
+    );
+    expect(
+      hrToXml('Insert Calculated Result [ Select ; Target: Invoices::Description[2] ; 1 ]').xml,
+    ).toContain('<Field table="Invoices" id="0" repetition="2" name="Description"/>');
+  });
+
+  it('treats [1] as the default and [0] / [] as no repetition', () => {
+    expect(hrToXml('Set Field [ Invoices::Description[1] ; 1 ]').xml).toContain(
+      '<Field table="Invoices" id="0" name="Description"/>',
+    );
+    expect(hrToXml('Show Custom Dialog [ "T" ; "" ; $rep[1] ]').xml).toContain('<Field>$rep</Field>');
+    for (const ref of ['$rep[0]', '$rep[]']) {
+      expect(hrToXml(`Insert Text [ Select ; Target: ${ref} ; "x" ]`).xml).not.toContain('repetition=');
+    }
+  });
+});
+
+// Calculated repetitions: `T::F[calc]` in HR. Authored in FileMaker Pro 26.0.2's
+// own Specify Field / Specify Target dialogs (Set Field, Go to Field, Insert Text
+// field and variable targets) and copied out: repetition="0" on the <Field> plus a
+// sibling <Repetition><Calculation> right after it; the Script Workspace line
+// reads `T::F[$i]`, the calc verbatim. A Show Custom Dialog input's target dialog
+// takes digits only, so a group entry has no calculated form. Mirrors the Python
+// test_calculated_repetition_* cases and the C++ FieldOps_CalcRepetition_* tests.
+describe('calculated repetitions', () => {
+  const fm =
+    '<fmxmlsnippet type="FMObjectList">'
+    + '<Step enable="True" id="76" name="Set Field"><Calculation><![CDATA["x"]]></Calculation>'
+    + '<Field table="Invoices" id="31" repetition="0" name="Description"></Field>'
+    + '<Repetition><Calculation><![CDATA[Let ( [ a = "]" ; b = 2 ] ; b )]]></Calculation></Repetition></Step>'
+    + '<Step enable="True" id="61" name="Insert Text"><SelectAll state="False"></SelectAll><Text>t</Text>'
+    + '<Field repetition="0">$v</Field>'
+    + '<Repetition><Calculation><![CDATA[$i + 1]]></Calculation></Repetition></Step>'
+    + '<Step enable="True" id="17" name="Go to Field"><SelectAll state="False"></SelectAll>'
+    + '<Field table="Invoices" id="31" repetition="0" name="Description"></Field>'
+    + '<Repetition><Calculation><![CDATA[$k // ] ;]]></Calculation></Repetition></Step>'
+    + '</fmxmlsnippet>';
+
+  it('renders a calculated repetition as a subscript', () => {
+    const hr = xmlToHr(fm).trim().split('\n');
+    expect(hr[0]).toBe('Set Field [ Invoices::Description[Let ( [ a = "]" ; b = 2 ] ; b )] ; "x" ]');
+    expect(hr[1]).toContain('Target: $v[$i + 1]');
+    // A `//` comment holding `]` or `;` breaks the line before the closing `]`.
+    expect(hr[2]).toBe('Go to Field [ Invoices::Description[$k // ] ;');
+    expect(hr[3]).toBe('] ]');
+  });
+
+  it("emits FileMaker's calculated form", () => {
+    expect(hrToXml('Set Field [ Invoices::Description[Let ( [ a = "]" ; b = 2 ] ; b )] ; "x" ]').xml).toContain(
+      '<Field table="Invoices" id="0" repetition="0" name="Description"/>\n'
+        + '    <Repetition>\n'
+        + '      <Calculation><![CDATA[Let ( [ a = "]" ; b = 2 ] ; b )]]></Calculation>\n'
+        + '    </Repetition>',
+    );
+    expect(hrToXml('Insert Text [ Target: $v[$i + 1] ; "t" ]').xml).toContain(
+      '<Field repetition="0">$v</Field>\n'
+        + '    <Repetition>\n'
+        + '      <Calculation><![CDATA[$i + 1]]></Calculation>\n'
+        + '    </Repetition>',
+    );
+    const lit = hrToXml('Set Field [ Invoices::Description[ 2 ] ; 1 ]').xml;
+    expect(lit).toContain('repetition="2" name="Description"');
+    expect(lit).not.toContain('<Repetition>');
+    const grp = hrToXml('Show Custom Dialog [ "T" ; "" ; $rep[$i] ]').xml;
+    expect(grp).toContain('<Field>$rep</Field>');
+    expect(grp).not.toContain('<Repetition>');
+  });
+
+  it('round-trips through HR unchanged', () => {
+    const hr1 = xmlToHr(fm.replace('<SelectAll state="False"></SelectAll><Field table', '<SelectAll state="True"></SelectAll><Field table'));
+    expect(xmlToHr(hrToXml(hr1).xml)).toBe(hr1);
+  });
+});
+
+// The parametersList / attrGroup / repeatGroup / fieldList splitters, the HR line
+// parser and the group-value quoting all read a text literal with the
+// calculation literal grammar (calc-literal.ts): ", “ and ” are interchangeable
+// delimiters, a backslash escapes any of them, and a doubled delimiter is
+// content. Measured in FileMaker Pro 26.0.2, which also stores a pasted doubled
+// quote as \" and a pasted curly-delimited literal with straight quotes, so
+// FileMaker's own copy-back is full of \" that a doubled-quote-only splitter cuts
+// in half. Mirrors agent/scripts/test_catalog_emit.py.
+describe('calculation text literals inside split values', () => {
+  const PJS = 'Perform JavaScript in Web Viewer [ Object Name: "wv" ; Function Name: "f" ; Parameters: ';
+  const snip = (step: string) => `<fmxmlsnippet type="FMObjectList">${step}</fmxmlsnippet>`;
+
+  it('splits Parameters honouring the backslash escape and curly delimiters', () => {
+    const out = hrToXml(PJS + '"a\\", b", “c, d”, "e" ]').xml;
+    expect(out).toContain('<Parameters Count="3">');
+    expect(out).toContain('CDATA["a\\", b"]');
+    expect(out).toContain('CDATA[“c, d”]');
+    expect(out).toContain('CDATA["e"]');
+  });
+
+  it('splits Parameters by the literal grammar table', () => {
+    const cases: [string, number][] = [
+      ['"a""b, c"', 1], // doubled escape
+      ['"a\\\\", b', 2], // \\ then a closing quote
+      ['"x“ & Upper ( "y, z" ) & ”z"', 1], // mixed families pair freely
+      ['"a\\nb, c", $d', 2], // \ before n is content
+      ['‘a, b’', 2], // curly single quotes are not delimiters
+    ];
+    for (const [params, count] of cases) {
+      expect(hrToXml(PJS + params + ' ]').xml, params).toContain(`<Parameters Count="${count}">`);
+    }
+  });
+
+  it('keeps a ; or ] inside a literal in its param', () => {
+    const out = hrToXml('Show Custom Dialog [ "T\\" ; x ] y" ; “M ; ] z” ]').xml;
+    expect(out).toContain('<Calculation><![CDATA["T\\" ; x ] y"]]>');
+    expect(out).toContain('<Calculation><![CDATA[“M ; ] z”]]>');
+    expect(parseLine('Show Custom Dialog [ "T\\" ; x ] y" ; “M ; ] z” ]', 1).params).toEqual([
+      '"T\\" ; x ] y"',
+      '“M ; ] z”',
+    ]);
+  });
+
+  it("round-trips FileMaker's copy-back with an escaped quote", () => {
+    const hr = xmlToHr(snip(
+      '<Step enable="True" id="175" name="Perform JavaScript in Web Viewer">'
+      + '<ObjectName><Calculation><![CDATA["wv"]]></Calculation></ObjectName>'
+      + '<FunctionName><Calculation><![CDATA["f"]]></Calculation></FunctionName>'
+      + '<Parameters Count="3">'
+      + '<P><Calculation><![CDATA["a\\", b"]]></Calculation></P>'
+      + '<P><Calculation><![CDATA["c, d"]]></Calculation></P>'
+      + '<P><Calculation><![CDATA["e"]]></Calculation></P>'
+      + '</Parameters></Step>'));
+    expect(hr).toContain('Parameters: "a\\", b", "c, d", "e"');
+    const back = hrToXml(hr).xml;
+    expect(back).toContain('<Parameters Count="3">');
+    expect(back).toContain('CDATA["a\\", b"]');
+    expect(back).toContain('CDATA["c, d"]');
+  });
+
+  it('round-trips button labels holding escaped and curly quotes', () => {
+    const hr = xmlToHr(snip(
+      '<Step enable="True" id="87" name="Show Custom Dialog">'
+      + '<Title><Calculation><![CDATA["T"]]></Calculation></Title>'
+      + '<Message><Calculation><![CDATA["M"]]></Calculation></Message>'
+      + '<Buttons><Button CommitState="True"><Calculation><![CDATA["O\\", K"]]></Calculation></Button>'
+      + '<Button CommitState="False"><Calculation><![CDATA[“x | y”]]></Calculation></Button>'
+      + '<Button CommitState="False"><Calculation><![CDATA["Z"]]></Calculation></Button></Buttons>'
+      + '</Step>'));
+    expect(hr).toContain(
+      'Buttons: commit=True, label="O\\", K" | commit=False, label=“x | y” | commit=False, label="Z"');
+    const back = hrToXml(hr).xml;
+    expect(back).toContain('<Button CommitState="True">');
+    expect(back).toContain('<![CDATA["O\\", K"]]>');
+    expect(back).toContain('<![CDATA[“x | y”]]>');
+    expect(back).toContain('<![CDATA["Z"]]>');
+  });
+
+  it('round-trips quoted group text holding curly quotes and backslashes', () => {
+    // Execute SQL's literal query is a quoted group text value: the encoder must
+    // write a calculation literal the splitters read back intact.
+    const sqls = [
+      "SELECT 'a “b', c FROM t", // curly + comma
+      'SELECT ”x“ FROM t', // curly alone forces quoting
+      "SELECT 'C:\\' , \"q\" FROM t", // backslash before a quote
+      "SELECT a FROM t WHERE p = 'C:\\dir\\', b", // ordinary backslashes + comma
+      "SELECT a, b FROM t WHERE x = 'end\\'", // trailing backslash
+    ];
+    for (const sql of sqls) {
+      const q = sql.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+      const hr = xmlToHr(snip(
+        '<Step enable="True" id="117" name="Execute SQL"><NoInteract state="True"/>'
+        + '<Profile QueryType="Query" flags="0" password="" UserName="" dsn="" FieldDelimiter=","'
+        + ' IsPredefined="-1" FieldNameRow="0" DataType="ODBC"><Query>' + q + '</Query></Profile></Step>'));
+      const back = hrToXml(hr).xml;
+      expect(back, sql).toContain(`<Query>${q}</Query>`);
+      expect(back, sql).toContain('FieldDelimiter=","');
+    }
+  });
+});
+
+// hrQuoted: a literal text param FileMaker displays quoted. FileMaker shows Insert
+// Text's value as `“x”` and never escapes it. The value used to render bare, so an
+// odd quote opened a literal that never closed and swallowed the step's `]` (and
+// every later line), and `;`/`]` in the text split or ended the step. Mirrors
+// agent/scripts/test_catalog_emit.py.
+describe('hrQuoted literal text params', () => {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const insertText = (text: string) =>
+    '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="61" name="Insert Text"><SelectAll state="True"/>'
+    + `<Text>${esc(text)}</Text><Field>$x</Field></Step></fmxmlsnippet>`;
+
+  it('renders Insert Text quoted and round-trips every quote shape', () => {
+    const values = ['x', 'He said “hi', 'He said "hi', '“x”', '"x"', 'a\\b', 'a\\"b', 'a;b ] c',
+      'it\'s ‘q’', '“', '""', '  sp  ', 'a\\', 'a¶b'];
+    for (const text of values) {
+      const hr = xmlToHr(insertText(text));
+      expect(hr.startsWith('Insert Text [ Select ; Target: $x ; “'), text).toBe(true);
+      expect(hrToXml(hr).xml, text).toContain(`<Text>${esc(text)}</Text>`);
+    }
+    expect(xmlToHr(insertText('a;b ] c'))).toBe('Insert Text [ Select ; Target: $x ; “a;b ] c” ]');
+    expect(xmlToHr(insertText(''))).toBe('Insert Text [ Select ; Target: $x ]');
+  });
+
+  it('keeps the lines after an odd quote', () => {
+    const hr = xmlToHr(insertText('He said “hi')) + '\nInsert Text [ Target: $y ; “next” ]';
+    const xml = hrToXml(hr).xml;
+    expect(xml).toContain('<Text>He said “hi</Text>');
+    expect(xml).toContain('<Text>next</Text>');
+    expect(xml).toContain('<Field>$y</Field>');
+  });
+
+  it('accepts bare, quoted and FileMaker display forms', () => {
+    const cases: [string, string][] = [
+      ['Insert Text [ Target: $x ; hello ]', 'hello'],
+      ['Insert Text [ Target: $x ; "hello" ]', 'hello'],
+      ['Insert Text [ Target: $x ; "<a class=\\"b\\">" ]', '<a class="b">'],
+      ['Insert Text [ Target: $x ; “"x"” ]', '"x"'],
+      ['Insert Text [ Select ; Target: $x ; {"sut":"S","cases":[]} ]', '{"sut":"S","cases":[]}'],
+    ];
+    for (const [hr, text] of cases) expect(hrToXml(hr).xml, hr).toContain(`<Text>${esc(text)}</Text>`);
+  });
+
+  // File paths: FileMaker shows every UniversalPathList path curly-quoted
+  // (`Get File Exists [ “$path” ; Target: $v ]`) and stores `;` as a path separator
+  // (`file:a;b.txt` copies back as `file:a;file:b.txt`). Rendered bare, the `;` split
+  // the param, a `]` ended the step and an odd quote swallowed it. Values below are
+  // FileMaker's own copy-back.
+  const getFileExists = (xmlValue: string) =>
+    '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="188" name="Get File Exists">'
+    + `<UniversalPathList>${xmlValue}</UniversalPathList><Text/><Field>$v</Field></Step></fmxmlsnippet>`;
+
+  it('renders file paths quoted and round-trips every path shape', () => {
+    const cases: [string, string, string][] = [
+      ['$path', '“$path”', '$path'],
+      ['file:a.txt', '“file:a.txt”', 'file:a.txt'],
+      ['file:a;file:b.txt', '“file:a;file:b.txt”', 'file:a;file:b.txt'],
+      ['file:a]b.txt', '“file:a]b.txt”', 'file:a]b.txt'],
+      ['file:a &quot;b&quot;.txt', '“file:a \\"b\\".txt”', 'file:a &quot;b&quot;.txt'],
+      ['file:a “b.txt', '“file:a \\“b.txt”', 'file:a “b.txt'],
+      // A return is written back as FileMaker writes it (`&#13;`; a raw CR pastes as LF).
+      ['file:a.txt&#13;file:b.txt', '“file:a.txt\rfile:b.txt”', 'file:a.txt&#13;file:b.txt'],
+      ['file:a.txt&#10;file:b.txt', '“file:a.txt\nfile:b.txt”', 'file:a.txt\nfile:b.txt'],
+    ];
+    for (const [xmlValue, token, emitted] of cases) {
+      const hr = xmlToHr(getFileExists(xmlValue));
+      expect(hr, xmlValue).toBe(`Get File Exists [ ${token} ; Target: $v ]`);
+      const xml = hrToXml(hr).xml;
+      expect(xml, xmlValue).toContain(`<UniversalPathList>${emitted}</UniversalPathList>`);
+      expect(xml, xmlValue).toContain('<Field>$v</Field>');
+    }
+  });
+
+  it("reads FileMaker's quoted path line back unquoted", () => {
+    const cases: [string, string][] = [
+      ['Get File Exists [ “a.txt” ; Target: $v ]', 'a.txt'],
+      ['Get File Exists [ “$path” ; Target: $v ]', '$path'],
+      ['Get File Exists [ "$path" ; Target: $v ]', '$path'],
+      ['Get File Exists [ $path ; Target: $v ]', '$path'],
+      ['Delete File [ Target file: “a.txt” ]', 'a.txt'],
+    ];
+    for (const [hr, p] of cases) expect(hrToXml(hr).xml, hr).toContain(`<UniversalPathList>${p}</UniversalPathList>`);
+  });
+
+  // A carriage return in a text value: FileMaker copies it back as `&#13;`, and XML
+  // parsing turns a raw CR into LF, so a raw CR pasted back holding LF (FileMaker Pro
+  // 26.0.2: Insert Text, a path list, Send Event and Perform AppleScript text, a
+  // comment). An LF value stays raw; a calculation keeps its line break in CDATA.
+  it('writes a carriage return in a text value as &#13;', () => {
+    const sendEvent = (t: string) => '<Step enable="True" id="57" name="Send Event">'
+      + `<ContentType value="Text"/><Text>${t}</Text><Event CopyResultToClipboard="False" `
+      + 'WaitForCompletion="True" BringTargetToForeground="False" TargetType="NUTD" '
+      + 'TargetName="&lt;unknown&gt;" id="dosc" class="misc"/></Step>';
+    const steps = (sep: string): [string, string][] => [
+      [`<Step enable="True" id="61" name="Insert Text"><SelectAll state="True"/><Text>line1${sep}line2</Text><Field>$v</Field></Step>`,
+        `<Text>line1${sep}line2</Text>`],
+      [`<Step enable="True" id="188" name="Get File Exists"><UniversalPathList>file:a.txt${sep}file:b.txt</UniversalPathList><Text/><Field>$v</Field></Step>`,
+        `<UniversalPathList>file:a.txt${sep}file:b.txt</UniversalPathList>`],
+      [sendEvent(`a${sep}b`), `<Text>a${sep}b</Text>`],
+      [`<Step enable="True" id="67" name="Perform AppleScript"><ContentType value="Text"/><Text>beep${sep}beep</Text></Step>`,
+        `<Text>beep${sep}beep</Text>`],
+    ];
+    const wrap = (x: string) => `<fmxmlsnippet type="FMObjectList">${x}</fmxmlsnippet>`;
+    for (const [x, want] of [...steps('&#13;'),
+      ['<Step enable="True" id="89" name="# (comment)"><Text>a&#13;b</Text></Step>', '<Text>a&#13;b</Text>'] as [string, string]]) {
+      const out = hrToXml(xmlToHr(wrap(x))).xml;
+      expect(out, x).toContain(want);
+      expect(out.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, ''), x).not.toContain('\r');
+    }
+    for (const [x, want] of steps('&#10;')) {
+      expect(hrToXml(xmlToHr(wrap(x))).xml, x).toContain(want.replace('&#10;', '\n'));
+    }
+    const calc = hrToXml(xmlToHr(wrap('<Step enable="True" id="141" name="Set Variable"><Value><Calculation>'
+      + '<![CDATA[1 +\r2]]></Calculation></Value><Name>$v</Name></Step>'))).xml;
+    expect(calc).toContain('<![CDATA[1 +\n2]]>');
+    expect(calc).not.toContain('&#13;');
+  });
+
+  it('escapes comment text', () => {
+    expect(hrToXml('# a < b & c').xml).toContain('<Text>a &lt; b &amp; c</Text>');
+    expect(hrToXml('Foo Bar Nope [ a & <b> ]').xml)
+      .toContain('<Text>[UNKNOWN STEP: Foo Bar Nope] Foo Bar Nope [ a &amp; &lt;b&gt; ]</Text>');
+  });
+
+  it('quotes Send Event text', () => {
+    const xml = '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="57" name="Send Event">'
+      + '<ContentType value="Text"/><Text>open a;b ] c</Text><Event CopyResultToClipboard="False" '
+      + 'WaitForCompletion="True" BringTargetToForeground="False" TargetType="NUTD" '
+      + 'TargetName="&lt;unknown&gt;" id="dosc" class="misc"/></Step></fmxmlsnippet>';
+    const hr = xmlToHr(xml);
+    expect(hr).toContain('Send Event [ Text ; “open a;b ] c” ; Event: ');
+    expect(hrToXml(hr).xml).toContain('<Text>open a;b ] c</Text>');
+  });
+});
+
+// Calculation comments: FileMaker stores `/* … */` (nesting) and `// …` (to the
+// next return) verbatim, and the punctuation inside is not structure. Every shape
+// was pasted into FileMaker Pro 26.0.2 and copied back unchanged. Mirrors
+// agent/scripts/test_calc_comments.py.
+describe('calculation comments inside split values', () => {
+  const cd = (c: string) => `<![CDATA[${c}]]>`;
+  const snip = (steps: string) => `<fmxmlsnippet type="FMObjectList">${steps}</fmxmlsnippet>`;
+  const pjs = (params: string[]) =>
+    '<Step enable="True" id="175" name="Perform JavaScript in Web Viewer">'
+    + `<ObjectName><Calculation>${cd('"wv"')}</Calculation></ObjectName>`
+    + `<FunctionName><Calculation>${cd('"f"')}</Calculation></FunctionName>`
+    + `<Parameters Count="${params.length}">`
+    + params.map((p) => `<P><Calculation>${cd(p)}</Calculation></P>`).join('')
+    + '</Parameters></Step>';
+  const scd = (t: string, m: string) =>
+    '<Step enable="True" id="87" name="Show Custom Dialog">'
+    + `<Title><Calculation>${cd(t)}</Calculation></Title>`
+    + `<Message><Calculation>${cd(m)}</Calculation></Message></Step>`;
+  const ifStep = (c: string) =>
+    `<Step enable="True" id="68" name="If"><Restore state="False"/><Calculation>${cd(c)}</Calculation></Step>`
+    + '<Step enable="True" id="70" name="End If"/>';
+  const after = '<Step enable="True" id="89" name="# (comment)"><Text>after</Text></Step>';
+  const calcs = (xml: string) =>
+    [...xml.matchAll(/<!\[CDATA\[([\s\S]*?)\]\]>/g)].map((m) => m[1].replace(/\r/g, '\n'));
+  const roundTrip = (steps: string) => {
+    const xml = snip(steps);
+    const hr = xmlToHr(xml);
+    const back = hrToXml(hr).xml;
+    const want = calcs(xml);
+    expect(calcs(back).slice(0, want.length), hr).toEqual(want);
+    expect(back).not.toContain('UNKNOWN');
+    return hr;
+  };
+
+  it('keeps a , ; ] or quote inside a block comment in its value', () => {
+    roundTrip(pjs(['/* a, b ; ] */ "x"', '"y"']) + after);
+    roundTrip(scd('"T" /* ; ] */', '"M"'));
+    roundTrip(scd('"T" /* it"s ; */', '"M"'));
+    roundTrip(pjs(['/* it"s, */ "x"', '"y"']));
+  });
+
+  it('keeps a line comment to its line break, and breaks the line where one line would cut it', () => {
+    roundTrip(pjs(['"x" // a, b ; ]\r& "y"', '"z"']) + after);
+    roundTrip(pjs(['"x" // it"s, ;\r& "y"', '"z"']));
+    expect(roundTrip(scd('"T" // x', '"M"'))).toContain('[ "T" // x ; "M"');
+    expect(roundTrip(scd('"T" // a ; b', '"M"'))).toContain('"T" // a ; b\n; "M"');
+    roundTrip(pjs(['"x" // c, d', '"y" // e ] f']) + after);
+    expect(roundTrip(ifStep('$x = 1 // a ; b'))).toContain('If [ $x = 1 // a ; b\n]');
+  });
+
+  it('reads the one-line form: a trailing comment ends at the separator', () => {
+    expect(parseLine('Move/Resize Window [ Current Window ; Height: 400 // Pixels ; Width: 600 // P ; Top: 100 ]', 1).params)
+      .toEqual(['Current Window', 'Height: 400 // Pixels', 'Width: 600 // P', 'Top: 100']);
+    const out = hrToXml('Set Variable [ $x ; Value: $y // note ]\nBeep\nSet Variable [ $z ; Value: 2 ]').xml;
+    expect(calcs(out)).toEqual(['$y // note', '2']);
+    expect(out).toContain('name="Beep"');
+  });
+
+  it('reads paths, disabled-step prefixes and an unmatched /* as plain text', () => {
+    expect(parseLine('Create Data File [ filewin://srv/a.txt ; Create folders: On ]', 1).params)
+      .toEqual(['filewin://srv/a.txt', 'Create folders: On']);
+    const d = hrToXml('// Set Variable [ $x ; Value: 1 /* ; */ ]\nBeep').xml;
+    expect(calcs(d)[0]).toBe('1 /* ; */');
+    const u = hrToXml('Show Custom Dialog [ "T" /* x ; "M" ]\nBeep');
+    expect(calcs(u.xml).slice(0, 2)).toEqual(['"T" /* x', '"M"']);
+    expect(u.xml).toContain('name="Beep"');
+    expect(u.warnings.some((w) => w.message.includes('/*'))).toBe(true);
   });
 });

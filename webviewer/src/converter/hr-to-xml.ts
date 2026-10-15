@@ -4,8 +4,8 @@
  * Parses HR script text line-by-line and emits valid fmxmlsnippet XML.
  */
 
-import { parseScript } from './parser';
-import { getHrToXmlConverter, stepOpen, stepSelfClose, cdata } from './step-registry';
+import { parseScript, parseLine } from './parser';
+import { getHrToXmlConverter, stepOpen, stepSelfClose, cdata, escXml } from './step-registry';
 import type { IdResolver } from './id-resolver';
 import { createIdResolver } from './id-resolver';
 import type { FMContext } from '@/context/types';
@@ -49,6 +49,7 @@ export function hrToXml(hrText: string, context?: FMContext | null): ConversionR
   const lines = parseScript(trimmedText);
   const resolver = createIdResolver(context ?? null);
   const errors: ConversionError[] = [];
+  const parseWarnings: ConversionError[] = [];
   const stepXmls: string[] = [];
 
   for (const line of lines) {
@@ -60,6 +61,37 @@ export function hrToXml(hrText: string, context?: FMContext | null): ConversionR
     if (!line.stepName) {
       stepXmls.push(stepSelfClose('# (comment)', !line.disabled));
       continue;
+    }
+
+    // A comment's continuation line (one indented past the comment) is part of
+    // its text. Say so when that line reads as a step: it is the same text an
+    // author gets by under-indenting a comment above a deeper step, and folding
+    // a step into a comment must not be silent.
+    if (line.isComment) {
+      line.raw.split('\n').slice(1).forEach((physical, i) => {
+        const as = parseLine(physical, line.lineNumber + i + 1);
+        if (!as.isComment && as.stepName && getHrToXmlConverter(as.stepName)) {
+          parseWarnings.push({
+            line: as.lineNumber,
+            message: `Line ${as.lineNumber} is indented under the comment on line ${line.lineNumber}, so it was kept as part of that comment, though it reads as "${as.stepName}". If it is a step, indent it to the comment's level.`,
+          });
+        }
+      });
+    }
+
+    // A disclosed fallback: the step's `]` was found only by reading an
+    // unbalanced quote as FileMaker's display form (parser.ts).
+    if (line.displayFormQuote) {
+      parseWarnings.push({
+        line: line.lineNumber,
+        message: `Unbalanced quote at line ${line.lineNumber} in "${line.stepName} [...]": read the way FileMaker displays text, so the step ends at the ] on that line. Escape a quote inside text with a backslash (\\") to make it unambiguous.`,
+      });
+    }
+    if (line.unterminatedCalcComment) {
+      parseWarnings.push({
+        line: line.lineNumber,
+        message: `Unclosed /* comment in "${line.stepName} [...]": FileMaker rejects this calculation; the /* was read as plain text.`,
+      });
     }
 
     const converter = getHrToXmlConverter(line.stepName);
@@ -86,7 +118,7 @@ export function hrToXml(hrText: string, context?: FMContext | null): ConversionR
 
   // Report unresolved references as warnings (not errors).
   // The XML is still valid — FileMaker resolves by name on paste.
-  const warnings: ConversionError[] = [];
+  const warnings: ConversionError[] = [...parseWarnings];
   for (const ref of resolver.getUnresolved()) {
     warnings.push({
       line: 0,
@@ -108,7 +140,7 @@ export function hrToXml(hrText: string, context?: FMContext | null): ConversionR
 function unknownStepXml(stepName: string, rawText: string, enabled: boolean): string {
   return [
     stepOpen('# (comment)', enabled),
-    `    <Text>[UNKNOWN STEP: ${stepName}] ${rawText}</Text>`,
+    `    <Text>[UNKNOWN STEP: ${escXml(stepName)}] ${escXml(rawText)}</Text>`,
     '  </Step>',
   ].join('\n');
 }

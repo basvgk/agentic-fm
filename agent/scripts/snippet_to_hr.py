@@ -34,6 +34,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 import catalog_grammar
+from calc_literal import hr_sep
 
 INDENT = "    "  # 4 spaces per level
 
@@ -73,6 +74,13 @@ GRAMMAR_ENTRIES = _load_grammar_entries()
 # XML helpers
 # ---------------------------------------------------------------------------
 
+def _close(line, last_value):
+    """Close a step's HR line: ' ]', or a line break and ']' when its last value ends
+    in a ``//`` calculation comment the one-line reading would cut
+    (``calc_literal.hr_sep``)."""
+    return line + hr_sep(last_value, ' ]')
+
+
 def _calc(el, selector='Calculation'):
     """Extract text from a <Calculation> child (handles CDATA transparently)."""
     if el is None:
@@ -87,25 +95,40 @@ def _calc(el, selector='Calculation'):
 # Step renderers — hand-coded for structurally unique steps
 # ---------------------------------------------------------------------------
 
+# A comment whose text holds a return is drawn by FileMaker on several Script
+# Workspace lines, each continuation aligned under the text after ``# ``. HR writes
+# it the same way: the break becomes a new line indented past the comment's own
+# indentation, two spaces for a CR (the return FileMaker itself stores, and the
+# form an author writes) and one tab for an LF (FileMaker keeps an LF a pasted
+# ``&#10;`` put there). convert() indents those lines with the step.
+COMMENT_CR_PAD, COMMENT_LF_PAD = '  ', '\t'
+
+
+def encode_hr_comment_text(text):
+    """*text* with each line break written as an HR continuation (column 0)."""
+    pads = {'\r': '\n' + COMMENT_CR_PAD, '\n': '\n' + COMMENT_LF_PAD}
+    return ''.join(pads.get(c, c) for c in text)
+
+
 def _render_comment(step):
     """# (comment) — id 89"""
     text_el = step.find('Text')
     text = text_el.text if text_el is not None and text_el.text else ''
     if text:
-        return f'# {text}', (False, False)
+        return f'# {encode_hr_comment_text(text)}', (False, False)
     return '', (False, False)  # blank line
 
 
 def _render_if(step):
     """If — id 68"""
     calc = _calc(step)
-    return f'If [ {calc} ]' if calc else 'If', (False, True)
+    return (_close(f'If [ {calc}', calc) if calc else 'If'), (False, True)
 
 
 def _render_else_if(step):
     """Else If — id 125"""
     calc = _calc(step)
-    return f'Else If [ {calc} ]' if calc else 'Else If', (True, True)
+    return (_close(f'Else If [ {calc}', calc) if calc else 'Else If'), (True, True)
 
 
 def _render_else(step):
@@ -143,7 +166,7 @@ def _render_loop(step):
 def _render_exit_loop_if(step):
     """Exit Loop If — id 72"""
     calc = _calc(step)
-    return f'Exit Loop If [ {calc} ]', (False, False)
+    return _close(f'Exit Loop If [ {calc}', calc), (False, False)
 
 
 def _render_end_loop(step):
@@ -155,7 +178,7 @@ def _render_exit_script(step):
     """Exit Script — id 103"""
     calc = _calc(step)
     if calc:
-        return f'Exit Script [ Text Result: {calc} ]', (False, False)
+        return _close(f'Exit Script [ Text Result: {calc}', calc), (False, False)
     return 'Exit Script', (False, False)
 
 
@@ -173,7 +196,7 @@ def _render_set_variable(step):
     if rep and rep.strip() != '1':
         rep_suffix = f'[{rep.strip()}]'
 
-    return f'Set Variable [ {name}{rep_suffix} ; Value: {value} ]', (False, False)
+    return _close(f'Set Variable [ {name}{rep_suffix} ; Value: {value}', value), (False, False)
 
 
 
@@ -250,7 +273,10 @@ def snippet_to_hr(xml_string):
         if not enabled:
             text = f'// {text}'
 
-        lines.append(INDENT * indent + text)
+        prefix = INDENT * indent
+        if step.get('name') == '# (comment)' and prefix:
+            text = text.replace('\n', '\n' + prefix)  # continuation lines sit under it
+        lines.append(prefix + text)
 
         if open_after:
             indent += 1

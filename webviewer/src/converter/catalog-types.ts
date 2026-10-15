@@ -146,12 +146,28 @@ export interface StepParam {
    *  rendered without a "Label: " prefix and parsed by position (Show Custom Dialog's
    *  Title/Message). Set only where FileMaker renders bare, verified against live FM. */
   hrBare?: boolean;
-  /** Inverse of `hrBare`: a `calc`/`field`/`script` param FileMaker renders WITH its
+  /** Inverse of `hrBare`: a `calc`/`field`/`script`, step-level `text`/`name` or legacy
+   *  `calculation` param FileMaker renders WITH its
    *  `hrLabel` prefix (and parsed by that label), even though those types print bare by
    *  default. FileMaker labels the same value type per step (Perform Script's name is
-   *  bare; Configure Region Monitor Script's is `Script: "…"`). Needs a non-empty
+   *  bare; Configure Region Monitor Script's is `Script: "…"`; Delete File's path is
+   *  `Target file: “…”`). Needs a non-empty
    *  hrLabel; set only where FileMaker renders the label, verified against live FM. */
   hrLabeled?: boolean;
+  /** A literal-text param (`text`/`name`) FileMaker displays wrapped in quotes (Insert
+   *  Text's `… ; “x” ]`). XML→HR writes the value as ONE text literal (`quoteCalcLiteral`:
+   *  embedded `"`/`“`/`”` backslash-escaped) so the line parser reads it back as one
+   *  token whatever quotes, `;` or `]` it holds; HR→XML decodes it. An empty value
+   *  renders no token, as FileMaker does. Set only where FM quotes the value (verified live). */
+  hrQuoted?: boolean;
+  /** The delimiter an hrQuoted param is written with: unset (default) is FileMaker's
+   *  curly `“…”`; `"straight"` is `"…"`, where FileMaker shows the literal
+   *  straight-quoted (Perform AppleScript's text). */
+  hrQuoteStyle?: string;
+  /** Governing discriminator: the separator FileMaker draws BETWEEN the labeled
+   *  companions a value reveals when it is not the step's ` ; ` (Insert from Device:
+   *  `Camera: Back; Resolution: Full; Flash: Auto`). Render-only. */
+  hrRevealSeparator?: string;
   /** Governing enum branches: enum value → what it reveals / how it renders */
   discriminatorValues?: Record<string, DiscriminatorValue>;
   /** String form: names the sibling element that governs this param's shape */

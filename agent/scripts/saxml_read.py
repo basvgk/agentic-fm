@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
+from calc_literal import hr_sep, quote_calc_literal
 from catalog_grammar import (
     CatalogEntry,
     StepParam,
@@ -188,6 +189,48 @@ def _field_ref_token(fr: ET.Element) -> str:
     if not name:
         return ""
     return name if not table else table + "::" + name
+
+
+def _repetition_suffix(ref_el: ET.Element, allow_calc: bool = True) -> str:
+    """The ``[N]`` / ``[calc]`` HR subscript for a ``<FieldReference>`` / ``<Variable>``
+    target.
+
+    SaXML gives every field and variable reference a ``<repetition>`` calc; the
+    fmxmlsnippet form carries a literal as ``repetition="N"``, only for N > 1, so
+    ``1`` (the default) yields no subscript. A computed repetition (``$i``) is
+    fmxmlsnippet's ``repetition="0"`` plus a ``<Repetition><Calculation>`` sibling,
+    which the emit's field and fieldOrVariable params write from ``[calc]``. A
+    Show Custom Dialog input (``allow_calc=False``) has no calculated form --
+    FileMaker's input-target dialog takes digits only -- so one is refused there
+    rather than dropped.
+    """
+    rep = ref_el.find("repetition")
+    if rep is None:
+        return ""
+    text = _calc_of(rep.find("Calculation")).strip()
+    if text in ("", "1"):
+        return ""
+    if text.isascii() and text.isdigit() and int(text) > 1:
+        return "[" + str(int(text)) + "]"
+    if allow_calc:
+        return "[" + text + hr_sep(text, "]")
+    raise UnsupportedSaXML(
+        "calculated repetition %r on %s %r has no fmxmlsnippet form"
+        % (text, ref_el.tag, ref_el.get("name") or ref_el.get("value") or "")
+    )
+
+
+def _target_token(ref_el: ET.Element, allow_calc: bool = True) -> str:
+    """A field/variable TARGET reference -> its HR token with any subscript
+    (``Table::Field[2]`` / ``$var[$i]``) — the form the emit's field and
+    fieldOrVariable params parse back into ``repetition="N"`` or the calculated
+    form. Field references elsewhere (sort / field lists) keep the bare
+    ``_field_ref_token``."""
+    if ref_el.tag == "Variable":
+        tok = ref_el.get("value", "")
+    else:
+        tok = _field_ref_token(ref_el)
+    return tok + _repetition_suffix(ref_el, allow_calc) if tok else ""
 
 
 def _layout_token_from_lrc(lrc: ET.Element) -> str:
@@ -735,7 +778,11 @@ def _extract_simple(
             t = sp.find("Text")
             if t is not None:
                 consumed[i] = True
-                return t.get("value", "") or (t.text or "")
+                raw = t.get("value", "") or (t.text or "")
+                # An hrQuoted param's token is one escaped text literal (the form
+                # the HR renderer writes and the emitter decodes), so a raw value
+                # holding quotes is not unwrapped on the way through.
+                return _quoted_text_token(param, raw) if param.hr_quoted else raw
             # File-path steps carry the path as <UniversalPathList><ObjectList>
             # <Location>… rather than a <Text> node.
             loc = sp.find(".//Location")
@@ -751,16 +798,16 @@ def _extract_simple(
             fr = sp.find("FieldReference")
             if fr is not None:
                 consumed[i] = True
-                return _field_ref_token(fr)
+                return _target_token(fr)
             if sp.get("type") == "Target":
                 v = sp.find("Variable")
                 if v is not None:
                     consumed[i] = True
-                    return v.get("value", "")
+                    return _target_token(v)
                 fr = sp.find("FieldReference")
                 if fr is not None:
                     consumed[i] = True
-                    return _field_ref_token(fr)
+                    return _target_token(fr)
         return ""
 
     if ptype == "fieldOrVariable":
@@ -771,15 +818,15 @@ def _extract_simple(
                 v = sp.find("Variable")
                 if v is not None:
                     consumed[i] = True
-                    return v.get("value", "")
+                    return _target_token(v)
                 fr = sp.find("FieldReference")
                 if fr is not None:
                     consumed[i] = True
-                    return _field_ref_token(fr)
+                    return _target_token(fr)
             fr = sp.find("FieldReference")
             if fr is not None:
                 consumed[i] = True
-                return _field_ref_token(fr)
+                return _target_token(fr)
         return ""
 
     if ptype == "script":
@@ -993,6 +1040,16 @@ def _ptypes(step_el: ET.Element, t: str) -> list[ET.Element]:
     return [sp for sp in step_el.findall("ParameterValues/Parameter") if sp.get("type") == t]
 
 
+def _quoted_text_token(param: StepParam | None, raw: str) -> str:
+    """An ``hrQuoted`` text param's HR token: one escaped text literal in the
+    param's delimiter style (``hrQuoteStyle``), '' for an empty value."""
+    if not raw:
+        return ""
+    if param is not None and param.hr_quote_style == "straight":
+        return quote_calc_literal(raw, '"', '"')
+    return quote_calc_literal(raw)
+
+
 def _bool_tok(sp: ET.Element | None) -> str:
     """A ``<Parameter><Boolean value=…/>`` → 'On'/'Off' ('' when absent)."""
     if sp is None:
@@ -1069,8 +1126,15 @@ def _dec_applescript(entry: CatalogEntry, step_el: ET.Element) -> list[str]:
         ctype = o.get("type", "")  # "Text" (literal) or "Calculation"
         v.set(_enum_tok(v.param(xml="ContentType"), ctype), xml="ContentType")
         calc = _calc_of(o.find("Calculation"))
-        # FM stores BOTH modes' script in <Calculation> (Text mode = the literal).
-        v.set(calc if calc else (o.text or ""), xml="Calculation")
+        # Either mode's script may sit in <Calculation> or as the element's text
+        # (Text mode = the literal). ContentType governs which companion emits, so
+        # the script goes to the one the mode reveals: Text mode's literal is an
+        # hrQuoted param, handed to the emitter in its quoted form.
+        script = calc if calc else (o.text or "")
+        if ctype == "Text":
+            v.set(_quoted_text_token(v.param(xml="Text"), script), xml="Text")
+        else:
+            v.set(script, xml="Calculation")
     return v.list()
 
 
@@ -1227,10 +1291,10 @@ def _input_field_token(fp: ET.Element) -> str:
     if tgt is not None:
         var = tgt.find("Variable")
         if var is not None:
-            fld = var.get("value", "")
+            fld = _target_token(var, allow_calc=False)
         else:
             fr = tgt.find("FieldReference")
-            fld = _field_ref_token(fr) if fr is not None else ""
+            fld = _target_token(fr, allow_calc=False) if fr is not None else ""
         if fld:
             parts.append("field=" + fld)
     lbl = None
@@ -1439,22 +1503,33 @@ def _cb_page_format(entry: CatalogEntry, param: StepParam, step_el: ET.Element) 
     return _grp(*[(k, v) for k, v in defaults.items()])
 
 
-# ── Insert from Device (DeviceOptions) — nested <Options type><Parameter> ─────
-@_cbuild("Insert from Device", "DeviceOptions")
-def _cb_device_options(entry: CatalogEntry, param: StepParam, step_el: ET.Element) -> str:
+# ── Insert from Device — device type + nested <Options type><Parameter> ───────
+@_decoder("Insert from Device")
+def _dec_insert_from_device(entry: CatalogEntry, step_el: ET.Element) -> list[str]:
+    """The device type is the outer ``<List name>``; each device option is a nested
+    ``<Options><Parameter type="X"><List name="Y"/>`` naming the catalog param whose
+    xmlElement is X (Camera / Resolution / LightMode …), set to Y. An option no
+    catalog param names is refused rather than dropped."""
+    v = _Vals(entry)
+    sparams = _params(step_el)
+    consumed = [False] * len(sparams)
+    claimed: set[int] = set()
     lst = _ptype(step_el, "List")
     inner = lst.find("List") if lst is not None else None
+    if inner is not None:
+        v.set(inner.get("name", ""), xml="InsertFrom")
+    for i, p in enumerate(entry.params):
+        if p.type == "fieldOrVariable" and not p.parent_element:
+            v.set(_extract_simple(entry, p, sparams, consumed, claimed), index=i)
     opts = inner.find("Options") if inner is not None else None
-    if opts is None:
-        return ""
-    groups = []
-    # Each <Parameter type="X"><List name="Y"/> → group X=(choice=Y).
-    for sp in opts.findall("Parameter"):
+    for sp in opts.findall("Parameter") if opts is not None else []:
         gname = sp.get("type", "")
         gl = sp.find("List")
-        if gl is not None and gname:
-            groups.append(f"{gname}=(choice={gl.get('name', '')})")
-    return ", ".join(groups)
+        p = v.param(xml=gname)
+        if p is None or p.type != "enum" or not p.parent_element or gl is None:
+            raise UnsupportedSaXML(f"Insert from Device: no catalog option for {gname!r}")
+        v.set(gl.get("name", ""), xml=gname)
+    return v.list()
 
 
 # ── Insert File (DialogOptions) — <Options type=…> siblings → the group ───────

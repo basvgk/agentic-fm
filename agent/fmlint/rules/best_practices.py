@@ -8,6 +8,7 @@ exit script results, and invalid ternary operators.
 import re
 
 from ..engine import rule, LintRule
+from ..literals import mask_string_literals
 from ..types import Diagnostic, Severity
 
 
@@ -305,9 +306,7 @@ class NoTernary(LintRule):
 
     def _strip_strings(self, text):
         """Remove quoted string literals to avoid false positives."""
-        # Remove "..." strings (FM uses double-quote for strings)
-        result = re.sub(r'"[^"]*"', '""', text)
-        return result
+        return mask_string_literals(text)
 
     def _has_ternary(self, text):
         """Check if text contains a likely ternary ? operator."""
