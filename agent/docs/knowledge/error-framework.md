@@ -2,7 +2,7 @@
 
 This solution uses a standard error, response, logging, and tracing framework.
 The canonical human-readable design is
-[`FileMaker Script Error Handling Specification`](../../../docs/FileMaker%20Script%20Error%20Handling%20Specification.md).
+[`FileMaker Script Error Handling Specification`](../../../filemaker/error-framework/FileMaker%20Script%20Error%20Handling%20Specification.md).
 This document is its concise, agent-executable interpretation.
 These rules supersede the archived generic error-handling and error-data-capture
 articles for every business script that is created, updated, or refactored.
@@ -95,11 +95,16 @@ Loop
   Exit Loop If [ True ]
 End Loop
 # Cleanup must not replace framework error state.
+If [ not IsEmpty ( Error.Get ) ]
+  Perform Script on Server [ "SYS_LogError" ; Parameter: Error.Get ]
+End If
 Exit Script [ Response.Make ( $data ) ]
 ```
 
 Use the project coding-convention documentation comments and a single-pass
-loop. Do not add early `Exit Script` steps after initialization.
+loop. Do not add early `Exit Script` steps after initialization. Log the
+current script's error once after the main loop and cleanup, immediately
+before the final `Exit Script`.
 
 ## Native FileMaker errors
 
@@ -129,11 +134,10 @@ application error in the response depends on the script's business context.
 ## Application errors and logging
 
 Every failure made by the current script must have its own stable application
-code and be created with:
+code and be created where it is detected with:
 
 ```text
 Set Variable [ $r ; Error.Make ( code ; message ; userMessage ; $context ) ]
-Perform Script on Server [ "SYS_LogError" ; Parameter: Error.Get ]
 ```
 
 `Error.Make` builds the log-ready object, assigns a per-error `errorID`, and
@@ -148,6 +152,19 @@ Do not mutate framework error state before logging and do not put a nested
 child error in the error object. A logger integration must not replace the
 current script's internal error state.
 
+Do not call the logger at each `Error.Make`. After the main loop and cleanup,
+check the current script's error once and call the logger at most once, just
+before the final `Exit Script`. Each script in a parent/child chain may log its
+own error once; this is one logging call per script, not one per error created
+inside that script.
+
+```text
+If [ not IsEmpty ( Error.Get ) ]
+  Perform Script on Server [ "SYS_LogError" ; Parameter: Error.Get ]
+End If
+Exit Script [ Response.Make ( $data ) ]
+```
+
 ## Child scripts and trace propagation
 
 Build a child parameter only through `Param.Make ( payload )`; it returns an
@@ -160,7 +177,8 @@ after every child script call, before any other script call:
 Perform Script [ child script ; Parameter: Param.Make ( <business JSON payload> ) ]
 Set Variable [ $r ; Response.Capture ]
 If [ not Response.IsOK ]
-  # Create and log this parent script's own Error.Make result.
+  # Create this parent script's own Error.Make result.
+  # The logger runs once after this script's main loop.
 End If
 ```
 
@@ -173,6 +191,14 @@ error state after `Perform Script` is irrelevant and must never be captured.
 On success, assign `Response.GetData` to a normal local variable when it is
 needed.
 Never read `Get ( ScriptResult )` directly in a framework script.
+
+## Worked parent/child templates
+
+The [child script example](../../../filemaker/error-framework/examples/template-framework-child.xml)
+and [parent script example](../../../filemaker/error-framework/examples/template-framework-parent.xml)
+show the parent/child response flow as fmxmlsnippet files. Each example makes
+errors in its main flow and calls its logger once after the loop. Bind their
+script references to the target solution.
 
 ## Response and trace contracts
 

@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fmxmlsnippet type="FMObjectList">
+  <Step enable="True" id="89" name="# (comment)">
+    <Text>PURPOSE: Template child script using the standard response, error, logging, and trace framework.</Text>
+  </Step>
+  <Step enable="False" id="61" name="Insert Text">
+    <SelectAll state="False"/>
+    <Text>PARAMETERS: Business JSON supplied by Param.Make ( payload ).&#xD;&#xD;RETURNS: Response.Make ( $data ).&#xD;&#xD;Replace the disabled business-work note with this script's work. Create errors where they occur, then run the log script once after the main loop.</Text>
+    <Field>$README</Field>
+  </Step>
+  <Step enable="True" id="89" name="# (comment)"/>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text> ### STANDARD SCRIPT STARTUP ###</Text>
+  </Step>
+  <Step enable="True" id="85" name="Allow User Abort">
+    <Set state="False"/>
+  </Step>
+  <Step enable="True" id="86" name="Set Error Capture">
+    <Set state="True"/>
+  </Step>
+  <Step enable="True" id="141" name="Set Variable">
+    <Value><Calculation><![CDATA[Trace.Init]]></Calculation></Value>
+    <Name>$r</Name>
+  </Step>
+  <Step enable="True" id="141" name="Set Variable">
+    <Value><Calculation><![CDATA[Param.Payload]]></Calculation></Value>
+    <Name>$payload</Name>
+  </Step>
+  <Step enable="True" id="141" name="Set Variable">
+    <Value><Calculation><![CDATA["Any data to return, plain text or JSON"]]></Calculation></Value>
+    <Name>$resultData</Name>
+  </Step>
+  <Step enable="True" id="141" name="Set Variable">
+    <Value><Calculation><![CDATA["Any context relevant for the error logging. JSON format."]]></Calculation></Value>
+    <Name>$context</Name>
+  </Step>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text> ### ### ### ### ### ### ### ###</Text>
+  </Step>
+  <Step enable="True" id="89" name="# (comment)"/>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text> ### MAIN CHILD SCRIPT BODY ###</Text>
+  </Step>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text> Example fragment of script that creates an error and/or result</Text>
+  </Step>
+  <Step enable="True" id="71" name="Loop">
+    <FlushType value="Always"/>
+  </Step>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text> Do some work or checks that may create an error</Text>
+  </Step>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text> Check if the payload is valid JSON</Text>
+  </Step>
+  <Step enable="True" id="68" name="If">
+    <Calculation><![CDATA[not JSON.IsValid ( $payload )]]></Calculation>
+  </Step>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text> Something is wrong, create an error.</Text>
+  </Step>
+  <Step enable="True" id="141" name="Set Variable">
+    <Value><Calculation><![CDATA["Put context here, for example important variables. JSON format"]]></Calculation></Value>
+    <Name>$context</Name>
+  </Step>
+  <Step enable="True" id="141" name="Set Variable">
+    <Value><Calculation><![CDATA[Error.Make ( "TEMPLATE.CHILD.INVALID_PARAMETER" ; "Template child received invalid JSON parameters." ; "The request could not be processed." ; $context )]]></Calculation></Value>
+    <Name>$r</Name>
+  </Step>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text> Exit the loop because there was an error.</Text>
+  </Step>
+  <Step enable="True" id="72" name="Exit Loop If">
+    <Calculation><![CDATA[True]]></Calculation>
+  </Step>
+  <Step enable="True" id="70" name="End If"/>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text> Example creating a random result</Text>
+  </Step>
+  <Step enable="True" id="141" name="Set Variable">
+    <Value><Calculation><![CDATA[JSONSetElement ( $resultData ; "keyName" ; "exampleValue" ; JSONString )]]></Calculation></Value>
+    <Name>$resultData</Name>
+  </Step>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text>// # Continue script</Text>
+  </Step>
+  <Step enable="True" id="89" name="# (comment)"/>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text> Always end loop with Exit Loop If 1 (single pass loop)</Text>
+  </Step>
+  <Step enable="True" id="72" name="Exit Loop If">
+    <Calculation><![CDATA[True]]></Calculation>
+  </Step>
+  <Step enable="True" id="73" name="End Loop"/>
+  <Step enable="True" id="89" name="# (comment)"/>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text> ### ### ### ### ### ### ### ###</Text>
+  </Step>
+  <Step enable="True" id="89" name="# (comment)"/>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text> ### CENTRALIZED ERROR LOGGING — ONCE AFTER THE LOOP ###</Text>
+  </Step>
+  <Step enable="True" id="68" name="If">
+    <Calculation><![CDATA[Error.HasError]]></Calculation>
+  </Step>
+  <Step enable="True" id="164" name="Perform Script on Server">
+    <WaitForCompletion state="False"/>
+    <Calculation><![CDATA[Error.Get]]></Calculation>
+    <Script id="0" name="(94000) Creeer foutmelding"/>
+  </Step>
+  <Step enable="True" id="70" name="End If"/>
+  <Step enable="True" id="89" name="# (comment)"/>
+  <Step enable="True" id="89" name="# (comment)">
+    <Text> Exit the script. Response.Make returns the error object automatically and the result data when the parent uses Response.Capture.</Text>
+  </Step>
+  <Step enable="True" id="103" name="Exit Script">
+    <Calculation><![CDATA[Response.Make ( $resultData )]]></Calculation>
+  </Step>
+</fmxmlsnippet>

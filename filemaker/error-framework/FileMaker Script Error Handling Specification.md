@@ -526,11 +526,6 @@ If [ not JSON.IsValid ( $_params ) or IsEmpty ( JSONGetElement ( $_params ; "ord
 		)
 	]
 
-	Perform Script on Server [
-		"SYS_LogError" ;
-		Parameter: $_error
-	]
-
 End If
 
 Exit Loop If [ not IsEmpty ( $_error ) ]
@@ -560,11 +555,6 @@ If [ FMError.Set ≠ 0 ]
 			"The order could not be updated." ;
 			$_context
 		)
-	]
-
-	Perform Script on Server [
-		"SYS_LogError" ;
-		Parameter: $_error
 	]
 
 End If
@@ -637,11 +627,6 @@ If [ not Response.IsOK ]
 		)
 	]
 
-	Perform Script on Server [
-		"SYS_LogError" ;
-		Parameter: $_error
-	]
-
 End If
 
 Exit Loop If [ not IsEmpty ( $_error ) ]
@@ -667,19 +652,31 @@ Set Variable [ $_child_data ;
 ]
 ```
 
+De complete fmxmlsnippet-voorbeelden staan naast deze specificatie:
+[child script](examples/template-framework-child.xml) en [parent script](examples/template-framework-parent.xml).
+De parent gebruikt de voorbeeldreferentie `Playground` (ID 920); pas die aan voor de doeloplossing.
+De loggerreferentie `(94000) Creeer foutmelding` heeft placeholder-ID 0 en moet daar worden gekoppeld.
+
 ---
 
 # 13. Loggingregels
 
 Iedere scriptlaag logt zijn eigen error door `$_error` ongewijzigd als parameter mee te geven (`Error.Make`
-heeft het al log-ready gemaakt, sectie 6/8):
+heeft het al log-ready gemaakt, sectie 6/8). Maak de fout op het punt waar deze ontstaat, maar roep de
+logscript niet daar aan. Roep na de hoofdloop en eventuele cleanup, direct vóór de finale `Exit Script`,
+de logscript precies één keer aan wanneer deze scriptlaag een fout heeft:
 
 ```filemaker
-Perform Script on Server [
-	"SYS_LogError" ;
-	Parameter: $_error
-]
+If [ not IsEmpty ( $_error ) ]
+	Perform Script on Server [
+		"SYS_LogError" ;
+		Parameter: $_error
+	]
+End If
 ```
+
+Dit is één logaanroep per script, niet één logaanroep per fout die binnen die scriptlaag wordt gemaakt.
+Een parent en child kunnen elk eenmaal loggen wanneer ze elk hun eigen fout maken.
 
 De logger ontvangt daarmee altijd:
 
@@ -737,13 +734,13 @@ Set Variable [ $_context ; "{}" ]
 Loop
 
 	# Validate
-	# Create + log error when needed
+	# Create own error when needed; defer logging
 
 	Exit Loop If [ not IsEmpty ( $_error ) ]
 
 	# Work
 	# Capture FMError immediately after risky FileMaker steps
-	# Create + log own Error when needed
+	# Create own Error when needed; defer logging
 
 	Exit Loop If [ not IsEmpty ( $_error ) ]
 
@@ -760,6 +757,11 @@ Loop
 End Loop
 
 # Cleanup here — mag $_error niet overschrijven
+
+# Log once for this script, after the loop and cleanup
+If [ not IsEmpty ( $_error ) ]
+	Perform Script on Server [ "SYS_LogError" ; Parameter: $_error ]
+End If
 
 Exit Script [ Response.Make ( $_data ) ]
 ```
@@ -785,7 +787,7 @@ Wanneer een script wordt gemaakt of aangepast:
 10. Gebruik FMError alleen als technische onderliggende fout.
 11. Wis `$_FMError` met `FMError.Clear` zodra een FileMaker-fout bewust genegeerd wordt (geen eigen fout
     tot gevolg heeft), zodat een latere `Error.Make`-aanroep 'm niet per ongeluk overneemt.
-12. Log iedere door het huidige script gemaakte fout.
+12. Log maximaal één keer per script, na de hoofdloop en eventuele cleanup, wanneer `$_error` bestaat.
 13. Geef `$_error` ongewijzigd mee als parameter aan het logging-script.
 14. Propagate geen geneste `cause`-objecten.
 15. Bouw een childparameter altijd met `Param.Make`, nooit handmatig met de keys `"payload"` of `"trace"`.
