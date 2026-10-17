@@ -2,12 +2,122 @@
 
 Parses HR format lines like:
   # comment text
+  // # disabled comment text
   // Disabled Step [ params ]
   Set Variable [ $name ; expression ]
   If [ condition ]
 """
 
+import re
+
+from ..literals import (
+    CALC_CLOSE_BRACKETS,
+    CALC_CLOSE_PARENS,
+    CALC_OPEN_BRACKETS,
+    CALC_OPEN_PARENS,
+    hr_bracket_depth_delta,
+    hr_opaque_span_at,
+    is_double_delimiter,
+    line_comment_open_len,
+    literal_span_at,
+)
 from ..types import ParsedHRLine
+
+# Every scanner below steps over calculation text literals and comments whole with
+# the shared grammar in ``..literals``: ``"``, ``“`` and ``”`` are one
+# interchangeable delimiter, a delimiter after an odd backslash run is content, and
+# outside a literal ``/* … */`` (nesting) and ``// …`` (to the end of the line) are
+# comments, so a ``;``, ``[``, ``]`` or quote inside ``"a\" ; b"``, ``“c ; d”`` or
+# ``/* e ; ] */`` is content, not structure.
+# Comment openers and closers are read in every slash/star form FileMaker reads
+# (``／＊ … ＊／``, ``⁄∗``, ``／／``); the disabled-step prefix ``//`` stays ASCII.
+
+# How a ``//`` line comment ends while looking for a step's closing ``]``:
+# AT_LINE_END -- the calculation grammar, tried first: a ``]`` inside the comment is
+# comment text. YIELDS_TO_FINAL_BRACKET -- the fallback for a line written with the
+# step's own ``]`` after a trailing comment (``Set Variable [ $x ; Value: $y // note ]``,
+# FileMaker's own line): when the comment's line ends with ``]``, that ``]`` closes
+# the step. Used only when AT_LINE_END never closes the statement, so
+# ``… // a ; ]`` followed by a continuation line keeps its ``]`` as comment text.
+AT_LINE_END, YIELDS_TO_FINAL_BRACKET = 0, 1
+
+
+def _step_over_opaque(text: str, i: int, mode: int) -> int:
+    """Offset just past the literal or comment opening at *i* (*i* when none)."""
+    span = hr_opaque_span_at(text, i)
+    if not span:
+        return i
+    end = i + span
+    if mode == YIELDS_TO_FINAL_BRACKET and not literal_span_at(text, i) and line_comment_open_len(text, i):
+        k = end
+        while k > i + 2 and text[k - 1] in " \t":
+            k -= 1
+        if k > i + 2 and text[k - 1] == "]":
+            end = k - 1
+    return end
+
+
+_DELIMS = '"\u201c\u201d'
+
+
+def _ends_in_display_form_close(text: str, lit_open: int, line_end: int) -> int:
+    """FileMaker draws a literal text parameter as ``“`` + value + ``”`` and never
+    escapes the value, so a value holding an odd number of quotes (``He said “hi``)
+    shows as ``… ; “He said “hi” ]``: read with the literal grammar, its last
+    delimiter opens a literal that never closes and swallows the step's ``]`` (and,
+    in a script, every later line). The display form ends with that closing
+    delimiter, optional blanks and the step's ``]``. Returns the ``]``'s offset when
+    the text of one line, from the dangling literal's opening delimiter at
+    *lit_open* to *line_end*, ends that way (trailing blanks and a CR allowed), else
+    -1. The delimiter may be escaped (``“a\\”`` is the value ``a\\``) or be the
+    literal's own opener."""
+    k = line_end
+    while k > lit_open and text[k - 1] in " \t\r":
+        k -= 1
+    if k <= lit_open or text[k - 1] != "]":
+        return -1
+    close = k - 1
+    k = close
+    while k > lit_open and text[k - 1] in " \t":
+        k -= 1
+    return close if k > lit_open and text[k - 1] in _DELIMS else -1
+
+
+def _literal_closes(text: str, i: int) -> bool:
+    """True when the literal opening at *i* closes before the end of *text*."""
+    j = i + 1
+    while j < len(text):
+        if is_double_delimiter(text, j):
+            return True
+        j += 1
+    return False
+
+
+def _find_display_form_close(text: str, open_idx: int) -> int:
+    """The display-form reading of a statement whose ``[`` at *open_idx* found no
+    matching ``]``: the first literal opened at the step's own bracket level (not
+    inside a calculation bracket) that never closes, starts on the statement's last
+    line, and runs to a line ending in a delimiter and ``]``
+    (``_ends_in_display_form_close``). Returns that ``]``, or -1."""
+    depth = 0
+    i = open_idx
+    while i < len(text):
+        if depth == 1 and is_double_delimiter(text, i):
+            if not _literal_closes(text, i):
+                if "\n" in text[i:]:
+                    return -1
+                return _ends_in_display_form_close(text, i, len(text))
+            i += literal_span_at(text, i)
+            continue
+        past = _step_over_opaque(text, i, AT_LINE_END)
+        if past != i:
+            i = past
+            continue
+        depth += hr_bracket_depth_delta(text, i, depth)
+        if depth <= 0:
+            return -1
+        i += 1
+    return -1
 
 
 def parse_hr(text: str) -> list:
@@ -17,48 +127,198 @@ def parse_hr(text: str) -> list:
     return [_parse_line(m_text, m_line) for m_text, m_line in merged]
 
 
+class _OpenScanTrace:
+    """An AT_LINE_END statement scan that reached the end of the text with its bracket
+    still open: per line (indexed from ``first``) the depth carried into it, whether it
+    was entered outside every literal and comment, and the lowest depth at any later
+    line end. A later statement starting on a cleanly entered line is answered from it
+    without rescanning, which keeps a script of ``… // note ]`` lines linear."""
+
+    def __init__(self, first: int):
+        self.first = first
+        self.valid = False
+        self.start_depth: list = []
+        self.clean_start: list = []
+        self.end_min: list = []
+
+    def known_open_from(self, k: int) -> bool:
+        if not self.valid or k <= self.first or k - self.first >= len(self.clean_start):
+            return False
+        r = k - self.first
+        return bool(self.clean_start[r]) and self.end_min[r] > self.start_depth[r]
+
+
+_INF = float("inf")
+
+
+def _statement_end_line(text: str, line_start: list, first: int, mode: int, trace) -> int:
+    """Index of the line on which the statement starting at line *first* ends: the
+    first line end, reached outside every literal and comment, at which its bracket
+    depth is back to <= 0; -1 when the text ends first (recorded in *trace*)."""
+    n_lines = len(line_start)
+    line_end_depth: list = []
+
+    def reach(to: int) -> None:
+        if trace is None:
+            return
+        while len(line_end_depth) <= to - first:
+            trace.start_depth.append(0)
+            trace.clean_start.append(0)
+            line_end_depth.append(_INF)
+
+    reach(first)
+    i = line_start[first]
+    n = len(text)
+    while i < n and text[i] in " \t":
+        i += 1
+    if text.startswith("//", i):
+        i += 2  # disabled-step prefix, not a comment
+    depth = 0
+    line = first
+    while i < n:
+        ch = text[i]
+        if ch == "\n":
+            if depth <= 0:
+                return line
+            if trace is not None:
+                reach(line + 1)
+                line_end_depth[line - first] = depth
+                trace.start_depth[line + 1 - first] = depth
+                trace.clean_start[line + 1 - first] = 1
+            line += 1
+            i += 1
+            continue
+        if depth > 0:
+            past = _step_over_opaque(text, i, mode)
+            # FileMaker's display form (_ends_in_display_form_close): a literal at the
+            # step's own level that runs past this line's end, on a line ending in a
+            # delimiter and ``]``, ends the statement on this line.
+            if past != i and depth == 1 and is_double_delimiter(text, i):
+                eol = text.find("\n", i)
+                if eol != -1 and past > eol and _ends_in_display_form_close(text, i, eol) >= 0:
+                    return line
+            if past != i:
+                line += text.count("\n", i, past)
+                i = past
+                continue
+        elif is_double_delimiter(text, i):
+            # A quote before any ``[`` keeps the historical per-line toggle.
+            past = i + literal_span_at(text, i)
+            eol = text.find("\n", i)
+            if eol != -1 and past > eol:
+                past = eol
+            i = past
+            continue
+        depth += hr_bracket_depth_delta(text, i, depth)
+        i += 1
+    if depth <= 0:
+        return n_lines - 1
+    if trace is not None:
+        reach(n_lines - 1)
+        line_end_depth[n_lines - 1 - first] = depth
+        trace.end_min = [_INF] * (len(line_end_depth) + 1)
+        for r in range(len(line_end_depth) - 1, -1, -1):
+            trace.end_min[r] = min(trace.end_min[r + 1], line_end_depth[r])
+        trace.valid = True
+    return -1
+
+
 def _merge_multiline(lines: list) -> list:
     """Merge continuation lines when brackets span multiple lines."""
     result = []
-    accumulator = ""
-    start_line = 1
-    bracket_depth = 0
-    in_quote = False
+    if not lines:
+        return result
+    line_start = []
+    pos = 0
+    for line in lines:
+        line_start.append(pos)
+        pos += len(line) + 1
+    text = "\n".join(lines)
 
-    for i, line in enumerate(lines):
-        trimmed = line.strip()
-
-        if bracket_depth == 0 and (trimmed.startswith("#") or trimmed == ""):
-            result.append((line, i + 1))
+    trace = _OpenScanTrace(0)
+    k = 0
+    while k < len(lines):
+        trimmed = lines[k].strip()
+        if trimmed == "":
+            result.append((lines[k], k + 1))
+            k += 1
             continue
-
-        if bracket_depth == 0:
-            accumulator = line
-            start_line = i + 1
-        else:
-            accumulator += "\n" + line
-
-        for ch in line:
-            if ch == '"':
-                in_quote = not in_quote
-                continue
-            if in_quote:
-                continue
-            if ch == "[":
-                bracket_depth += 1
-            elif ch == "]":
-                bracket_depth -= 1
-
-        if bracket_depth <= 0:
-            result.append((accumulator, start_line))
-            accumulator = ""
-            bracket_depth = 0
-            in_quote = False
-
-    if accumulator:
-        result.append((accumulator, start_line))
-
+        # A comment, enabled or disabled, takes its continuation lines with it
+        # (see _decode_comment_text).
+        if _comment_hash_offset(trimmed) >= 0:
+            lead = lines[k][: len(lines[k]) - len(lines[k].lstrip())]
+            j = k + 1
+            while j < len(lines) and is_comment_continuation(lines[j], lead):
+                j += 1
+            result.append(("\n".join(lines[k:j]), k + 1))
+            k = j
+            continue
+        last = -1
+        if not trace.known_open_from(k):
+            fresh = _OpenScanTrace(k)
+            last = _statement_end_line(text, line_start, k, AT_LINE_END, fresh)
+            if fresh.valid:
+                trace = fresh
+        if last < 0:
+            last = _statement_end_line(text, line_start, k, YIELDS_TO_FINAL_BRACKET, None)
+        if last < 0:
+            last = len(lines) - 1  # unclosed: the rest, as before
+        result.append(("\n".join(lines[k : last + 1]), k + 1))
+        k = last + 1
     return result
+
+
+# A comment whose text holds a return is drawn by FileMaker on several Script
+# Workspace lines, each continuation aligned under the text after ``# ``. HR writes
+# it the same way: the break becomes a new line indented past the comment's own
+# indentation, two spaces for a CR (the return FileMaker itself stores, and the form
+# an author writes) and one tab for an LF (FileMaker keeps an LF a pasted ``&#10;``
+# put there). A blank line still ends the comment.
+COMMENT_CR_PAD, COMMENT_LF_PAD = "  ", "\t"
+
+
+def is_comment_continuation(line: str, lead: str) -> bool:
+    """*line* continues a comment whose own line starts with the whitespace *lead*."""
+    if not line.startswith(lead):
+        return False
+    return line.startswith(COMMENT_CR_PAD, len(lead)) or line[len(lead):len(lead) + 1] == COMMENT_LF_PAD
+
+
+_DISABLED_COMMENT = re.compile(r"//[ \t]*#")
+
+
+def _comment_hash_offset(trimmed: str) -> int:
+    """Where a comment line's ``#`` sits in its trimmed text: 0 for ``# text``, past
+    the ``//`` for a disabled comment, which the XML to HR converter writes and
+    FileMaker's Script Workspace draws as ``// # text``. -1 when not a comment."""
+    if trimmed.startswith("#"):
+        return 0
+    m = _DISABLED_COMMENT.match(trimmed)
+    return m.end() - 1 if m else -1
+
+
+def _decode_comment_text(raw: str, indent: int, hash_at: int) -> str:
+    """The text a merged comment statement carries: the ``#`` (and a disabled
+    comment's ``//``) and the one space the XML to HR converter writes after the
+    ``#`` dropped, each continuation line's pad turned back into its CR or LF. Every
+    other blank is the comment's own: FileMaker stores and copies back a leading tab,
+    leading spaces and trailing spaces, and draws the comment as ``# `` + its text.
+    ``#text`` (no space) is the comment ``text``; ``#  text`` keeps one leading
+    space. *hash_at* is the ``#``'s offset in *raw*."""
+    lead = raw[:indent]
+    head, *rest = raw.split("\n")
+    strip_cr = lambda s: s[:-1] if s.endswith("\r") else s  # noqa: E731
+    text = strip_cr(head[hash_at + 1:])
+    if text.startswith(" "):
+        text = text[1:]
+    for physical in rest:
+        line = strip_cr(physical)
+        if is_comment_continuation(line, lead):
+            lf = line[len(lead)] == COMMENT_LF_PAD
+            text += ("\n" if lf else "\r") + line[len(lead) + (1 if lf else 2):]
+        else:
+            text += "\n" + line  # _parse_line handed a raw multi-line comment
+    return text
 
 
 def _parse_line(raw: str, line_number: int) -> ParsedHRLine:
@@ -70,11 +330,12 @@ def _parse_line(raw: str, line_number: int) -> ParsedHRLine:
     if not trimmed:
         return ParsedHRLine(raw=raw, line_number=line_number, indent=indent)
 
-    # Comment: # ...
-    if trimmed.startswith("#"):
-        comment_text = trimmed[1:].strip()
+    # Comment: # ... ; a disabled comment is // # ...
+    hash_at = _comment_hash_offset(trimmed)
+    if hash_at >= 0:
+        comment_text = _decode_comment_text(raw, indent, indent + hash_at)
         return ParsedHRLine(
-            raw=raw, line_number=line_number, is_comment=True,
+            raw=raw, line_number=line_number, is_comment=True, disabled=hash_at > 0,
             comment_text=comment_text, step_name="# (comment)", indent=indent,
         )
 
@@ -87,15 +348,23 @@ def _parse_line(raw: str, line_number: int) -> ParsedHRLine:
 
     # Extract step name and bracket content
     bracket_idx = _find_top_level_bracket(work_text)
+    display_form_quote = False
 
     if bracket_idx >= 0:
         step_name = work_text[:bracket_idx].strip()
         close_bracket = _find_matching_bracket(work_text, bracket_idx)
+        if close_bracket < 0:
+            close_bracket = _find_display_form_close(work_text, bracket_idx)
+            display_form_quote = close_bracket >= 0
+        # Split the untrimmed content: a line break before the closing ``]`` ends a
+        # ``//`` comment (XML->HR writes one after a comment that holds a ``;``), and
+        # trimming it would hand that comment to the one-line reading.
         if close_bracket >= 0:
-            bracket_content = work_text[bracket_idx + 1:close_bracket].strip()
+            content = work_text[bracket_idx + 1:close_bracket]
         else:
-            bracket_content = work_text[bracket_idx + 1:].strip()
-        params = _split_params(bracket_content)
+            content = work_text[bracket_idx + 1:]
+        bracket_content = content.strip()
+        params = _split_params(content)
     else:
         step_name = work_text.strip()
         bracket_content = ""
@@ -104,76 +373,89 @@ def _parse_line(raw: str, line_number: int) -> ParsedHRLine:
     return ParsedHRLine(
         raw=raw, line_number=line_number, disabled=disabled,
         step_name=step_name, bracket_content=bracket_content,
-        params=params, indent=indent,
+        params=params, indent=indent, display_form_quote=display_form_quote,
     )
 
 
 def _find_top_level_bracket(text: str) -> int:
-    """Find the first top-level '[' not inside quotes."""
+    """Find the first top-level '[' not inside a text literal."""
     in_quote = False
     for i, ch in enumerate(text):
-        if ch == '"':
+        if is_double_delimiter(text, i):
             in_quote = not in_quote
         if not in_quote and ch == "[":
             return i
     return -1
 
 
-def _find_matching_bracket(text: str, open_idx: int) -> int:
-    """Find the matching ']' for an opening '['."""
+def _find_matching_bracket_in(text: str, open_idx: int, mode: int) -> int:
     depth = 0
-    in_quote = False
-    for i in range(open_idx, len(text)):
-        ch = text[i]
-        if ch == '"':
-            in_quote = not in_quote
-        if in_quote:
+    i = open_idx
+    while i < len(text):
+        past = _step_over_opaque(text, i, mode)
+        if past != i:
+            i = past
             continue
-        if ch == "[":
-            depth += 1
-        elif ch == "]":
-            depth -= 1
-            if depth == 0:
-                return i
+        delta = hr_bracket_depth_delta(text, i, depth)
+        depth += delta
+        if delta < 0 and depth == 0:
+            return i
+        i += 1
     return -1
 
 
+def _find_matching_bracket(text: str, open_idx: int) -> int:
+    """Find the matching ']' for an opening '[' (literals and comments are content)."""
+    idx = _find_matching_bracket_in(text, open_idx, AT_LINE_END)
+    if idx >= 0:
+        return idx
+    return _find_matching_bracket_in(text, open_idx, YIELDS_TO_FINAL_BRACKET)
+
+
 def _split_params(content: str) -> list:
-    """Split bracket content by semicolons, respecting quotes and nesting."""
+    """Split bracket content by semicolons, respecting literals, comments and nesting."""
     params = []
     current = ""
-    in_quote = False
     paren_depth = 0
     bracket_depth = 0
 
-    for ch in content:
-        if ch == '"':
-            in_quote = not in_quote
-            current += ch
+    i = 0
+    while i < len(content):
+        # On the last line a ``//`` comment ends before the next ``;`` (the one-line
+        # form FileMaker's Script Workspace shows).
+        span = hr_opaque_span_at(content, i, ";")
+        if span:
+            current += content[i : i + span]
+            i += span
             continue
-
-        if in_quote:
-            current += ch
-            continue
-
-        if ch == "(":
+        ch = content[i]
+        # Every form FileMaker reads as a parenthesis or bracket counts:
+        # ``Left （ "abc" ; 2 ）`` is one argument.
+        if ch in CALC_OPEN_PARENS:
             paren_depth += 1
-        elif ch == ")":
+        elif ch in CALC_CLOSE_PARENS:
             paren_depth -= 1
-        elif ch == "[":
+        elif ch in CALC_OPEN_BRACKETS:
             bracket_depth += 1
-        elif ch == "]":
+        elif ch in CALC_CLOSE_BRACKETS:
             bracket_depth -= 1
 
         if ch == ";" and paren_depth == 0 and bracket_depth == 0:
             params.append(current.strip())
             current = ""
+            i += 1
             continue
 
         current += ch
+        i += 1
 
     if current.strip():
         params.append(current.strip())
+    elif params:
+        # An empty slot after the last ``;`` is one FileMaker drew empty and last
+        # (Export Records with no path but a <Profile>: ``Create folders: On ; ]``),
+        # kept like any other empty slot. A bracket holding nothing has no slot.
+        params.append("")
 
     return params
 

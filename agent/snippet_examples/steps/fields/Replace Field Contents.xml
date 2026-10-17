@@ -11,7 +11,7 @@
 </fmxmlsnippet>
 <!-- NoInteract state: "True" suppresses the Replace Field Contents dialog. "False" shows the dialog. -->
 <!-- Restore state: "True" uses the stored/specified replacement settings. "False" does not restore stored settings. -->
-<!-- With value: "Calculation" (replace with calculated result) | "SerialNumbers" (reserialize the field) | "CurrentContents" (replace with current record's value) -->
+<!-- With value: "Calculation" (replace with calculated result) | "SerialNumbers" (reserialize the field) | "CurrentContents" (replace with current record's value) | "None" (unconfigured default — live-verified on FM 26.0.2: FileMaker writes <With value="None"/> for a Replace with no replacement type selected) -->
 <!-- SerialNumbers PerformAutoEnter: "True" applies auto-enter options on the target field after replacement. "False" skips auto-enter (shown in HR as "Skip auto-enter options"). -->
 <!-- SerialNumbers UpdateEntryOptions: "True" resets Entry Options serial number to follow reserialized records. "False" leaves Entry Options unchanged. -->
 <!-- SerialNumbers UseEntryOptions: "True" uses Entry Options next value as starting serial. "False" uses custom start/increment values. -->

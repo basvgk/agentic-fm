@@ -13,7 +13,7 @@
   </Step>
 </fmxmlsnippet>
 <!-- LLMType value: "ChatGPT" (OpenAI) | "Anthropic" | "Cohere" | "Other" (Custom endpoint) -->
-<!-- Note: XML element names contain typos: "SetLLMAccout" and "AccoutName" (missing 'n'). These are canonical. -->
+<!-- Version note: this sample shows the FileMaker 2025 serialization, whose wrapper element names were misspelled "SetLLMAccout" and "AccoutName" (missing 'n'). FileMaker 26 corrected these to "SetLLMAccount" and "AccountName". The converter emits the corrected FileMaker 26 spelling and accepts either spelling on read (via the step's wrapperElementAliases / parentElementAliases catalog fields). -->
 <!-- For "Other" (Custom): also includes <Endpoint><Calculation>...</Calculation></Endpoint> inside SetLLMAccout, and <VerifySSLCertificates state="True|False"/> outside SetLLMAccout. -->
 <!-- All child params (AccoutName, AccessAPIKey, Endpoint) are wrapped inside <SetLLMAccout>. -->
 <!-- VerifySSLCertificates is a sibling of LLMType, not inside SetLLMAccout. Only applies to Custom/Other type. -->

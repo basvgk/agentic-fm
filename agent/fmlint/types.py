@@ -80,3 +80,7 @@ class ParsedHRLine:
     bracket_content: str = ""
     params: list = field(default_factory=list)
     indent: int = 0
+    # The step's ``]`` was found only by reading a literal that never closes as
+    # FileMaker's display form (an unescaped quote inside ``“…”``): the statement
+    # ended at the line's last ``]``.
+    display_form_quote: bool = False

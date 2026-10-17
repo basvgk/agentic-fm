@@ -47,15 +47,33 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from calc_literal import (
+    CALC_CLOSE_BRACKETS,
+    CALC_CLOSE_PARENS,
+    CALC_OPEN_BRACKETS,
+    CALC_OPEN_PARENS,
+    decode_whole_calc_literal,
+    hr_bracket_depth_delta,
+    hr_calc_opaque_span_at,
+    reads_as_quoted_literal_text,
+)
 from catalog_grammar import (
+    FIELD_MISSING_SENTINEL,
     CatalogEntry,
     StepParam,
+    _group_quote_value,
+    _group_unquote_value,
     candidate_hr_labels,
+    closed_vocab_enum,
     governing_discriminator_for,
     hr_param_order,
     is_driven_discriminator,
     is_governing_discriminator,
     param_key,
+    positional_token_fits_param,
+    projection_owner,
+    renders_bare_in_hr,
+    shape_routed_values,
     value_reveals_companion,
 )
 
@@ -105,6 +123,13 @@ def _trim(s: str) -> str:
     return s.strip(" \t")
 
 
+def _trim_piece(s: str) -> str:
+    """Trim a split piece: a line comment ends at a line break, so a piece can end
+    with the break XML->HR wrote after it (``calc_literal.hr_sep``); it is not part
+    of the value."""
+    return s.strip(" \t\r\n")
+
+
 def _ci_equals(a: str, b: str) -> bool:
     return a.lower() == b.lower()
 
@@ -122,11 +147,17 @@ def _split_element_attr(xml_element: str) -> tuple[bool, str, str]:
 
 
 def esc_xml(s: str) -> str:
+    """Escape & < > " and write a carriage return as ``&#13;``, as FileMaker does.
+
+    XML parsing turns a raw CR into LF, and FileMaker stores CR and LF as different
+    characters, so a raw CR in a path list or text param pastes back as LF.
+    """
     return (
         s.replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace('"', "&quot;")
+        .replace("\r", "&#13;")
     )
 
 
@@ -158,40 +189,38 @@ def cdata(s: str) -> str:
 
 
 def _split_top_level_commas(s: str) -> list[str]:
-    """Split on top-level commas, respecting paren/bracket/brace depth + quotes."""
+    """Split on top-level commas, respecting paren/bracket/brace depth + text literals.
+
+    Used by the parametersList grammar and the attrGroup/repeatGroup body parser,
+    whose quoted values are written as calculation literals (``_group_quote_value``).
+    A literal or a calculation comment is stepped over whole with the calculation
+    grammar (``calc_literal.hr_calc_opaque_span_at``), so a comma inside ``"a\\", b"``,
+    ``“c, d”`` or ``/* e, f */`` is content.
+    """
     out: list[str] = []
     if not s:
         return out
     cur = ""
     paren = bracket = brace = 0
-    in_quote = False
     i = 0
     n = len(s)
     while i < n:
+        lit = hr_calc_opaque_span_at(s, i, ",")
+        if lit:
+            cur += s[i : i + lit]
+            i += lit
+            continue
         c = s[i]
-        if in_quote:
-            cur += c
-            if c == '"':
-                if i + 1 < n and s[i + 1] == '"':
-                    cur += '"'
-                    i += 1
-                else:
-                    in_quote = False
-            i += 1
-            continue
-        if c == '"':
-            in_quote = True
-            cur += c
-            i += 1
-            continue
-        if c == "(":
+        # Every form FileMaker reads as a parenthesis or bracket counts
+        # (``Left （ "abc" , 2 ）`` is one item).
+        if c in CALC_OPEN_PARENS:
             paren += 1
-        elif c == ")":
+        elif c in CALC_CLOSE_PARENS:
             if paren > 0:
                 paren -= 1
-        elif c == "[":
+        elif c in CALC_OPEN_BRACKETS:
             bracket += 1
-        elif c == "]":
+        elif c in CALC_CLOSE_BRACKETS:
             if bracket > 0:
                 bracket -= 1
         elif c == "{":
@@ -199,7 +228,7 @@ def _split_top_level_commas(s: str) -> list[str]:
         elif c == "}" and brace > 0:
             brace -= 1
         if c == "," and paren == 0 and bracket == 0 and brace == 0:
-            item = _trim(cur)
+            item = _trim_piece(cur)
             if item:
                 out.append(item)
             cur = ""
@@ -207,14 +236,21 @@ def _split_top_level_commas(s: str) -> list[str]:
             continue
         cur += c
         i += 1
-    tail = _trim(cur)
+    tail = _trim_piece(cur)
     if tail:
         out.append(tail)
     return out
 
 
-def _split_on_delim(s: str, delim: str) -> list[str]:
-    """Split ``s`` on every top-level occurrence of multi-char ``delim`` (quote-aware)."""
+def _split_on_delim(s: str, delim: str, calc_literals: bool) -> list[str]:
+    """Split ``s`` on every top-level occurrence of multi-char ``delim``.
+
+    A delimiter inside a quoted region is kept. With ``calc_literals`` the region is a
+    calculation text literal or comment (the repeatGroup entries, whose values are calculations
+    or ``_group_quote_value``-quoted text); without it a straight ``"`` toggles a
+    find-request phrase (the findRequests rows and criteria: find text is not a
+    calculation, and ``"`` is FileMaker's match-phrase operator there).
+    """
     out: list[str] = []
     if not delim:
         out.append(s)
@@ -225,59 +261,58 @@ def _split_on_delim(s: str, delim: str) -> list[str]:
     dn = len(delim)
     n = len(s)
     while i + dn <= n:
-        if s[i] == '"':
+        if calc_literals:
+            lit = hr_calc_opaque_span_at(s, i, delim.strip(" ")[:1] or delim[0])
+            if lit:
+                i += lit
+                continue
+        elif s[i] == '"':
             in_quote = not in_quote
             i += 1
             continue
         if not in_quote and s[i : i + dn] == delim:
-            piece = _trim(s[start:i])
+            piece = _trim_piece(s[start:i])
             if piece:
                 out.append(piece)
             i += dn
             start = i
             continue
         i += 1
-    tail = _trim(s[start:])
+    tail = _trim_piece(s[start:])
     if tail:
         out.append(tail)
     return out
 
 
 def _split_list_entries(s: str) -> list[str]:
-    """Split a fieldList body on top-level commas, PRESERVING empty entries."""
+    """Split a fieldList body on top-level commas, PRESERVING empty entries.
+
+    Text literals and comments are stepped over whole, as in ``_split_top_level_commas``.
+    """
     out: list[str] = []
-    if not _trim(s):
+    if not _trim_piece(s):
         return out
     cur = ""
     paren = bracket = brace = 0
-    in_quote = False
     i = 0
     n = len(s)
     while i < n:
+        lit = hr_calc_opaque_span_at(s, i, ",")
+        if lit:
+            cur += s[i : i + lit]
+            i += lit
+            continue
         c = s[i]
-        if in_quote:
-            cur += c
-            if c == '"':
-                if i + 1 < n and s[i + 1] == '"':
-                    cur += '"'
-                    i += 1
-                else:
-                    in_quote = False
-            i += 1
-            continue
-        if c == '"':
-            in_quote = True
-            cur += c
-            i += 1
-            continue
-        if c == "(":
+        # Every form FileMaker reads as a parenthesis or bracket counts
+        # (``Left （ "abc" , 2 ）`` is one item).
+        if c in CALC_OPEN_PARENS:
             paren += 1
-        elif c == ")":
+        elif c in CALC_CLOSE_PARENS:
             if paren > 0:
                 paren -= 1
-        elif c == "[":
+        elif c in CALC_OPEN_BRACKETS:
             bracket += 1
-        elif c == "]":
+        elif c in CALC_CLOSE_BRACKETS:
             if bracket > 0:
                 bracket -= 1
         elif c == "{":
@@ -285,13 +320,13 @@ def _split_list_entries(s: str) -> list[str]:
         elif c == "}" and brace > 0:
             brace -= 1
         if c == "," and paren == 0 and bracket == 0 and brace == 0:
-            out.append(_trim(cur))
+            out.append(_trim_piece(cur))
             cur = ""
             i += 1
             continue
         cur += c
         i += 1
-    out.append(_trim(cur))
+    out.append(_trim_piece(cur))
     return out
 
 
@@ -321,6 +356,185 @@ def _is_variable(s: str) -> bool:
     return len(t) > 0 and t[0] == "$"
 
 
+def _parse_field_repetition(ref: str) -> tuple[str, int]:
+    """Split a trailing ``[N]`` repetition subscript off a field/variable ref.
+
+    ``Invoices::Notes[2]`` -> (``Invoices::Notes``, 2); ``$rep[3]`` -> (``$rep``, 3).
+    Only a positive integer subscript at the very end counts, with something
+    before it; anything else (no subscript, ``[]``, ``[0]``, ``[$i]``) returns the
+    ref unchanged and 0. FileMaker repetitions are 1-based.
+    """
+    if len(ref) < 3 or ref[-1] != "]":
+        return ref, 0
+    open_idx = ref.rfind("[")
+    if open_idx <= 0 or open_idx + 1 == len(ref) - 1:
+        return ref, 0
+    digits = ref[open_idx + 1 : -1]
+    if not digits.isascii() or not digits.isdigit() or len(digits) > 7:
+        return ref, 0
+    rep = int(digits)
+    if rep < 1 or rep > 1000000:
+        return ref, 0
+    return ref[:open_idx], rep
+
+
+def _parse_field_subscript(ref: str) -> tuple[str, int, str]:
+    """Split a trailing repetition subscript that may be a literal OR a calculation.
+
+    ``T::F[2]`` -> (``T::F``, 2, ``""``); ``T::F[$i + 1]`` -> (``T::F``, 0, ``$i + 1``).
+    The subscript opens at the first ``[`` and must close, bracket-balanced (text
+    literals and comments are opaque), on the last character; the calc is trimmed
+    (XML->HR writes a line break before the closing ``]`` after a ``//`` comment).
+    A digits-only subscript is the literal form with ``_parse_field_repetition``'s
+    rules. Anything else returns (ref, 0, "").
+    """
+    if len(ref) < 3 or ref[-1] != "]":
+        return ref, 0, ""
+    open_idx = ref.find("[")
+    if open_idx <= 0:
+        return ref, 0, ""
+    depth = 0
+    close = -1
+    i = open_idx
+    while i < len(ref):
+        span = hr_calc_opaque_span_at(ref, i)
+        if span:
+            i += span
+            continue
+        # The subscript's own ``[ ]`` are ASCII; the calculation inside may use
+        # ``［ ］`` too.
+        delta = hr_bracket_depth_delta(ref, i, depth)
+        depth += delta
+        if delta < 0 and depth == 0:
+            close = i
+            break
+        i += 1
+    if close != len(ref) - 1:
+        return ref, 0, ""
+    inner = ref[open_idx + 1 : close].strip(" \t\r\n")
+    if not inner:
+        return ref, 0, ""
+    if inner.isascii() and inner.isdigit():
+        bare, rep = _parse_field_repetition(ref[:open_idx] + "[" + inner + "]")
+        return bare, rep, ""
+    return ref[:open_idx], 0, inner
+
+
+def _repetition_attr(rep: int, calc: str = "") -> str:
+    """FileMaker's ``repetition`` attribute: ``"0"`` for the calculated form, else
+    ``"N"`` written only for N > 1."""
+    if calc:
+        return ' repetition="0"'
+    return ' repetition="' + str(rep) + '"' if rep > 1 else ""
+
+
+def _repetition_calc_sibling(calc: str, indent: str) -> str:
+    """FileMaker's calculated-repetition sibling, written right after the ``<Field>``
+    it subscripts: ``<Repetition><Calculation>`` (measured, FileMaker Pro 26.0.2:
+    Set Field, Go to Field, Insert Text field and variable targets)."""
+    if not calc:
+        return ""
+    return (
+        "\n" + indent + "<Repetition>\n"
+        + indent + "  <Calculation>" + cdata(calc) + "</Calculation>\n"
+        + indent + "</Repetition>"
+    )
+
+
+def _resolve_field(resolver: IdResolver, ref: str) -> tuple[str, int, str]:
+    """Resolve ``Table::Field``; FileMaker's ``Table::<Field Missing>`` (a table
+    with no field) reads back to its stored form, id 0 and an empty name, never a
+    field literally named ``<Field Missing>``."""
+    sep = ref.find("::")
+    if sep >= 0 and _trim(ref[sep + 2 :]) == FIELD_MISSING_SENTINEL:
+        return _trim(ref[:sep]), 0, ""
+    return resolver.resolve_field(ref)
+
+
+def _field_ref_xml(
+    resolver: IdResolver,
+    ref: str,
+    extra_attrs: str = "",
+    indent: str = "    ",
+    allow_calc: bool = True,
+) -> str:
+    """``<Field table id [repetition] name/>`` for a ``Table::Field[N]`` ref, in
+    FileMaker's attribute order, plus the ``<Repetition>`` sibling for a calculated
+    ``Table::Field[calc]``. The subscript is stripped before name resolution. Group
+    children (``allow_calc=False``) have no calculated form in FileMaker, whose
+    input-target dialog takes digits only, so a calculated subscript is dropped."""
+    bare, rep, calc = _parse_field_subscript(_trim(ref))
+    if not allow_calc:
+        calc = ""
+    table, fid, fname = _resolve_field(resolver, bare)
+    return (
+        "<Field"
+        + extra_attrs
+        + ' table="'
+        + esc_xml(table)
+        + '" id="'
+        + str(fid)
+        + '"'
+        + _repetition_attr(rep, calc)
+        + ' name="'
+        + esc_xml(fname)
+        + '"/>'
+        + _repetition_calc_sibling(calc, indent)
+    )
+
+
+def _variable_field_xml(
+    var: str, extra_attrs: str = "", indent: str = "    ", allow_calc: bool = True
+) -> str:
+    """``<Field [repetition]>$var</Field>`` for a ``$var[N]`` target, plus the
+    ``<Repetition>`` sibling for a calculated ``$var[calc]``."""
+    bare, rep, calc = _parse_field_subscript(_trim(var))
+    if not allow_calc:
+        calc = ""
+    return (
+        "<Field" + extra_attrs + _repetition_attr(rep, calc) + ">" + esc_xml(bare) + "</Field>"
+        + _repetition_calc_sibling(calc, indent)
+    )
+
+
+def _unquote_text_value(s: str) -> str:
+    """Strip one surrounding quote pair from a free-text HR value: straight
+    ``"…"``, curly ``“…”`` or curly single ``‘…’``. A no-op on bare text."""
+    if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+        return s[1:-1]
+    if len(s) >= 2 and ((s[0] == "“" and s[-1] == "”") or (s[0] == "‘" and s[-1] == "’")):
+        return s[1:-1]
+    return s
+
+
+def _text_param_value(param, hr_value: str) -> str:
+    """The raw XML body for a ``text``/``name`` param's HR token.
+
+    An ``hr_quoted`` param was rendered as one escaped text literal: decode it. A
+    token that is not exactly one literal is FileMaker's own unescaped display
+    (``“He said “hi”``) or bare text: strip one outer quote pair (a no-op on bare
+    text). Any other text param is taken as written, except that a quoted lone
+    variable used as a path/target unquotes to the bare ``$`` reference.
+    """
+    if param.hr_quoted:
+        t = _trim(hr_value)
+        decoded = decode_whole_calc_literal(t)
+        return decoded if decoded is not None else _unquote_text_value(t)
+    quoted, bare = _is_quoted_lone_variable(hr_value)
+    return bare if quoted else hr_value
+
+
+def _table_param_value(param, hr_value: str) -> str:
+    """The table name for a ``tableRef`` / ``tableOccurrence`` HR token. An
+    ``hr_quoted`` one (Save Records as JSONL's ``Table: “Invoices”``) was rendered
+    as one escaped literal: decode it, else strip one quote pair."""
+    if param.hr_quoted:
+        t = _trim(hr_value)
+        decoded = decode_whole_calc_literal(t)
+        return decoded if decoded is not None else _unquote_text_value(t)
+    return _unquote(hr_value)
+
+
 def _is_quoted_lone_variable(v: str) -> tuple[bool, str]:
     """True when ``v`` (trimmed, one layer of matching quotes stripped) is a single
     variable token; returns the bare variable as the tuple's second element."""
@@ -337,22 +551,6 @@ def _is_quoted_lone_variable(v: str) -> tuple[bool, str]:
     if any(ch in " \t\"" for ch in t):
         return False, ""
     return True, t
-
-
-def _group_unquote_value(v: str) -> str:
-    if len(v) < 2 or v[0] != '"' or v[-1] != '"':
-        return v
-    out = ""
-    last = len(v) - 1
-    i = 1
-    while i < last:
-        if v[i] == '"' and i + 1 < last and v[i + 1] == '"':
-            out += '"'
-            i += 2
-        else:
-            out += v[i]
-            i += 1
-    return out
 
 
 def _parse_group_kv(body: str) -> dict[str, str]:
@@ -426,6 +624,28 @@ def _resolve_enum_xml_value(param: StepParam, hr_value: str) -> str:
     return (param.default_value or "") if hr_value == "" else hr_value
 
 
+def _param_visible_hr(entry: CatalogEntry, values: list[str], param: StepParam) -> bool:
+    """HR->XML counterpart of catalog_grammar.param_visible: whether ``param`` passes
+    its ``visibleWhen`` gate given the sibling param's resolved value from the parsed
+    HR ``values``. An enum sibling's HR token is resolved to its FM XML value
+    (so "Custom" -> "Other" is compared against the value the gate lists); any other
+    sibling uses its raw HR value; empty falls back to the sibling's default. An
+    unresolved gate reference is inert (visible), so a catalog typo degrades to
+    always-emit. Symmetric with param_visible so both directions agree."""
+    vw = param.visible_when
+    if vw is None or not vw.param:
+        return True
+    for i, q in enumerate(entry.params):
+        if param_key(q) != vw.param:
+            continue
+        raw = values[i] if i < len(values) else ""
+        v = _resolve_enum_xml_value(q, raw) if q.type == "enum" else raw
+        if v == "":
+            v = q.default_value or ""
+        return v in vw.values
+    return True
+
+
 def _resolve_bool_state(param: StepParam, hr_value: str) -> str:
     state = param.default_value if param.default_value else "False"
     if hr_value != "":
@@ -444,21 +664,6 @@ def _resolve_bool_state(param: StepParam, hr_value: str) -> str:
             hr_means_true = not hr_means_true
         state = "True" if hr_means_true else "False"
     return state
-
-
-def _renders_bare_in_hr(param: StepParam) -> bool:
-    """Whether a param renders bare (positional) in HR — the pass-2 eligibility test."""
-    if param.hr_bare:  # per-param opt-in: FileMaker prints it bare
-        return True
-    if not param.hr_label:
-        return True
-    if param.type in ("calc", "field", "script"):
-        return True
-    if param.type == "layout":
-        return not param.hr_label
-    if param.type in ("text", "name") and not param.parent_element:
-        return True
-    return param.type == "calculation" and not param.omit_when_empty
 
 
 # ---------------------------------------------------------------------------
@@ -566,6 +771,9 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
     values = [""] * len(entry.params)
     resolved = [False] * len(entry.params)
     consumed = [False] * len(hr_params)
+    # Which params claimed an HR token, by label or by position -- distinct from
+    # "has a non-empty value": an empty slot is still evidence for the P7.2 derive.
+    got_token = [False] * len(entry.params)
 
     for pi, param in enumerate(entry.params):
         if param.hr_hidden:
@@ -640,6 +848,7 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
                 if _ci_equals(_trim(hr_params[i]), param.hr_label):
                     consumed[i] = True
                     values[pi] = "True"
+                    got_token[pi] = True
                     break
             continue
 
@@ -653,31 +862,206 @@ def match_param_values(entry: CatalogEntry, hr_params: list[str]) -> list[str]:
                     if _starts_with_ci(t, prefix):
                         consumed[i] = True
                         values[pi] = _trim(t[len(prefix) :])
+                        got_token[pi] = True
                         resolved[pi] = True
                         break
                 if resolved[pi]:
                     break
 
+    # Shape-routed governing discriminator (shape_routed_values): FileMaker's line
+    # shows only the revealed companion, so its shape is the only evidence of the
+    # value. Perform AppleScript prints Text mode as the quoted literal
+    # (``[ "a "b";c] d" ]``, unescaped) and Calculation mode as the calculation
+    # (``[ "say " & $x ]``). A bare token naming one of the two values at the
+    # companion's position selects it explicitly (rendered when the companion's
+    # shape alone would read as the other value). Otherwise the token there selects
+    # the value revealing the ``hrQuoted`` companion when it reads as quoted literal
+    # text, else the other value. No token leaves the enum at its default.
+    for pi, param in enumerate(entry.params):
+        if values[pi] != "":
+            continue
+        routed = shape_routed_values(entry, param)
+        if routed is None:
+            continue
+        quoted_value, other_value = routed
+        # The companion renders at the discriminator's HR slot, so it takes the bare
+        # token after those of the positional params rendered before it.
+        before = 0
+        for qi in hr_param_order(entry):
+            if qi == pi:
+                break
+            q = entry.params[qi]
+            if resolved[qi] or not renders_bare_in_hr(q) or governing_discriminator_for(entry, q):
+                continue
+            before += 1
+        for i in range(len(hr_params)):
+            if consumed[i]:
+                continue
+            if before > 0:
+                before -= 1
+                continue
+            t = _trim(hr_params[i])
+            if _ci_equals(t, quoted_value) or _ci_equals(t, other_value):
+                consumed[i] = True
+                values[pi] = quoted_value if _ci_equals(t, quoted_value) else other_value
+            elif t:
+                values[pi] = quoted_value if reads_as_quoted_literal_text(t) else other_value
+            break
+
     # Pass 2 — positional for the remaining bare-rendering params, in HR order.
-    pos = 0
-    for pi in hr_param_order(entry):
-        if resolved[pi]:
-            continue
-        if not _renders_bare_in_hr(entry.params[pi]):
-            continue
+    def positional_target(pi: int) -> bool:
+        if resolved[pi] or not renders_bare_in_hr(entry.params[pi]):
+            return False
         gov = governing_discriminator_for(entry, entry.params[pi])
         if gov is not None:
             gi = entry.params.index(gov)
             gval = (gov.default_value or "") if values[gi] == "" else values[gi]
             if not value_reveals_companion(gov, gval, param_key(entry.params[pi])):
-                continue
+                return False
+        return True
+
+    order = hr_param_order(entry)
+    # Missing optional slot, told apart by vocabulary: with FEWER bare tokens than
+    # positional slots, a token naming a value of a LATER closed-vocabulary enum is
+    # that enum's token, so a free param ahead of it is the one left out (Save a
+    # Copy as with no path: ``[ copy of current file ; Create folders: On ]``).
+    # Only a deficit enables the skip. Mirrors the reference converter.
+    missing_slots = sum(1 for pi in order if positional_target(pi)) - sum(
+        1 for i in range(len(hr_params)) if not consumed[i] and _trim(hr_params[i])
+    )
+
+    def names_later_closed_enum(oi: int, token: str) -> bool:
+        return any(
+            closed_vocab_enum(entry.params[qi])
+            and positional_target(qi)
+            and positional_token_fits_param(entry.params[qi], token)
+            for qi in order[oi + 1 :]
+        )
+
+    pos = 0
+    for oi, pi in enumerate(order):
+        if not positional_target(pi):
+            continue
         while pos < len(hr_params) and consumed[pos]:
             pos += 1
         if pos < len(hr_params):
+            token = _trim(hr_params[pos])
+            # A closed-vocabulary enum only claims a token that names one of its
+            # own values; anything else belongs to a later bare param.
+            if not positional_token_fits_param(entry.params[pi], token):
+                continue
+            if (
+                missing_slots > 0
+                and not closed_vocab_enum(entry.params[pi])
+                and names_later_closed_enum(oi, token)
+            ):
+                missing_slots -= 1
+                continue
             consumed[pos] = True
-            values[pi] = _trim(hr_params[pos])
+            values[pi] = token
+            got_token[pi] = True
             resolved[pi] = True
             pos += 1
+
+    # hrPositionalKey repeatGroup: FileMaker prints each non-empty entry's
+    # positional field bare after the step's own bare params (Show Custom Dialog
+    # `[ "T" ; "M" ; $a ; Invoices::Number ]`), so the bare tokens left after
+    # pass 2 are those entries, in order -- capped at repeatCount, and only a
+    # token that can BE a target (a `$variable` or a `Table::Field` reference);
+    # anything else stays unconsumed and is reported dropped. Mirrors the
+    # reference converter.
+    for pi, param in enumerate(entry.params):
+        key = _raw_str(param.raw, "hrPositionalKey")
+        if param.type != "repeatGroup" or not key or resolved[pi]:
+            continue
+        pos_field = next((f for f in _raw_arr(param.raw, "fields") if _raw_str(f, "key") == key), None)
+        if pos_field is None:
+            continue
+        kind = _raw_str(pos_field, "kind")
+        cap = int(param.raw.get("repeatCount", 0) or 0)
+
+        def fits(tok: str, kind: str = kind) -> bool:
+            if kind not in ("fieldOrVariable", "field"):
+                return True
+            if not tok or tok[0] == '"':
+                return False
+            if kind == "fieldOrVariable" and tok[0] == "$":
+                return True
+            return "::" in tok
+
+        parts: list[str] = []
+        for i in range(len(hr_params)):
+            if consumed[i]:
+                continue
+            tok = _trim(hr_params[i])
+            if not tok:
+                continue
+            if cap > 0 and len(parts) >= cap:
+                break
+            if not fits(tok):
+                break
+            consumed[i] = True
+            parts.append(key + "=" + _group_quote_value(tok))
+        if parts:
+            values[pi] = " | ".join(parts)
+            got_token[pi] = True
+            resolved[pi] = True
+
+    # P7.2 governed-visibility ENUM: a ``visibleWhen`` gate names a sibling enum
+    # and the values of it under which this param is shown. FileMaker renders a
+    # gate value that reveals a companion as the COMPANION ALONE, with no token of
+    # its own, so the gate cannot be read back from the HR -- it falls through to
+    # its catalog default instead, and FileMaker obeys the default and discards
+    # the companion. Derive it from the gated params that claimed a token ("a
+    # token was present", not "the value was non-empty": an empty slot is still
+    # evidence). Refused when two gate values would explain the same companions
+    # equally well. Mirrors the reference converter.
+    for gi, gate in enumerate(entry.params):
+        if gate.type != "enum" or values[gi] != "":
+            continue
+        # A display projection's value comes from its token or the group body,
+        # never from its companions (FileMaker's default PDF step has no
+        # <PDFSaveType>).
+        if gate.group_fields:
+            continue
+        gate_key = param_key(gate)
+        chosen = ""
+        ambiguous = False
+        for qi, gated in enumerate(entry.params):
+            if ambiguous:
+                break
+            vw = gated.visible_when
+            if vw is None or vw.param != gate_key or not vw.values:
+                continue
+            if not got_token[qi]:
+                continue
+            for v in vw.values:
+                if chosen == "":
+                    chosen = v
+                elif chosen != v:
+                    ambiguous = True
+                    break
+        if not ambiguous and chosen:
+            values[gi] = chosen
+
+    # hrEmptySlotWith: an empty token at a param's slot is FileMaker drawing the
+    # sibling it stands for (Save Records as Excel ``With dialog: Off ; ; Records
+    # being browsed`` is a step with a <Profile> and no path). An attrGroup with
+    # no token of its own takes a body of its attribute defaults.
+    for pi, param in enumerate(entry.params):
+        if not param.hr_empty_slot_with or not got_token[pi] or _trim(values[pi]):
+            continue
+        for qi, q in enumerate(entry.params):
+            if param_key(q) != param.hr_empty_slot_with:
+                continue
+            if q.type == "attrGroup" and not _trim(values[qi]):
+                values[qi] = ", ".join(
+                    _raw_str(f, "key") + "=" + _group_quote_value(_raw_str(f, "defaultValue"))
+                    for f in _raw_arr(q.raw, "fields")
+                    if _raw_str(f, "kind") == "attr" and not _raw_bool(f, "optional")
+                    and _raw_str(f, "defaultValue")
+                )
+            break
 
     return values
 
@@ -735,7 +1119,7 @@ def _emit_find_requests(hr_value: str, resolver: IdResolver) -> str:
     v = _trim(hr_value)
     if not v:
         return ""
-    rows = _split_on_delim(v, " | ")
+    rows = _split_on_delim(v, " | ", calc_literals=False)
     if not rows:
         return ""
     out = "    <Query>\n"
@@ -748,7 +1132,7 @@ def _emit_find_requests(hr_value: str, resolver: IdResolver) -> str:
         elif _starts_with_ci(r, "Include "):
             r = _trim(r[8:])
         out += '      <RequestRow operation="' + op + '">\n'
-        crits = _split_on_delim(r, " & ")
+        crits = _split_on_delim(r, " & ", calc_literals=False)
         if not crits:
             crits = [""]
         for crit in crits:
@@ -765,7 +1149,7 @@ def _emit_find_requests(hr_value: str, resolver: IdResolver) -> str:
             if not field:
                 out += '          <Field table="" id="0" name=""/>\n'
             else:
-                table, fid, fname = resolver.resolve_field(field)
+                table, fid, fname = _resolve_field(resolver, field)
                 out += (
                     '          <Field table="'
                     + esc_xml(table)
@@ -789,26 +1173,26 @@ def _emit_field_or_variable(
         if _raw_bool(param.raw, "emitEmptyDefault"):
             return '    <Field table="" id="0" name=""/>'
         return ""
+    # A typed same-element child (typeAttr/typeValue) carries its fixed
+    # discriminator attribute on the <Field …> open tag — FM's variable-only
+    # <Field type="Messages">/<Field type="ToolCalls"> children of one wrapper.
+    # Generic, driven entirely by the catalog. Mirrors the C++ converter.
+    type_attr = param.raw.get("typeAttr") or ""
+    type_attr_str = (
+        ' ' + type_attr + '="' + esc_xml(param.raw.get("typeValue") or "") + '"'
+        if type_attr
+        else ""
+    )
     if _is_variable(hr_value):
-        trimmed = _trim(hr_value)
         out = ""
         if not preceded_by_text_element:
             out += "    <Text/>\n"
-        out += "    <Field>" + esc_xml(trimmed) + "</Field>"
+        out += "    " + _variable_field_xml(hr_value, type_attr_str)
         return out
     out = ""
     if _raw_bool(param.raw, "textMarker") and not preceded_by_text_element:
         out += "    <Text/>\n"
-    table, fid, fname = resolver.resolve_field(hr_value)
-    out += (
-        '    <Field table="'
-        + esc_xml(table)
-        + '" id="'
-        + str(fid)
-        + '" name="'
-        + esc_xml(fname)
-        + '"/>'
-    )
+    out += "    " + _field_ref_xml(resolver, hr_value, type_attr_str)
     return out
 
 
@@ -851,17 +1235,7 @@ def _emit_group_element(
                     children += ci + "</" + child_element + ">\n"
         elif kind == "field":
             if present:
-                table, fid, fname = resolver.resolve_field(it)
-                children += (
-                    ci
-                    + '<Field table="'
-                    + esc_xml(table)
-                    + '" id="'
-                    + str(fid)
-                    + '" name="'
-                    + esc_xml(fname)
-                    + '"/>\n'
-                )
+                children += ci + _field_ref_xml(resolver, it, indent=ci, allow_calc=False) + "\n"
         elif kind == "script":
             if present:
                 sid, sname = resolver.resolve_script(_group_unquote_value(it))
@@ -878,19 +1252,9 @@ def _emit_group_element(
         elif kind == "fieldOrVariable":
             v = _group_unquote_value(it) if present else ""
             if v and _is_variable(v):
-                children += ci + "<Field>" + esc_xml(_trim(v)) + "</Field>\n"
+                children += ci + _variable_field_xml(v, indent=ci, allow_calc=False) + "\n"
             elif v:
-                table, fid, fname = resolver.resolve_field(v)
-                children += (
-                    ci
-                    + '<Field table="'
-                    + esc_xml(table)
-                    + '" id="'
-                    + str(fid)
-                    + '" name="'
-                    + esc_xml(fname)
-                    + '"/>\n'
-                )
+                children += ci + _field_ref_xml(resolver, v, indent=ci, allow_calc=False) + "\n"
             else:
                 children += ci + '<Field table="" id="0" name=""/>\n'
         elif kind == "group":
@@ -912,9 +1276,16 @@ def _emit_group_element(
 
 
 def _emit_repeat_group(param: StepParam, hr_value: str, resolver: IdResolver) -> str:
+    # hrDefault: no token means FileMaker's default content (its HR line omits
+    # it); repeatCount: FileMaker always serializes that many entries, padded.
+    if not _trim(hr_value):
+        hr_value = _raw_str(param.raw, "hrDefault")
     if not _trim(hr_value):
         return ""
-    entries = _split_on_delim(hr_value, " | ")
+    entries = _split_on_delim(hr_value, " | ", calc_literals=True)
+    cap = int(param.raw.get("repeatCount", 0) or 0)
+    while cap > 0 and len(entries) < cap:
+        entries.append("")
     out = "    <" + param.xml_element + ">\n"
     for e in entries:
         out += (
@@ -931,12 +1302,16 @@ def _emit_repeat_group(param: StepParam, hr_value: str, resolver: IdResolver) ->
     return out
 
 
-def _emit_attr_group(param: StepParam, hr_value: str, resolver: IdResolver) -> str:
-    if not _trim(hr_value) and not param.hr_hidden:
+def _emit_attr_group(
+    param: StepParam, hr_value: str, resolver: IdResolver, projected: dict[str, str] | None = None
+) -> str:
+    # ``projected``: fields a display projection (groupFields) read from its own
+    # token, keyed lower-case; they override the body's and make the group present.
+    if not _trim(hr_value) and not param.hr_hidden and not projected:
         return ""
-    return _emit_group_element(
-        param.xml_element, _raw_arr(param.raw, "fields"), _parse_group_kv(hr_value), "    ", resolver
-    )
+    kv = _parse_group_kv(hr_value)
+    kv.update(projected or {})
+    return _emit_group_element(param.xml_element, _raw_arr(param.raw, "fields"), kv, "    ", resolver)
 
 
 # ── bitmaskGroup ─────────────────────────────────────────────────────────────
@@ -1051,7 +1426,7 @@ def _emit_field_list(param: StepParam, hr_value: str, resolver: IdResolver) -> s
         if eq != -1:
             fieldref = _trim(entry_str[:eq])
             attrval = _trim(entry_str[eq + 1 :])
-        table, fid, fname = resolver.resolve_field(_group_unquote_value(fieldref))
+        table, fid, fname = _resolve_field(resolver, _group_unquote_value(fieldref))
         fattrs = ""
         for ff in field_fixed_attrs:
             fattrs += " " + _raw_str(ff, "xmlAttr") + '="' + esc_xml_attr(_raw_str(ff, "defaultValue")) + '"'
@@ -1104,6 +1479,15 @@ def convert_step_with_catalog(
     # G10 attribute-bearing wrapper: a wrapper element may carry an enum value as an
     # attribute (FM serializes <Action value="Queue"> holding children).
     wrapper_attr: dict[str, str] = {}
+    # G10 non-default standalone survival: a wrapper whose enum resolves to a
+    # NON-default value but whose lazy-open group never fires (no child emits)
+    # would otherwise drop the pre-resolved attribute entirely, leaving the step
+    # with no discriminator (FM re-fills the default on paste, losing the authored
+    # value). Remember these in param order and emit them as self-closing
+    # <Wrapper attr="v"/> after the loop if the wrapper never opened. Default-valued
+    # wrappers are intentionally NOT queued: a bare default emits nothing and FM
+    # re-fills the same default on paste, matching FM's own render.
+    g10_standalone: list[tuple[str, str]] = []
     is_wrapper: set[str] = set()
     for p in params:
         segs = _split_path(p.parent_element or "")
@@ -1115,7 +1499,10 @@ def convert_step_with_catalog(
             if v == "":
                 continue
             attr = p.xml_attr or "value"
-            wrapper_attr[p.xml_element] = " " + attr + '="' + esc_xml(v) + '"'
+            attr_str = " " + attr + '="' + esc_xml(v) + '"'
+            wrapper_attr[p.xml_element] = attr_str
+            if v != (p.default_value or ""):
+                g10_standalone.append((p.xml_element, attr_str))
             skip_param[pi] = True
 
     # G11 attribute-on-element: an enum/boolean param whose xmlElement uses "Elem/@attr"
@@ -1136,6 +1523,25 @@ def convert_step_with_catalog(
             continue
         element_attr[elem] = element_attr.get(elem, "") + " " + attr + '="' + esc_xml(v) + '"'
         skip_param[pi] = True
+
+    # attrGroup display projection (groupFields): a projection owns no element;
+    # its token's value (resolved back through hrEnumValues) is split over the
+    # fields it projects and handed to the owning group's emit.
+    projected_fields: dict[int, dict[str, str]] = {}
+    for pi, p in enumerate(params):
+        if not p.group_fields:
+            continue
+        skip_param[pi] = True
+        if not _trim(values[pi]):
+            continue
+        owner = projection_owner(entry, p)
+        if owner is None:
+            continue
+        oi = next(i for i, q in enumerate(params) if q is owner)
+        parts = _resolve_enum_xml_value(p, _trim(values[pi])).split("|")
+        for key, part in zip(p.group_fields, parts):
+            if part:
+                projected_fields.setdefault(oi, {})[_lower_key(key)] = part
 
     # Discriminator-driven layout: pre-resolve destination + <Layout> piece.
     discrim_value: dict[str, str] = {}
@@ -1192,11 +1598,86 @@ def convert_step_with_catalog(
         off_value = "False" if on_value == "True" else "True"
         implied_bool[gi] = on_value if any_content else off_value
 
+    # G10 nested attribute-bearing wrapper: the step-level rule one level down. An
+    # enum or boolean INSIDE a group whose xmlElement names a wrapper other params
+    # nest inside (parentElement "<its parent>/<it>") carries its value as that
+    # wrapper's attribute: Insert from Device writes <ScanFrom type="Field"><Field
+    # .../></ScanFrom> and <MaxDuration state="True"><Calculation>...</Calculation>
+    # </MaxDuration>. FileMaker serializes such a wrapper in every state, child or
+    # not (<ScanFrom type="Camera"/>, <MaxDuration state="False"/>), so it opens at
+    # its own slot and closes self-closed when no child follows. A governed one is
+    # gated like any companion; a hidden boolean takes its derived state.
+    wrapper_attr_by_path: dict[str, str] = {}
+    nested_wrapper_open: dict[int, str] = {}
+    wrapper_paths: set[str] = set()
+    for p in params:
+        prefix = ""
+        for seg in _split_path(p.parent_element or ""):
+            prefix = seg if not prefix else prefix + "/" + seg
+            wrapper_paths.add(prefix)
+    for pi, p in enumerate(params):
+        if not p.parent_element or p.type not in ("enum", "boolean"):
+            continue
+        if _split_element_attr(p.xml_element)[0]:
+            continue
+        path = p.parent_element + "/" + p.xml_element
+        if path not in wrapper_paths:
+            continue
+        skip_param[pi] = True
+        gov = governing_discriminator_for(entry, p)
+        if gov is not None:
+            dval = gov_discrim_value.get(gov.xml_element, gov.default_value or "")
+            if not value_reveals_companion(gov, dval, param_key(p)):
+                continue
+        if p.type == "boolean":
+            v = implied_bool.get(pi) or _resolve_bool_state(p, values[pi])
+        else:
+            v = _resolve_enum_xml_value(p, values[pi])
+        attr = p.xml_attr or ("state" if p.type == "boolean" else "value")
+        if v:
+            wrapper_attr_by_path[path] = " " + attr + '="' + esc_xml(v) + '"'
+        nested_wrapper_open[pi] = path
+
     prev_was_text_element = False
     open_groups: list[str] = []
+    # Wrappers actually opened by an emitting child during the loop, so the
+    # post-loop G10 standalone pass only injects for wrappers that never opened.
+    wrapper_opened: set[str] = set()
+    # len(xml) right after each open wrapper's start tag: a wrapper closed with
+    # nothing written inside it closes self-closed (<ScanFrom type="Camera"/>).
+    open_tag_end: list[int] = []
+
+    def reconcile_wrappers(want: list[str]) -> None:
+        """Keep the shared prefix of the open-wrapper stack, close what we left,
+        open what is new (with any G10 attribute resolved for it)."""
+        nonlocal xml
+        common = 0
+        while common < len(open_groups) and common < len(want) and open_groups[common] == want[common]:
+            common += 1
+        for k in range(len(open_groups), common, -1):
+            if len(xml) == open_tag_end[k - 1]:
+                xml = xml[:-2] + "/>\n"
+            else:
+                xml += "    </" + open_groups[k - 1] + ">\n"
+        del open_groups[common:]
+        del open_tag_end[common:]
+        path = ""
+        for k, seg in enumerate(want):
+            path = seg if not path else path + "/" + seg
+            if k < common:
+                continue
+            wa = wrapper_attr_by_path.get(path, wrapper_attr.get(seg, ""))
+            xml += "    <" + seg + wa + ">\n"
+            open_groups.append(seg)
+            open_tag_end.append(len(xml))
+            wrapper_opened.add(seg)
 
     for pi, param in enumerate(params):
         hr_value = values[pi]
+        if pi in nested_wrapper_open:
+            reconcile_wrappers(_split_path(nested_wrapper_open[pi]))
+            prev_was_text_element = False
+            continue
         if skip_param[pi]:
             continue
 
@@ -1225,6 +1706,24 @@ def convert_step_with_catalog(
 
         if gov_handled:
             pass  # piece already decided (a value or intentionally empty)
+        elif (
+            param.type == "boolean"
+            and param.visible_when is not None
+            and param.visible_when.param
+            and param.omit_when_empty
+        ):
+            # P7.3 governed-visibility boolean: a boolean whose PRESENCE (not just
+            # value) is governed by a sibling enum's value declares a ``visibleWhen``
+            # gate — the generic "governed by another param's enum value" primitive,
+            # symmetric with the XML->HR param_visible skip and the discriminator-
+            # revealed omit. When the gate value is not met FileMaker omits the
+            # element ENTIRELY (confirmed live: Configure AI Account drops
+            # <VerifySSLCertificates> for every LLMType except "Other"); when met it
+            # emits with the normal flag-style presence semantics. Opt-in via
+            # omitWhenEmpty. Benefits any step of this shape, not just #212.
+            if _param_visible_hr(entry, values, param):
+                piece = _emit_boolean(param, hr_value)
+            # else: gate not met -> omit entirely (piece stays "")
         elif param.type == "boolean":
             if pi in implied_bool:
                 attr = param.xml_attr or "state"
@@ -1250,7 +1749,7 @@ def convert_step_with_catalog(
             if not param.omit_when_empty or _trim(hr_value):
                 piece = "    <Calculation>" + cdata(hr_value) + "</Calculation>"
         elif param.type == "attrGroup":
-            piece = _emit_attr_group(param, hr_value, resolver)
+            piece = _emit_attr_group(param, hr_value, resolver, projected_fields.get(pi))
         elif param.type == "bitmaskGroup":
             piece = _emit_bitmask_group(param, hr_value)
         elif param.type == "repeatGroup":
@@ -1272,17 +1771,23 @@ def convert_step_with_catalog(
                 piece = "    <" + param.xml_element + "/>"
         elif param.type == "field":
             if not param.omit_when_empty or _trim(hr_value):
-                table, fid, fname = resolver.resolve_field(hr_value)
-                piece = '    <Field table="' + esc_xml(table) + '" id="' + str(fid) + '" name="' + esc_xml(fname) + '"/>'
+                piece = "    " + _field_ref_xml(resolver, hr_value)
         elif param.type == "tableRef":
             if not _trim(hr_value):
-                piece = '    <Table id="" name=""/>'
+                # A present-driven, gated table (Fine-Tune Model's training
+                # <Table>, revealed only in the DataTable branch) opts into
+                # omit_when_empty and emits nothing when unset.
+                if not param.omit_when_empty:
+                    piece = '    <Table id="" name=""/>'
             else:
-                tid, tname = _resolve_table(_unquote(hr_value))
+                tid, tname = _resolve_table(_table_param_value(param, hr_value))
                 piece = '    <Table id="' + str(tid) + '" name="' + esc_xml(tname) + '"/>'
         elif param.type == "tableOccurrence":
-            tid, tname = _resolve_table(_unquote(hr_value))
-            piece = '    <Table id="' + str(tid) + '" name="' + esc_xml(tname) + '"/>'
+            # An unset present-driven TO (omit_when_empty) emits no <Table> —
+            # matching FM's TrainingFile form; otherwise the TO always serializes.
+            if _trim(hr_value) or not param.omit_when_empty:
+                tid, tname = _resolve_table(_table_param_value(param, hr_value))
+                piece = '    <Table id="' + str(tid) + '" name="' + esc_xml(tname) + '"/>'
         elif param.type == "fileReference":
             if _trim(hr_value):
                 quoted, bare = _is_quoted_lone_variable(hr_value)
@@ -1318,12 +1823,48 @@ def convert_step_with_catalog(
                         piece = '    <Layout id="' + str(rid) + '" name="' + esc_xml(rname) + '"/>'
         elif param.type == "script":
             if not param.omit_when_empty or _trim(hr_value):
-                script_name = _unquote(hr_value)
-                sid, sname = resolver.resolve_script(script_name)
-                piece = '    <Script id="' + str(sid) + '" name="' + esc_xml(sname) + '"/>'
+                # Cross-file reference (Perform Script id 1): FM renders a call into
+                # another file as the positional token `"NAME" from file: "FILE"`.
+                # When the catalog opts this script param into the from-file grammar
+                # (``fromFileElement`` set), split that infix clause into a
+                # <FileReference name="FILE"> sibling emitted BEFORE the <Script>,
+                # carrying a <UniversalPathList>file:FILE</> child, and emit the
+                # <Script> NAME-ONLY. FM binds the reference by the external-data-
+                # source NAME when one of that name exists in the destination — the
+                # path is then ignored (even a wrong path binds, no dialog), so an
+                # in-solution cross-file call never regresses. When the destination
+                # does NOT yet reference FILE, the child preserves the file name
+                # (`from file: "FILE"`) and lets FM raise its normal locate prompt
+                # (fail-loud) instead of a name-only reference's silent `from file:
+                # ""` drop. The path uses the display NAME — the only value available
+                # offline; name-binding makes the real filename moot for resolvable
+                # references. The <Script> stays name-only: its binding id lives in
+                # the OTHER file (absent from the current-file context), so resolving
+                # it would bind the WRONG same-file script of the same name; FM shows
+                # it <unknown> until rebound while the file + name survive intact.
+                from_file_element = _raw_str(param.raw, "fromFileElement")
+                file_name = ""
+                script_token = hr_value
+                if from_file_element:
+                    marker = " from file: "
+                    fp = hr_value.find(marker)
+                    if fp != -1:
+                        script_token = _trim(hr_value[:fp])
+                        file_name = _unquote(_trim(hr_value[fp + len(marker):]))
+                script_name = _unquote(script_token)
+                if file_name:
+                    script_xml = '    <Script name="' + esc_xml(script_name) + '"/>'
+                    piece = (
+                        "    <" + from_file_element + ' name="' + esc_xml(file_name) + '">\n'
+                        + "      <UniversalPathList>file:" + esc_xml(file_name)
+                        + "</UniversalPathList>\n    </" + from_file_element + ">\n"
+                        + script_xml
+                    )
+                else:
+                    sid, sname = resolver.resolve_script(script_name)
+                    piece = '    <Script id="' + str(sid) + '" name="' + esc_xml(sname) + '"/>'
         elif param.type in ("text", "name") and (not param.omit_when_empty or _trim(hr_value)):
-            quoted, bare = _is_quoted_lone_variable(hr_value)
-            emit_value = bare if quoted else hr_value
+            emit_value = _text_param_value(param, hr_value)
             attrs = element_attr.get(param.xml_element, "")
             piece = "    <" + param.xml_element + attrs + ">" + esc_xml(emit_value) + "</" + param.xml_element + ">"
         # complex + unhandled types yield no piece.
@@ -1332,23 +1873,21 @@ def convert_step_with_catalog(
             continue
 
         # Reconcile the open-wrapper stack with this param's parentElement path.
-        want = _split_path(param.parent_element or "")
-        common = 0
-        while common < len(open_groups) and common < len(want) and open_groups[common] == want[common]:
-            common += 1
-        for k in range(len(open_groups), common, -1):
-            xml += "    </" + open_groups[k - 1] + ">\n"
-        del open_groups[common:]
-        for k in range(common, len(want)):
-            wa = wrapper_attr.get(want[k], "")
-            xml += "    <" + want[k] + wa + ">\n"
-            open_groups.append(want[k])
+        reconcile_wrappers(_split_path(param.parent_element or ""))
 
         xml += piece + "\n"
         prev_was_text_element = is_text_element
 
-    for k in range(len(open_groups), 0, -1):
-        xml += "    </" + open_groups[k - 1] + ">\n"
+    reconcile_wrappers([])
+
+    # G10 non-default standalone survival: any G10 wrapper whose enum carried a
+    # non-default value but whose lazy-open group never fired (no child emitted)
+    # would otherwise drop its pre-resolved attribute. Emit the self-closing
+    # <Wrapper attr="v"/> so the authored value survives the round-trip; the
+    # default-valued case is never queued, so a bare default still emits nothing.
+    for wrapper, attr_str in g10_standalone:
+        if wrapper not in wrapper_opened:
+            xml += "    <" + wrapper + attr_str + "/>\n"
 
     xml += "  </Step>"
     return xml

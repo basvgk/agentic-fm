@@ -15,6 +15,7 @@
  */
 
 import { getXmlToHrConverter } from './step-registry';
+import { indentHrContinuations } from './parser';
 import { getGrammarEntry, renderStepHr, blockIndent } from './catalog-grammar';
 
 // Import the sanctioned hand-coded control-flow converters (side-effect import).
@@ -66,6 +67,9 @@ export function xmlToHr(xml: string): string {
 
     // Apply indentation
     const prefix = '    '.repeat(indent);
+    // A comment's continuation lines (a line break in its text) sit under the
+    // comment, so they take its indentation too.
+    if (stepName === '# (comment)') hrLine = indentHrContinuations(hrLine, prefix);
     lines.push(`${prefix}${hrLine}`);
 
     if (openAfter) {

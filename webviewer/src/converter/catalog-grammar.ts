@@ -22,6 +22,15 @@
  */
 
 import type { StepCatalogEntry } from './catalog-types';
+import {
+  hrSep,
+  isCalcBackslash,
+  isCalcQuote,
+  isCalcEscape,
+  quoteCalcLiteral,
+  readsAsQuotedLiteralText,
+  skipCalcLiteral,
+} from './calc-literal';
 
 // ---------------------------------------------------------------------------
 // DOM helpers — ElementTree `.find` / `.findall` / `.text` semantics over a
@@ -45,6 +54,25 @@ function findChildren(parent: Element | null, name: string): Element[] {
 }
 
 /**
+ * First direct child element named `name` whose attribute `attr` equals `value`
+ * (ElementTree `parent.find("name[@attr='value']")`). Locates one of several
+ * same-element typed children by its discriminator attribute — the typed-child
+ * grammar (a <Field type="Messages"> vs <Field type="ToolCalls"> sibling).
+ */
+function findChildByAttr(
+  parent: Element | null,
+  name: string,
+  attr: string,
+  value: string,
+): Element | null {
+  if (!parent) return null;
+  for (const c of Array.from(parent.children)) {
+    if (c.tagName === name && (c.getAttribute(attr) ?? '') === value) return c;
+  }
+  return null;
+}
+
+/**
  * Text directly inside `el` (ElementTree `.text`). Every text-bearing element in
  * the catalog grammar (Calculation, Text, Name, UniversalPathList, field text) is
  * a leaf, so `textContent` — which decodes entities and includes CDATA content in
@@ -65,18 +93,38 @@ function childAttr(parent: Element | null, name: string, attr: string): string {
   return c ? (c.getAttribute(attr) ?? '') : '';
 }
 
-/** ElementTree `_nested_text`: parent → child → grand → text. */
-function nestedText(parent: Element | null, child: string, grand: string): string {
-  return childText(findChild(parent, child), grand);
+/**
+ * Find a direct child by its canonical `name`; if absent and the name carries
+ * declared aliases, retry each legacy synonym in order (element-alias grammar).
+ * Mirrors Python `_aliased_child`.
+ */
+function aliasedChild(
+  parent: Element | null,
+  name: string,
+  aliases?: Record<string, string[]>,
+): Element | null {
+  if (parent === null) return null;
+  const c = findChild(parent, name);
+  if (c !== null) return c;
+  for (const syn of aliases?.[name] ?? []) {
+    const s = findChild(parent, syn);
+    if (s !== null) return s;
+  }
+  return null;
 }
 
-/** Follow a '/'-delimited direct-child path from `step` (ElementTree find path). */
-function descendPath(step: Element | null, path: string): Element | null {
+/** Follow a '/'-delimited direct-child path from `step` (ElementTree find path),
+ * resolving each segment alias-tolerantly (element-alias grammar). */
+function descendPath(
+  step: Element | null,
+  path: string,
+  aliases?: Record<string, string[]>,
+): Element | null {
   let n: Element | null = step;
   for (const seg of path.split('/')) {
     if (!seg) continue;
     if (n === null) return null;
-    n = findChild(n, seg);
+    n = aliasedChild(n, seg, aliases);
   }
   return n;
 }
@@ -95,20 +143,65 @@ function splitElementAttr(xmlElement: string): [boolean, string, string] {
   return [true, xmlElement.slice(0, pos), xmlElement.slice(pos + 2)];
 }
 
-function joinWithComma(items: string[]): string {
-  return items.join(', ');
+/**
+ * Join HR tokens with `sep`, breaking the line before a separator that a
+ * trailing `//` comment would otherwise swallow (calc-literal.ts hrSep).
+ */
+function hrJoin(items: string[], sep: string): string {
+  let out = '';
+  items.forEach((item, i) => {
+    if (i) out += hrSep(items[i - 1], sep);
+    out += item;
+  });
+  return out;
 }
 
+function joinWithComma(items: string[]): string {
+  return hrJoin(items, ', ');
+}
+
+// Group-value quoting (attr / text kinds). A group body (`k1=v1, k2=v2` /
+// `entry | entry`) is split back by splitters that step over calculation text
+// literals (calc-literal.ts), so a quoted value is written as one: an embedded
+// `"` is doubled, any other delimiter (`“ ” „ ‟ ＂`) and any backslash form
+// (`\ ＼ ﹨`) that would otherwise escape the next character, or the closing
+// quote, are backslash-escaped. A value needs quoting when it carries a top-level
+// comma, any of the six delimiters, or leading/trailing whitespace (Execute SQL's tab
+// `FieldDelimiter`). `calc` children are never quoted: a well-formed calculation
+// is already literal/paren-nested.
 function needsGroupQuote(v: string): boolean {
   if (!v) return false;
   const ws = ' \t\n\r';
   if (ws.includes(v[0]) || ws.includes(v[v.length - 1])) return true;
-  return v.includes(',') || v.includes('"');
+  if (v.includes(',')) return true;
+  for (const c of v) if (isCalcQuote(c)) return true;
+  return false;
 }
 
-function groupQuoteValue(v: string): string {
+export function groupQuoteValue(v: string): string {
   if (!needsGroupQuote(v)) return v;
-  return '"' + v.replace(/"/g, '""') + '"';
+  let out = '"';
+  for (let i = 0; i < v.length; i++) {
+    const c = v[i];
+    if (c === '"') out += '""';
+    else if (isCalcQuote(c)) out += '\\' + c; // “ ” „ ‟ ＂
+    else if (isCalcBackslash(c) && (i === v.length - 1 || isCalcEscape(v, i))) out += '\\' + c;
+    else out += c;
+  }
+  return out + '"';
+}
+
+/**
+ * Read back a groupQuoteValue token: one well-formed calculation literal spanning
+ * the whole token is decoded (doubled delimiters and backslash escapes resolved);
+ * any other `"`-wrapped token keeps the historical reading (strip the outer
+ * quotes, undouble `""`); anything else is returned as is.
+ */
+export function groupUnquoteValue(v: string): string {
+  if (v.length < 2 || v[0] !== '"' || v[v.length - 1] !== '"') return v;
+  const lit = skipCalcLiteral(v, 0);
+  if (lit.closed && lit.end === v.length) return lit.decoded;
+  return v.slice(1, -1).replace(/""/g, '"');
 }
 
 // ---------------------------------------------------------------------------
@@ -153,6 +246,21 @@ export interface GrammarParam {
   hrSlot: number | null;
   hrHidden: boolean | null;
   hrBare: boolean | null;
+  // Inverse of hrBare: render a calc/field/script value WITH its hrLabel prefix and
+  // match it by that label, even though those types are bare/positional by default.
+  // FileMaker labels the same value type per step (Perform Script bare; Configure
+  // Region Monitor Script's `Script: "…"`). Generic; needs a non-empty hrLabel.
+  hrLabeled: boolean | null;
+  // A literal-text param FileMaker displays quoted (`“x”`): rendered as one escaped
+  // text literal (quoteCalcLiteral) and decoded on HR→XML. Generic; set only where
+  // FileMaker quotes the value.
+  hrQuoted: boolean | null;
+  // The delimiter an hrQuoted param is written with: null = curly `“…”` (default);
+  // 'straight' = `"…"` where FileMaker shows straight quotes (Perform AppleScript).
+  hrQuoteStyle: string | null;
+  // Governing discriminator: the separator FileMaker draws between the labeled
+  // companions a value reveals (Insert from Device `Camera: Back; Resolution: Full`).
+  hrRevealSeparator: string | null;
   omitWhenEmpty: boolean | null;
   discriminator: string | null;
   discriminatorValues: Record<string, DiscriminatorBranch>;
@@ -169,6 +277,15 @@ export interface GrammarEntry {
   params: GrammarParam[];
   /** Block role (open/close/middle/inner) for control-flow indentation, or null. */
   blockRole: string | null;
+  /**
+   * Element-alias grammar (mirrors Python `CatalogEntry.element_aliases`): map a
+   * canonical element name (the last path segment) to its declared legacy
+   * synonyms, so a drifted step reads either spelling (e.g. FileMaker serializes
+   * Configure AI Account's wrapper as the typo'd `<SetLLMAccout>`/`<AccoutName>`
+   * while the catalog names them `SetLLMAccount`/`AccountName`). Built at load
+   * from each param's `wrapperElementAliases` / `parentElementAliases`.
+   */
+  elementAliases: Record<string, string[]>;
 }
 
 /**
@@ -195,8 +312,57 @@ export function blockIndent(name: string): { closeBefore: boolean; openAfter: bo
  * `xmlElement`.
  */
 export function paramKey(p: GrammarParam): string {
+  const gf = groupFieldsOf(p);
+  // An attrGroup display projection shares its group's xmlElement.
+  if (gf.length > 0) return p.xmlElement + '#' + gf[0];
   if (p.type === 'namedCalc' && p.wrapperElement) return p.wrapperElement;
   return p.xmlElement;
+}
+
+/**
+ * attrGroup display projection (`groupFields`): the top-level fields (attr /
+ * text) of the sibling attrGroup sharing this param's xmlElement that this enum
+ * is a view of. FileMaker draws Export Records' stored character set
+ * (`Unicode (UTF-8)`) and Save Records as PDF's `Save to: File` / `Blank record,
+ * with boxes` as tokens of their own; several fields join with `|`.
+ */
+export function groupFieldsOf(p: GrammarParam): string[] {
+  const gf = p.raw.groupFields;
+  return Array.isArray(gf) ? (gf as string[]) : [];
+}
+
+/** The attrGroup a display projection is a view of, or null. */
+export function projectionOwner(entry: GrammarEntry, proj: GrammarParam): GrammarParam | null {
+  for (const p of entry.params) {
+    if (p.type === 'attrGroup' && p.xmlElement === proj.xmlElement
+        && (p.parentElement || '') === (proj.parentElement || '')) return p;
+  }
+  return null;
+}
+
+/** A projection's raw value off its owning group element (fields joined `|`). */
+function readProjectedValue(node: Element | null, owner: GrammarParam, proj: GrammarParam): string {
+  if (node === null) return '';
+  const fields = ((owner.raw.fields as Record<string, unknown>[]) ?? []);
+  const vals: string[] = [];
+  for (const key of groupFieldsOf(proj)) {
+    const f = fields.find((x) => x.key === key);
+    if (!f) continue;
+    let v = '';
+    if (f.kind === 'attr') v = node.getAttribute((f.xmlAttr as string) ?? '') ?? '';
+    else if (f.kind === 'text') v = childText(node, (f.childElement as string) ?? '');
+    if (v) vals.push(v);
+  }
+  return vals.join('|');
+}
+
+/** A gate's raw value: readEnumRawValue, or a projection's fields. */
+function readGateRawValue(entry: GrammarEntry, step: Element, p: GrammarParam): string {
+  if (groupFieldsOf(p).length === 0) return readEnumRawValue(step, p, entry.elementAliases);
+  const owner = projectionOwner(entry, p);
+  if (owner === null) return '';
+  const base = !p.parentElement ? step : descendPath(step, p.parentElement, entry.elementAliases);
+  return readProjectedValue(findChild(base, p.xmlElement), owner, p);
 }
 
 function buildDiscriminatorBranch(d: Record<string, unknown>): DiscriminatorBranch {
@@ -238,6 +404,10 @@ function buildParam(d: Record<string, unknown>): GrammarParam {
     hrSlot: typeof d.hrSlot === 'number' ? (d.hrSlot as number) : null,
     hrHidden: (d.hrHidden as boolean) ?? null,
     hrBare: (d.hrBare as boolean) ?? null,
+    hrLabeled: (d.hrLabeled as boolean) ?? null,
+    hrQuoted: (d.hrQuoted as boolean) ?? null,
+    hrQuoteStyle: (d.hrQuoteStyle as string) ?? null,
+    hrRevealSeparator: (d.hrRevealSeparator as string) ?? null,
     omitWhenEmpty: (d.omitWhenEmpty as boolean) ?? null,
     discriminator: (d.discriminator as string) ?? null,
     discriminatorValues,
@@ -253,11 +423,29 @@ function buildParam(d: Record<string, unknown>): GrammarParam {
 
 function buildEntry(entry: StepCatalogEntry): GrammarEntry {
   const params = (entry.params as unknown as Record<string, unknown>[]) ?? [];
+  // Element-alias grammar: gather each param's wrapper/parent synonyms, keyed by
+  // the canonical element's last path segment (mirrors Python `from_dict`).
+  const elementAliases: Record<string, string[]> = {};
+  for (const p of params) {
+    for (const [aliasKey, canonical] of [
+      ['wrapperElementAliases', p.wrapperElement],
+      ['parentElementAliases', p.parentElement],
+    ] as const) {
+      const syns = p[aliasKey];
+      if (!canonical || !Array.isArray(syns)) continue;
+      const seg = String(canonical).split('/').pop() as string;
+      const bucket = (elementAliases[seg] ??= []);
+      for (const s of syns) {
+        if (typeof s === 'string' && !bucket.includes(s)) bucket.push(s);
+      }
+    }
+  }
   return {
     name: entry.name,
     id: entry.id ?? 0,
     params: params.map(buildParam),
     blockRole: entry.blockPair?.role ?? null,
+    elementAliases,
   };
 }
 
@@ -340,8 +528,12 @@ export function governingDiscriminatorFor(
   return null;
 }
 
-function readEnumRawValue(step: Element, p: GrammarParam): string {
-  const base = !p.parentElement ? step : descendPath(step, p.parentElement);
+function readEnumRawValue(
+  step: Element,
+  p: GrammarParam,
+  aliases?: Record<string, string[]>,
+): string {
+  const base = !p.parentElement ? step : descendPath(step, p.parentElement, aliases);
   if (p.enumStyle === 'text') return childText(base, p.xmlElement);
   const attr = p.xmlAttr || 'value';
   return childAttr(base, p.xmlElement, attr);
@@ -351,7 +543,7 @@ function effectiveHrLabel(entry: GrammarEntry, step: Element, param: GrammarPara
   for (const variant of param.hrLabelWhen) {
     for (const q of entry.params) {
       if (paramKey(q) !== variant.param) continue;
-      const v = readEnumRawValue(step, q) || (q.defaultValue || '');
+      const v = readGateRawValue(entry, step, q) || (q.defaultValue || '');
       if (variant.values.includes(v)) return variant.hrLabel || '';
       break;
     }
@@ -364,7 +556,7 @@ function paramVisible(entry: GrammarEntry, step: Element, param: GrammarParam): 
   if (vw === null || !vw.param) return true;
   for (const q of entry.params) {
     if (paramKey(q) !== vw.param) continue;
-    const v = readEnumRawValue(step, q) || (q.defaultValue || '');
+    const v = readGateRawValue(entry, step, q) || (q.defaultValue || '');
     return vw.values.includes(v);
   }
   return true;
@@ -383,6 +575,59 @@ export function hrParamOrder(entry: GrammarEntry): number[] {
     const kb = sb !== null && sb >= 0 ? sb : b;
     return ka - kb;
   });
+}
+
+/**
+ * The calculation of FileMaker's calculated-repetition form for `fld`:
+ * `repetition="0"` with a `<Repetition><Calculation>` as its next element
+ * sibling. Empty otherwise (FileMaker ignores such a sibling unless the
+ * `<Field>` says "0").
+ */
+function repetitionCalcOf(fld: Element): string {
+  if (fld.getAttribute('repetition') !== '0') return '';
+  let sib = fld.nextSibling;
+  while (sib && sib.nodeType !== 1) sib = sib.nextSibling;
+  if (!sib || (sib as Element).tagName !== 'Repetition') return '';
+  return childText(sib as Element, 'Calculation');
+}
+
+/**
+ * FileMaker's drawing of a field reference that names a table occurrence but no
+ * field: it stores `<Field table="T" id="0" name=""/>` and draws
+ * `T::<Field Missing>`. The emit side reads the sentinel back to the empty name.
+ */
+export const FIELD_MISSING_SENTINEL = '<Field Missing>';
+
+/**
+ * The HR token of a stored `<Field table id name/>`, drawn the way FileMaker
+ * draws it: `Table::Field`, the bare name when there is no table, and
+ * `Table::<Field Missing>` when there is a table but no field. No table and no
+ * field is the unconfigured default and yields no token.
+ */
+function fieldRefHr(table: string, name: string): string {
+  if (name) return !table ? name : table + '::' + name;
+  if (table) return table + '::' + FIELD_MISSING_SENTINEL;
+  return '';
+}
+
+/**
+ * Append FileMaker's `[N]` repetition subscript to a field/variable ref.
+ *
+ * FileMaker serializes a repetition as `repetition="N"` on the `<Field>`
+ * (`<Field table="T" id="1" repetition="2" name="F"/>`, or
+ * `<Field repetition="2">$var</Field>`) and writes the attribute only for N > 1;
+ * its Script Workspace line shows `T::F[2]` / `$var[2]`. Repetition 1 is the
+ * default and carries no subscript. A calculated repetition is `repetition="0"`
+ * plus a `<Repetition><Calculation>` sibling, shown as `T::F[calc]`; a calc
+ * ending in a `//` comment holding `]` or `;` gets a line break before the
+ * closing `]`.
+ */
+function withRepetitionSuffix(ref: string, fld: Element): string {
+  if (!ref) return ref;
+  const calc = repetitionCalcOf(fld);
+  if (calc) return ref + '[' + calc + hrSep(calc, ']');
+  const rep = parseInt(fld.getAttribute('repetition') ?? '', 10);
+  return rep > 1 ? ref + '[' + rep + ']' : ref;
 }
 
 // ---------------------------------------------------------------------------
@@ -413,7 +658,8 @@ function renderGroupElement(node: Element, fields: Record<string, unknown>[]): s
       if (fld !== null) {
         const table = fld.getAttribute('table') ?? '';
         const name = fld.getAttribute('name') ?? '';
-        if (name) parts.push(key + '=' + (!table ? name : table + '::' + name));
+        const ref = fieldRefHr(table, name);
+        if (ref) parts.push(key + '=' + withRepetitionSuffix(ref, fld));
       }
     } else if (kind === 'script') {
       const sc = findChild(node, (f.element as string) ?? '');
@@ -426,14 +672,12 @@ function renderGroupElement(node: Element, fields: Record<string, unknown>[]): s
       if (fld !== null) {
         const text = elemText(fld).trim();
         if (text) {
-          parts.push(key + '=' + groupQuoteValue(text));
+          parts.push(key + '=' + groupQuoteValue(withRepetitionSuffix(text, fld)));
         } else {
           const table = fld.getAttribute('table') ?? '';
           const name = fld.getAttribute('name') ?? '';
-          if (name) {
-            const ref = !table ? name : table + '::' + name;
-            parts.push(key + '=' + groupQuoteValue(ref));
-          }
+          const ref = fieldRefHr(table, name);
+          if (ref) parts.push(key + '=' + groupQuoteValue(withRepetitionSuffix(ref, fld)));
         }
       }
     } else if (kind === 'group') {
@@ -452,7 +696,48 @@ function renderRepeatGroup(container: Element, param: GrammarParam): string {
   const entryEl = (param.raw.entryElement as string) ?? '';
   const fields = (param.raw.fields as Record<string, unknown>[]) ?? [];
   const entries = findChildren(container, entryEl).map((e) => renderGroupElement(e, fields));
-  return entries.join(' | ');
+  return hrJoin(entries, ' | ');
+}
+
+/**
+ * `hrPositionalKey`: FileMaker's own form for a repeatGroup -- one BARE token per
+ * non-empty entry (that entry's positional field), joined ' ; ' (Show Custom
+ * Dialog `... ; $a ; Invoices::Number`). `null` when that form would lose
+ * information (another entry field off its default, an empty entry before a
+ * filled one, or an entry count re-emit would not reproduce), so the caller keeps
+ * the labeled body form. Mirrors the reference converter.
+ */
+function renderRepeatGroupPositional(container: Element, param: GrammarParam): string | null {
+  const key = (param.raw.hrPositionalKey as string) ?? '';
+  const fields = (param.raw.fields as Record<string, unknown>[]) ?? [];
+  const pos = fields.find((f) => f.key === key);
+  if (!pos) return null;
+  const tokens: string[] = [];
+  let count = 0;
+  let sawEmpty = false;
+  for (const e of findChildren(container, (param.raw.entryElement as string) ?? '')) {
+    count++;
+    for (const f of fields) {
+      if (f === pos) continue;
+      const got = renderGroupElement(e, [f]);
+      const dflt = f.kind === 'attr'
+        ? ((f.key as string) ?? '') + '=' + groupQuoteValue((f.defaultValue as string) ?? '')
+        : '';
+      if (got !== dflt) return null;
+    }
+    const body = renderGroupElement(e, [pos]);
+    const prefix = key + '=';
+    const v = body.startsWith(prefix) ? groupUnquoteValue(body.slice(prefix.length)) : '';
+    if (!v.trim()) { sawEmpty = true; continue; }
+    if (sawEmpty) return null;
+    tokens.push(v);
+  }
+  if (count === 0) return '';
+  if (tokens.length === 0) return null;
+  const rc = Number(param.raw.repeatCount ?? 0) || 0;
+  const expected = rc > 0 ? Math.max(rc, tokens.length) : tokens.length;
+  if (count !== expected) return null;
+  return hrJoin(tokens, ' ; ');
 }
 
 function renderFieldList(container: Element, param: GrammarParam): string {
@@ -465,7 +750,7 @@ function renderFieldList(container: Element, param: GrammarParam): string {
     if (fieldNode === null) return;
     const table = fieldNode.getAttribute('table') ?? '';
     const name = fieldNode.getAttribute('name') ?? '';
-    const fieldref = !name ? '' : !table ? name : table + '::' + name;
+    const fieldref = fieldRefHr(table, name);
     let token = groupQuoteValue(fieldref);
     if (entryAttr) {
       const attrNode = !entryEl ? fieldNode : entryNode;
@@ -523,7 +808,7 @@ function bitmaskMaskForFlags(param: GrammarParam, labels: string[]): number {
 /** Compute one param's HR fragment ('' = no token), as the reference does. */
 export function computeParamHr(entry: GrammarEntry, step: Element, param: GrammarParam): string {
   let val = '';
-  let base = !param.parentElement ? step : descendPath(step, param.parentElement);
+  let base = !param.parentElement ? step : descendPath(step, param.parentElement, entry.elementAliases);
   if (base === null) base = step; // a missing wrapper reads nothing; keep base usable
   const [isElemAttr, g11Elem, g11Attr] = splitElementAttr(param.xmlElement);
   const label = param.hrLabel || '';
@@ -549,7 +834,10 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
   } else if (ptype === 'enum' && isDrivenDiscriminator(entry, param)) {
     // silent companion of a layout param
   } else if (ptype === 'enum') {
-    if (param.enumStyle === 'text') {
+    if (groupFieldsOf(param).length > 0) {
+      const owner = projectionOwner(entry, param);
+      if (owner !== null) val = readProjectedValue(findChild(base, param.xmlElement), owner, param);
+    } else if (param.enumStyle === 'text') {
       val = childText(base, param.xmlElement);
     } else {
       const eattr = isElemAttr ? g11Attr : param.xmlAttr || 'value';
@@ -570,16 +858,31 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
     if (param.flagStyle) {
       val = val && val !== (param.defaultValue || '') && label ? label : '';
     } else if (val && label) {
-      val = label + ': ' + val;
+      // P5.2d: the label may vary with a sibling enum's value (hrLabelWhen;
+      // Insert from Device's `Flash:` / `Flashlight:`).
+      val = effectiveHrLabel(entry, step, param) + ': ' + val;
     }
   } else if (ptype === 'calculation') {
     val = childText(base, 'Calculation');
-    if (val && param.omitWhenEmpty && label) val = label + ': ' + val;
+    // Optional labeled calcs keep their label; legacy positional calcs stay bare
+    // unless the catalog opts one in with hrLabeled (Rename File's "New name:").
+    if (val && (param.omitWhenEmpty || param.hrLabeled) && label) val = label + ': ' + val;
   } else if (ptype === 'attrGroup') {
     const groupNode = findChild(base, param.xmlElement);
     if (groupNode !== null) {
-      const inner = renderGroupElement(groupNode, (param.raw.fields as Record<string, unknown>[]) ?? []);
-      val = !label ? inner : label + ': ' + inner;
+      // A field a visible display projection prints as its own token is left
+      // out of the body; one whose projection is hidden stays.
+      const shown = new Set<string>();
+      for (const q of entry.params) {
+        const gf = groupFieldsOf(q);
+        if (gf.length === 0 || q.xmlElement !== param.xmlElement
+            || (q.parentElement || '') !== (param.parentElement || '')) continue;
+        if (paramVisible(entry, step, q)) gf.forEach((k) => shown.add(k));
+      }
+      const fields = ((param.raw.fields as Record<string, unknown>[]) ?? [])
+        .filter((f) => !shown.has(f.key as string));
+      const inner = renderGroupElement(groupNode, fields);
+      if (inner) val = !label ? inner : label + ': ' + inner;
     }
   } else if (ptype === 'bitmaskGroup') {
     const g = findChild(base, param.xmlElement);
@@ -606,8 +909,15 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
     }
   } else if (ptype === 'repeatGroup') {
     const container = findChild(base, param.xmlElement);
-    if (container !== null) {
-      const inner = renderRepeatGroup(container, param);
+    const positional = container !== null && param.raw.hrPositionalKey
+      ? renderRepeatGroupPositional(container, param) : null;
+    if (positional !== null) {
+      val = positional; // FileMaker's own bare form (lossless here)
+    } else if (container !== null) {
+      let inner = renderRepeatGroup(container, param);
+      // FileMaker's default content prints no token; emit restores it.
+      const dflt = (param.raw.hrDefault as string) ?? '';
+      if (dflt && inner === dflt) inner = '';
       if (inner) val = !label ? inner : label + ': ' + inner;
     }
   } else if (ptype === 'fieldList') {
@@ -618,7 +928,10 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
     }
   } else if (ptype === 'namedCalc') {
     const wrapper = param.wrapperElement || param.xmlElement;
-    val = nestedText(base, wrapper, 'Calculation');
+    // Element-alias grammar: match the wrapper by its canonical name, falling
+    // back to any declared legacy synonym (e.g. AccoutName). Mirrors Python.
+    const wnode = aliasedChild(base, wrapper, entry.elementAliases);
+    val = wnode !== null ? childText(wnode, 'Calculation') : '';
     // hrBare params (Show Custom Dialog's Title/Message) print positionally
     // with no label, mirroring FileMaker; every other namedCalc keeps its label.
     if (val && !param.hrBare) {
@@ -649,8 +962,7 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
           const table = fld !== null ? fld.getAttribute('table') ?? '' : '';
           const name = fld !== null ? fld.getAttribute('name') ?? '' : '';
           const text = childText(cr, 'Text');
-          let fieldref = '';
-          if (name) fieldref = !table ? name : table + '::' + name;
+          const fieldref = fieldRefHr(table, name);
           crits.push(!fieldref ? text : fieldref + ': ' + text);
         }
         let joined = crits.join(' & ');
@@ -661,34 +973,63 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
       if (val && label) val = label + ': ' + val;
     }
   } else if (ptype === 'fieldOrVariable') {
-    let fieldNode = findChild(base, param.xmlElement);
-    if (fieldNode === null) fieldNode = findChild(base, 'Field');
+    // A typed same-element child (typeAttr/typeValue) is located by its
+    // discriminator attribute rather than by position, so two typed <Field>
+    // siblings under one wrapper never read each other's node.
+    const typeAttr = (param.raw.typeAttr as string) ?? '';
+    let fieldNode: Element | null;
+    if (typeAttr) {
+      fieldNode = findChildByAttr(base, 'Field', typeAttr, (param.raw.typeValue as string) ?? '');
+    } else {
+      fieldNode = findChild(base, param.xmlElement);
+      if (fieldNode === null) fieldNode = findChild(base, 'Field');
+    }
     if (fieldNode !== null) {
       const table = fieldNode.getAttribute('table') ?? '';
       const name = fieldNode.getAttribute('name') ?? '';
       const text = elemText(fieldNode);
       if (text && text[0] === '$') val = text;
-      else if (name) val = !table ? name : table + '::' + name;
+      else if (name) val = fieldRefHr(table, name);
       else if (text) val = text;
+      else val = fieldRefHr(table, name); // Table::<Field Missing>, or none
+      val = withRepetitionSuffix(val, fieldNode);
       if (val && label) val = label + ': ' + val;
     }
   } else if (ptype === 'flagElement') {
     if (findChild(base, param.xmlElement) !== null && label) val = label;
   } else if (ptype === 'calc') {
     val = childText(base, 'Calculation');
+    // hrLabeled: FileMaker labels this calc for some steps (inverse of bare).
+    if (val && param.hrLabeled && label) val = label + ': ' + val;
   } else if (ptype === 'field') {
-    let fieldNode = findChild(base, param.xmlElement);
-    if (fieldNode === null) fieldNode = findChild(base, 'Field');
+    const typeAttr = (param.raw.typeAttr as string) ?? '';
+    let fieldNode: Element | null;
+    if (typeAttr) {
+      fieldNode = findChildByAttr(base, 'Field', typeAttr, (param.raw.typeValue as string) ?? '');
+    } else {
+      fieldNode = findChild(base, param.xmlElement);
+      if (fieldNode === null) fieldNode = findChild(base, 'Field');
+    }
     if (fieldNode !== null) {
       const table = fieldNode.getAttribute('table') ?? '';
       const name = fieldNode.getAttribute('name') ?? '';
-      val = !table ? name : table + '::' + name;
+      val = withRepetitionSuffix(fieldRefHr(table, name), fieldNode);
+      // hrLabeled: label the field where FileMaker does (inverse of bare).
+      if (val && param.hrLabeled && label) val = label + ': ' + val;
     }
   } else if (ptype === 'tableRef' || ptype === 'tableOccurrence') {
     const tableNode = findChild(base, 'Table');
     if (tableNode !== null) {
       const name = tableNode.getAttribute('name') ?? '';
-      if (name) val = !label ? name : label + ': ' + name;
+      // Labeled (Go to Related Record's "From table") renders "Label: name";
+      // label-less (Fine-Tune Model's positional training table) renders the
+      // quoted TO name — the quoted positional spelling FM uses, like `layout`.
+      // hrQuoted: FileMaker draws the labeled name quoted (Save Records as JSONL's
+      // `Table: “Invoices”`); write it as one escaped literal.
+      if (name && param.hrQuoted) {
+        const q = quoteCalcLiteral(name);
+        val = !label ? q : label + ': ' + q;
+      } else if (name) val = !label ? '"' + name + '"' : label + ': ' + name;
     }
   } else if (ptype === 'fileReference') {
     const frNode = findChild(base, param.xmlElement);
@@ -735,57 +1076,255 @@ export function computeParamHr(entry: GrammarEntry, step: Element, param: Gramma
       const name = scriptNode.getAttribute('name') ?? '';
       if (name) val = '"' + name + '"';
     }
+    // hrLabeled: FileMaker labels the script token for some steps (Configure Region
+    // Monitor Script's "Script:") while others print it bare (Perform Script).
+    if (val && param.hrLabeled && label) val = label + ': ' + val;
   } else if (ptype === 'text' || ptype === 'name') {
     val = childText(base, param.xmlElement);
-    if (val && param.parentElement && label) val = label + ': ' + val;
+    // hrQuoted: FileMaker displays this literal text quoted (`“x”`). Write it as one
+    // escaped literal so an embedded quote, `;` or `]` cannot open a literal or end
+    // the param/step on the way back.
+    if (val && param.hrQuoted) {
+      val = param.hrQuoteStyle === 'straight' ? quoteCalcLiteral(val, '"', '"') : quoteCalcLiteral(val);
+    }
+    // A grouped text param carries its label; step-level free text stays bare
+    // unless the catalog opts it in with hrLabeled (Delete File's "Target file:").
+    if (val && (param.parentElement || param.hrLabeled) && label) val = label + ': ' + val;
   }
 
   return val;
 }
 
-/** Render a governing discriminator's HR fragment. Port of RenderDiscriminatorGroup. */
-function renderDiscriminatorGroup(entry: GrammarEntry, step: Element, param: GrammarParam): string {
-  const value = readEnumRawValue(step, param) || (param.defaultValue || '');
+// ---------------------------------------------------------------------------
+// Empty positional slots (HR render). The HR→XML parser hands bare tokens to
+// bare-rendering params by POSITION, so a bare param whose value is empty must
+// still hold its slot whenever a later positional token is rendered — otherwise
+// that token slides into the empty param's slot (Set Next Serial Value with no
+// field rendered `[ 100 ]` and read back as `<Field name="100"/>` with an empty
+// calculation). A trailing empty slot is still dropped. Mirrors the reference.
+// ---------------------------------------------------------------------------
+
+/** Whether a param renders bare (positional) in HR — the pass-2 eligibility test. */
+export function rendersBareInHr(param: GrammarParam): boolean {
+  if (param.hrBare) return true; // per-param opt-in: FileMaker prints it bare
+  if (!param.hrLabel) return true;
+  // Inverse of hrBare: a calc/field/script, step-level text or legacy calculation
+  // FileMaker renders WITH its label is matched by that label, never positionally.
+  if (param.hrLabeled) return false;
+  if (param.type === 'calc' || param.type === 'field' || param.type === 'script') return true;
+  if (param.type === 'layout') return !param.hrLabel;
+  if ((param.type === 'text' || param.type === 'name') && !param.parentElement) return true;
+  if (param.type === 'calculation' && !param.omitWhenEmpty) return true;
+  return false;
+}
+
+/**
+ * Whether the HR parser reads `param` by position: pass-2 eligibility minus every
+ * param pass 1 resolves without a positional token.
+ */
+function readsPositionally(entry: GrammarEntry, param: GrammarParam): boolean {
+  if (param.hrHidden || param.type === 'complex' || param.type === 'bitmaskGroup') return false;
+  if (param.flagStyle || param.type === 'flagElement') return false;
+  if (isDrivenDiscriminator(entry, param) || isGoverningDiscriminator(param)) return false;
+  return rendersBareInHr(param);
+}
+
+/**
+ * Whether an EMPTY value of `param` renders as an empty slot when a later
+ * positional token follows. A closed-vocabulary enum is excluded: the parser only
+ * hands it a token naming one of its values, so an empty token would not fit.
+ */
+function emptyHoldsSlot(entry: GrammarEntry, param: GrammarParam): boolean {
+  if (!readsPositionally(entry, param)) return false;
+  return !closedVocabEnum(param);
+}
+
+/**
+ * An enum that declares its vocabulary (`enumValues`): the only kind the positional
+ * pass checks a token against, so a token naming one of its values identifies it.
+ * Port of ClosedVocabEnum.
+ */
+export function closedVocabEnum(param: GrammarParam): boolean {
+  const enumValues = (param.raw.enumValues as string[] | undefined) ?? [];
+  return param.type === 'enum' && enumValues.length > 0;
+}
+
+/** A rendered token, tagged with whether the parser reads it by position. */
+interface HrToken {
+  text: string;
+  positional: boolean;
+  holdsSlot: boolean;
+  /** A closed-vocabulary enum's value (closedVocabEnum). */
+  closedVocab?: boolean;
+}
+
+function paramToken(entry: GrammarEntry, param: GrammarParam, val: string): HrToken {
+  let positional = readsPositionally(entry, param);
+  if (param.type === 'repeatGroup' && param.raw.hrPositionalKey && val) {
+    const label = param.hrLabel || '';
+    positional = !label || !val.toLowerCase().startsWith((label + ':').toLowerCase());
+  }
+  return { text: val, positional, holdsSlot: emptyHoldsSlot(entry, param), closedVocab: closedVocabEnum(param) };
+}
+
+/** A governing discriminator's HR tokens. Port of RenderDiscriminatorGroupTokens. */
+/**
+ * A SHAPE-ROUTED governing discriminator: exactly two of its values render no token
+ * of their own and each reveal ONE bare companion, one of them `hrQuoted`.
+ * FileMaker's line then shows only the companion (Perform AppleScript: Text mode
+ * prints the quoted literal, Calculation mode the calculation), so the reader tells
+ * the values apart by the token's shape (`readsAsQuotedLiteralText`). Returns
+ * `{ quoted, other }`, or null. Port of ShapeRoutedValues.
+ */
+export function shapeRoutedValues(
+  entry: GrammarEntry,
+  discrim: GrammarParam,
+): { quoted: string; other: string } | null {
+  if (!isGoverningDiscriminator(discrim)) return null;
+  let quoted = '';
+  let other = '';
+  let routed = 0;
+  for (const [value, spec] of Object.entries(discrim.discriminatorValues)) {
+    if (spec.hrToken || spec.labeled || spec.reveal.length !== 1) continue;
+    const c = entry.params.find((q) => paramKey(q) === spec.reveal[0]);
+    if (!c || !rendersBareInHr(c)) continue;
+    routed++;
+    if (c.hrQuoted) quoted = value;
+    else other = value;
+  }
+  if (routed !== 2 || !quoted || !other) return null;
+  return { quoted, other };
+}
+
+function renderDiscriminatorGroupTokens(
+  entry: GrammarEntry,
+  step: Element,
+  param: GrammarParam,
+): HrToken[] {
+  const value = readEnumRawValue(step, param, entry.elementAliases) || (param.defaultValue || '');
   const branch = param.discriminatorValues[value];
   if (branch === undefined) {
     const mapped = param.hrEnumValues[value] || value;
     const label = param.hrLabel || '';
-    return !label ? mapped : label + ': ' + mapped;
+    // Unlabeled, pass 1 cannot claim it, so the parser reads it by position.
+    return !label
+      ? [{ text: mapped, positional: true, holdsSlot: false }]
+      : [{ text: label + ': ' + mapped, positional: false, holdsSlot: false }];
   }
-  if (branch.hrToken) return branch.hrToken;
-  const parts: string[] = [];
+  if (branch.hrToken) return [{ text: branch.hrToken, positional: false, holdsSlot: false }];
+  const parts: HrToken[] = [];
   if (branch.labeled && param.hrLabel) {
     const mapped = param.hrEnumValues[value] || value;
-    parts.push(param.hrLabel + ': ' + mapped);
+    parts.push({ text: param.hrLabel + ': ' + mapped, positional: false, holdsSlot: false });
   }
+  // A revealed companion is positional like any bare param, so it keeps its empty
+  // slot (the caller drops it unless a later positional follows).
+  // hrRevealSeparator: consecutive labeled (non-positional) companion tokens merge
+  // into one, joined the way FileMaker draws them; the parser splits on `;`
+  // regardless, so the merge is render-only.
+  const firstCompanion = parts.length;
+  const sep = param.hrRevealSeparator || '';
+  const pushCompanion = (tok: HrToken): void => {
+    // An empty token that holds no slot renders nothing; dropping it keeps the
+    // companions on either side adjacent for the merge.
+    if (!tok.text && !tok.holdsSlot) return;
+    const last = parts[parts.length - 1];
+    if (sep && tok.text && !tok.positional && parts.length > firstCompanion && last.text && !last.positional) {
+      last.text = last.text + hrSep(last.text, sep) + tok.text;
+      return;
+    }
+    parts.push(tok);
+  };
   for (const elem of branch.reveal) {
     for (const c of entry.params) {
       if (paramKey(c) !== elem) continue;
-      const v = computeParamHr(entry, step, c);
-      if (v) parts.push(v);
+      // An internal flag renders no token, revealed or not; its value is derived
+      // on HR→XML.
+      if (c.hrHidden) break;
+      const tok = paramToken(entry, c, computeParamHr(entry, step, c));
+      // Shape-routed: when the companion's token would read back as the other value
+      // (a calculation that is one text literal reads as quoted text), name the
+      // value explicitly before it. FileMaker's own line prints no such token.
+      if (
+        tok.text &&
+        shapeRoutedValues(entry, param) !== null &&
+        readsAsQuotedLiteralText(tok.text.trim()) !== !!c.hrQuoted
+      ) {
+        parts.push({ text: value, positional: false, holdsSlot: false });
+      }
+      pushCompanion(tok);
       break;
     }
   }
-  return parts.join(' ; ');
+  return parts;
 }
 
 /**
  * Render a full step to its HR bracket line, as the reference does.
  * Returns `entry.name` alone when no param contributes a token, else
- * `Name [ tok ; tok ; … ]`. Does not handle control-flow steps.
+ * `Name [ tok ; tok ; … ]`. An empty positional slot followed by a later
+ * positional token renders as an empty token (`[  ; 100 ]`). Does not handle
+ * control-flow steps.
  */
 export function renderStepHr(entry: GrammarEntry, step: Element): string {
   const parts: string[] = [];
+  const fmEmpty = new Set<number>(); // indexes of hrEmptySlotWith empty slots
+  let pendingEmpty = 0;
+  const add = (tok: HrToken): void => {
+    if (!tok.text) {
+      if (tok.holdsSlot) pendingEmpty++;
+      return;
+    }
+    if (tok.positional) {
+      // A closed-vocabulary enum's value names its own slot: the parser skips the
+      // free params left out ahead of it (the missing-slot rule in
+      // matchParamValues), so those empty slots are not written, as on
+      // FileMaker's line (Save a Copy as `[ copy of current file ; … ]`).
+      if (tok.closedVocab) pendingEmpty = 0;
+      for (; pendingEmpty > 0; pendingEmpty--) parts.push('');
+    }
+    parts.push(tok.text);
+  };
   for (const pi of hrParamOrder(entry)) {
     const param = entry.params[pi];
     if (param.hrHidden) continue;
     if (governingDiscriminatorFor(entry, param)) continue;
     if (!paramVisible(entry, step, param)) continue;
-    const val = isGoverningDiscriminator(param)
-      ? renderDiscriminatorGroup(entry, step, param)
-      : computeParamHr(entry, step, param);
-    if (val) parts.push(val);
+    if (isGoverningDiscriminator(param)) {
+      for (const tok of renderDiscriminatorGroupTokens(entry, step, param)) add(tok);
+    } else {
+      const tok = paramToken(entry, param, computeParamHr(entry, step, param));
+      if (!tok.text && parts.length > 0 && emptySlotSiblingPresent(entry, step, param)) {
+        // FileMaker draws this param's empty slot, even last, when the sibling it
+        // stands for is present (Export Records with no path but a <Profile>:
+        // `Create folders: On ; ]`).
+        for (; pendingEmpty > 0; pendingEmpty--) parts.push('');
+        fmEmpty.add(parts.length);
+        parts.push('');
+        continue;
+      }
+      add(tok);
+    }
   }
   if (parts.length === 0) return entry.name;
-  return entry.name + ' [ ' + parts.join(' ; ') + ' ]';
+  // An hrEmptySlotWith slot draws as FileMaker draws it: a bare `;`.
+  let out = entry.name + ' [ ';
+  parts.forEach((item, i) => {
+    if (i) out += fmEmpty.has(i) ? ' ;' : hrSep(parts[i - 1], ' ; ');
+    out += item;
+  });
+  if (fmEmpty.has(parts.length - 1)) return out + ' ]';
+  return out + hrSep(parts[parts.length - 1], ' ]');
+}
+
+/** hrEmptySlotWith: whether the sibling an empty param's slot stands for is present. */
+function emptySlotSiblingPresent(entry: GrammarEntry, step: Element, param: GrammarParam): boolean {
+  const key = (param.raw.hrEmptySlotWith as string) ?? '';
+  if (!key) return false;
+  for (const q of entry.params) {
+    if (paramKey(q) !== key) continue;
+    const base = !q.parentElement ? step : descendPath(step, q.parentElement, entry.elementAliases);
+    return base !== null && aliasedChild(base, q.xmlElement, entry.elementAliases) !== null;
+  }
+  return false;
 }

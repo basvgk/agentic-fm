@@ -131,6 +131,30 @@ def test_param_key_used_for_discriminator_reveal():
     assert G.param_key(name_param) == "Name"
 
 
+def _render_xml(step_xml):
+    step = ET.fromstring(step_xml)
+    return G.render_step_hr(ENTRIES[step.get("name")], step)
+
+
+def test_empty_leading_positional_keeps_its_slot():
+    # An empty bare param before a rendered positional token keeps an empty slot,
+    # so the value is not read back into the empty param's slot.
+    assert _render("Set Next Serial Value") == "Set Next Serial Value [  ; 100 ]"
+    # A governed companion (revealed by a discriminator) is positional too.
+    assert _render("Replace Field Contents") == (
+        'Replace Field Contents [ With dialog: Off ;  ; "value" ]'
+    )
+
+
+def test_trailing_empty_positional_is_dropped():
+    out = _render_xml(
+        '<Step enable="True" id="76" name="Set Field">'
+        "<Calculation><![CDATA[]]></Calculation>"
+        '<Field table="Invoices" id="1" name="ID"/></Step>'
+    )
+    assert out == "Set Field [ Invoices::ID ]"
+
+
 if __name__ == "__main__":
     test_engine_renders_whole_corpus_without_error()
     test_inverted_hr_boolean()
@@ -143,4 +167,6 @@ if __name__ == "__main__":
     test_governing_discriminator_reveals_companions()
     test_hr_param_order_stable_without_hrslot()
     test_param_key_used_for_discriminator_reveal()
+    test_empty_leading_positional_keeps_its_slot()
+    test_trailing_empty_positional_is_dropped()
     print("all catalog_grammar engine tests passed")

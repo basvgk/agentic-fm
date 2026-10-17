@@ -83,6 +83,42 @@ def test_discriminator_branches_parse():
     assert window.discriminator_values["Current"].hr_token == "Current Window"
 
 
+def test_element_alias_reads_both_spellings():
+    # Configure AI Account (id 212): FileMaker 2025 serialized the wrapper with a
+    # misspelling (<SetLLMAccout>/<AccoutName>); FileMaker 26 corrected it to
+    # <SetLLMAccount>/<AccountName>. The catalog records the canonical spelling
+    # plus the legacy synonyms under `elementAliases`, so the reader must accept
+    # either and never drop the account name / endpoint / API key.
+    import xml.etree.ElementTree as ET
+
+    from catalog_grammar import load_catalog, render_step_hr
+
+    entry = next(e for e in load_catalog(CATALOG) if e.id == 212)
+    assert entry.element_aliases.get("SetLLMAccount") == ["SetLLMAccout"]
+    assert entry.element_aliases.get("AccountName") == ["AccoutName"]
+
+    canon = (
+        '<Step enable="True" id="212" name="Configure AI Account">'
+        '<VerifySSLCertificates state="True"/><LLMType value="Other"/><SetLLMAccount>'
+        '<AccountName><Calculation><![CDATA["my_account"]]></Calculation></AccountName>'
+        '<Endpoint><Calculation><![CDATA["ep"]]></Calculation></Endpoint>'
+        '<AccessAPIKey><Calculation><![CDATA["key"]]></Calculation></AccessAPIKey>'
+        "</SetLLMAccount></Step>"
+    )
+    hr = render_step_hr(entry, ET.fromstring(canon))
+    assert '"my_account"' in hr and '"ep"' in hr and '"key"' in hr, hr
+
+    legacy = (
+        '<Step enable="True" id="212" name="Configure AI Account">'
+        '<LLMType value="ChatGPT"/><SetLLMAccout>'
+        '<AccoutName><Calculation><![CDATA["acct"]]></Calculation></AccoutName>'
+        '<AccessAPIKey><Calculation><![CDATA["key"]]></Calculation></AccessAPIKey>'
+        "</SetLLMAccout></Step>"
+    )
+    hr2 = render_step_hr(entry, ET.fromstring(legacy))
+    assert '"acct"' in hr2 and '"key"' in hr2, hr2
+
+
 def _load_steps():
     import json
 
@@ -98,4 +134,5 @@ if __name__ == "__main__":
     test_param_key_rule()
     test_step_instance_ir_roundtrips_values()
     test_discriminator_branches_parse()
+    test_element_alias_reads_both_spellings()
     print(f"all catalog_grammar tests passed ({len(KNOWN_PARAM_TYPES)} known types)")

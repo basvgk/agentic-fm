@@ -5,7 +5,7 @@
     <Zoom value="100"/>
   </Step>
 </fmxmlsnippet>
-<!-- Zoom value: "100" | "75" | "50" | "25" (reduction values); "150" | "200" | "300" | "400" (enlargement values); "ZoomIn" (reduces screen image by one zoom level); "ZoomOut" (enlarges screen image by one zoom level). -->
+<!-- Zoom value: "100" | "75" | "50" | "25" (reduction values); "150" | "200" | "300" | "400" (enlargement values); "ZoomIn" (reduces screen image by one zoom level); "ZoomOut" (enlarges screen image by one zoom level); "ByCalculation" (FM 26: zoom by calculation — FileMaker writes <Zoom value="ByCalculation"/> with the percentage in a companion <Calculation>, live-verified on FM 26.0.2). -->
 <!-- Lock state: "True" prohibits users from making changes to zoom level. "False" allows users to change zoom level (to allow, perform script step without Lock option). -->
 <!-- Enlarges or reduces the image on the screen. Use to specify preset zoom levels. -->
 <!-- To set default zoom level, can use OnWindowOpen script trigger. -->

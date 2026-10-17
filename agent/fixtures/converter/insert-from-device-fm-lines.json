@@ -1,0 +1,240 @@
+{
+  "_comment": [
+    "Insert from Device, measured on FileMaker Pro 26.0.3 (macOS, 2026-10-12): each step was pasted into a script, FileMaker's displayed line read, and the step copied back (xml).",
+    "FileMaker draws the target bare first, then `Type:`, then the options the type keeps joined with `; `. lineHides names what the stored step holds that FileMaker's line cannot show: a barcode-type mask other than all types (4194303), and the flashlight mode of a barcode scan from the front camera. HR to XML of that line writes all barcode types and leaves the flashlight mode for FileMaker to fill (Auto)."
+  ],
+  "cases": [
+    {
+      "label": "cam-none-back-full-auto",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Camera\"/><DeviceOptions><Camera choice=\"Back\"/><Resolution choice=\"Full\"/><LightMode choice=\"Auto\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ Type: Camera ; Camera: Back; Resolution: Full; Flash: Auto ]",
+      "lineHides": []
+    },
+    {
+      "label": "cam-var-front-large-on",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Camera\"/><Text/><Field>$out</Field><DeviceOptions><Camera choice=\"Front\"/><Resolution choice=\"Large\"/><LightMode choice=\"On\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Camera ; Camera: Front; Resolution: Large; Flash: On ]",
+      "lineHides": []
+    },
+    {
+      "label": "cam-fld-back-medium-off",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Camera\"/><Field table=\"Invoices\" id=\"31\" name=\"Description\"/><DeviceOptions><Camera choice=\"Back\"/><Resolution choice=\"Medium\"/><LightMode choice=\"Off\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ Invoices::Description ; Type: Camera ; Camera: Back; Resolution: Medium; Flash: Off ]",
+      "lineHides": []
+    },
+    {
+      "label": "cam-var-back-small-auto",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Camera\"/><Text/><Field>$out</Field><DeviceOptions><Camera choice=\"Back\"/><Resolution choice=\"Small\"/><LightMode choice=\"Auto\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Camera ; Camera: Back; Resolution: Small; Flash: Auto ]",
+      "lineHides": []
+    },
+    {
+      "label": "vid-var-defaults",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Video Camera\"/><Text/><Field>$out</Field><DeviceOptions><Camera choice=\"Back\"/><Resolution choice=\"Full\"/><LightMode choice=\"Auto\"/><MaxDuration state=\"False\"/><StartImmediately state=\"False\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Video Camera ; Camera: Back; Resolution: Full; Flash: Auto ]",
+      "lineHides": []
+    },
+    {
+      "label": "vid-fld-front-small-off-md10-si",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Video Camera\"/><Field table=\"Invoices\" id=\"31\" name=\"Description\"/><DeviceOptions><Camera choice=\"Front\"/><Resolution choice=\"Small\"/><LightMode choice=\"Off\"/><MaxDuration state=\"True\"><Calculation><![CDATA[10]]></Calculation></MaxDuration><StartImmediately state=\"True\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ Invoices::Description ; Type: Video Camera ; Camera: Front; Resolution: Small; Flash: Off; Max duration: 10; Start immediately ]",
+      "lineHides": []
+    },
+    {
+      "label": "vid-var-md-calc-nosi",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Video Camera\"/><Text/><Field>$out</Field><DeviceOptions><Camera choice=\"Back\"/><Resolution choice=\"Large\"/><LightMode choice=\"On\"/><MaxDuration state=\"True\"><Calculation><![CDATA[$sec * 2]]></Calculation></MaxDuration><StartImmediately state=\"False\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Video Camera ; Camera: Back; Resolution: Large; Flash: On; Max duration: $sec * 2 ]",
+      "lineHides": []
+    },
+    {
+      "label": "mic-var-defaults",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Microphone\"/><Text/><Field>$out</Field><DeviceOptions><MaxDuration state=\"False\"/><StartImmediately state=\"False\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Microphone ]",
+      "lineHides": []
+    },
+    {
+      "label": "mic-none-md-si",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Microphone\"/><DeviceOptions><MaxDuration state=\"True\"><Calculation><![CDATA[$sec]]></Calculation></MaxDuration><StartImmediately state=\"True\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ Type: Microphone ; Max duration: $sec; Start immediately ]",
+      "lineHides": []
+    },
+    {
+      "label": "mic-fld-si-only",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Microphone\"/><Field table=\"Invoices\" id=\"31\" name=\"Description\"/><DeviceOptions><MaxDuration state=\"False\"/><StartImmediately state=\"True\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ Invoices::Description ; Type: Microphone ; Start immediately ]",
+      "lineHides": []
+    },
+    {
+      "label": "photo-var",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Photo Library\"/><Text/><Field>$out</Field></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Photo Library ]",
+      "lineHides": []
+    },
+    {
+      "label": "photo-none",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Photo Library\"/></Step>",
+      "fmLine": "Insert from Device [ Type: Photo Library ]",
+      "lineHides": []
+    },
+    {
+      "label": "music-fld",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Music Library\"/><Field table=\"Invoices\" id=\"31\" name=\"Description\"/></Step>",
+      "fmLine": "Insert from Device [ Invoices::Description ; Type: Music Library ]",
+      "lineHides": []
+    },
+    {
+      "label": "bc-var-field-all",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Barcode\"/><Text/><Field>$out</Field><DeviceOptions><ScanFrom type=\"Field\"><Field table=\"Invoices\" id=\"31\" name=\"Description\"/></ScanFrom><Barcodes types=\"4194303\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Barcode ; Scan from: Invoices::Description ]",
+      "lineHides": []
+    },
+    {
+      "label": "bc-var-cam-all",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Barcode\"/><Text/><Field>$out</Field><DeviceOptions><ScanFrom type=\"Camera\"/><Camera choice=\"Back\"/><Resolution choice=\"Full\"/><LightMode choice=\"Auto\"/><Barcodes types=\"4194303\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Barcode ; Camera: Back; Resolution: Full; Flashlight: Auto ]",
+      "lineHides": []
+    },
+    {
+      "label": "bc-fld-cam-front-medium-on-1",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Barcode\"/><Field table=\"Invoices\" id=\"31\" name=\"Description\"/><DeviceOptions><ScanFrom type=\"Camera\"/><Camera choice=\"Front\"/><Resolution choice=\"Medium\"/><LightMode choice=\"On\"/><Barcodes types=\"1\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ Invoices::Description ; Type: Barcode ; Camera: Front; Resolution: Medium ]",
+      "lineHides": [
+        "Barcodes",
+        "LightMode"
+      ]
+    },
+    {
+      "label": "bc-var-field-8192",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Barcode\"/><Text/><Field>$out</Field><DeviceOptions><ScanFrom type=\"Field\"><Field table=\"Invoices\" id=\"31\" name=\"Description\"/></ScanFrom><Barcodes types=\"8192\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Barcode ; Scan from: Invoices::Description ]",
+      "lineHides": [
+        "Barcodes"
+      ]
+    },
+    {
+      "label": "bc-none-cam-0",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Barcode\"/><DeviceOptions><ScanFrom type=\"Camera\"/><Camera choice=\"Back\"/><Resolution choice=\"Full\"/><LightMode choice=\"Auto\"/><Barcodes types=\"0\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ Type: Barcode ; Camera: Back; Resolution: Full; Flashlight: Auto ]",
+      "lineHides": [
+        "Barcodes"
+      ]
+    },
+    {
+      "label": "sig-var-full",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Signature\"/><Text/><Field>$out</Field><DeviceOptions><Title><Calculation><![CDATA[\"T\"]]></Calculation></Title><Message><Calculation><![CDATA[\"M\"]]></Calculation></Message><Prompt><Calculation><![CDATA[\"P\"]]></Calculation></Prompt><Presentation choice=\"Full Screen\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Signature ; Title: \"T\"; Message: \"M\"; Prompt: \"P\"; Presentation: Full Screen ]",
+      "lineHides": []
+    },
+    {
+      "label": "sig-fld-overlay-bare",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Signature\"/><Field table=\"Invoices\" id=\"31\" name=\"Description\"/><DeviceOptions><Title/><Message/><Prompt/><Presentation choice=\"Overlay\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ Invoices::Description ; Type: Signature ; Presentation: Overlay ]",
+      "lineHides": []
+    },
+    {
+      "label": "sig-var-embedded-title",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Signature\"/><Text/><Field>$out</Field><DeviceOptions><Title><Calculation><![CDATA[$t]]></Calculation></Title><Message/><Prompt/><Presentation choice=\"Embedded\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Signature ; Title: $t; Presentation: Embedded ]",
+      "lineHides": []
+    },
+    {
+      "label": "bc-var-cam-back-full-on",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Barcode\"/><Text/><Field>$out</Field><DeviceOptions><ScanFrom type=\"Camera\"/><Camera choice=\"Back\"/><Resolution choice=\"Full\"/><LightMode choice=\"On\"/><Barcodes types=\"4194303\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Barcode ; Camera: Back; Resolution: Full; Flashlight: On ]",
+      "lineHides": []
+    },
+    {
+      "label": "bc-var-cam-back-large-off",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Barcode\"/><Text/><Field>$out</Field><DeviceOptions><ScanFrom type=\"Camera\"/><Camera choice=\"Back\"/><Resolution choice=\"Large\"/><LightMode choice=\"Off\"/><Barcodes types=\"4194303\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Barcode ; Camera: Back; Resolution: Large; Flashlight: Off ]",
+      "lineHides": []
+    },
+    {
+      "label": "bc-var-cam-front-small-auto",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Barcode\"/><Text/><Field>$out</Field><DeviceOptions><ScanFrom type=\"Camera\"/><Camera choice=\"Front\"/><Resolution choice=\"Small\"/><LightMode choice=\"Auto\"/><Barcodes types=\"4194303\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Barcode ; Camera: Front; Resolution: Small ]",
+      "lineHides": [
+        "LightMode"
+      ]
+    },
+    {
+      "label": "bc-var-cam-front-full-off",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Barcode\"/><Text/><Field>$out</Field><DeviceOptions><ScanFrom type=\"Camera\"/><Camera choice=\"Front\"/><Resolution choice=\"Full\"/><LightMode choice=\"Off\"/><Barcodes types=\"4194303\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Barcode ; Camera: Front; Resolution: Full ]",
+      "lineHides": [
+        "LightMode"
+      ]
+    },
+    {
+      "label": "vid-var-nomd-si",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Video Camera\"/><Text/><Field>$out</Field><DeviceOptions><Camera choice=\"Back\"/><Resolution choice=\"Medium\"/><LightMode choice=\"Auto\"/><MaxDuration state=\"False\"/><StartImmediately state=\"True\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Video Camera ; Camera: Back; Resolution: Medium; Flash: Auto; Start immediately ]",
+      "lineHides": []
+    },
+    {
+      "label": "vid-none-md-semicolon",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Video Camera\"/><DeviceOptions><Camera choice=\"Back\"/><Resolution choice=\"Full\"/><LightMode choice=\"Auto\"/><MaxDuration state=\"True\"><Calculation><![CDATA[Min ( 10 ; $x )]]></Calculation></MaxDuration><StartImmediately state=\"False\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ Type: Video Camera ; Camera: Back; Resolution: Full; Flash: Auto; Max duration: Min ( 10 ; $x ) ]",
+      "lineHides": []
+    },
+    {
+      "label": "sig-var-message-only",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Signature\"/><Text/><Field>$out</Field><DeviceOptions><Title/><Message><Calculation><![CDATA[\"a; b\"]]></Calculation></Message><Prompt/><Presentation choice=\"Overlay\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Signature ; Message: \"a; b\"; Presentation: Overlay ]",
+      "lineHides": []
+    },
+    {
+      "label": "sig-var-prompt-only",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Signature\"/><Text/><Field>$out</Field><DeviceOptions><Title/><Message/><Prompt><Calculation><![CDATA[$p]]></Calculation></Prompt><Presentation choice=\"Full Screen\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Signature ; Prompt: $p; Presentation: Full Screen ]",
+      "lineHides": []
+    },
+    {
+      "label": "sig-none-defaults",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Signature\"/><DeviceOptions><Title/><Message/><Prompt/><Presentation choice=\"Full Screen\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ Type: Signature ; Presentation: Full Screen ]",
+      "lineHides": []
+    },
+    {
+      "label": "cam-no-opts",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Camera\"/><Text/><Field>$out</Field><DeviceOptions><Camera choice=\"Front\"/><Resolution choice=\"Full\"/><LightMode choice=\"Auto\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Camera ; Camera: Front; Resolution: Full; Flash: Auto ]",
+      "lineHides": []
+    },
+    {
+      "label": "vid-no-opts",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Video Camera\"/><Text/><Field>$out</Field><DeviceOptions><Camera choice=\"Front\"/><Resolution choice=\"Full\"/><LightMode choice=\"Auto\"/><MaxDuration state=\"False\"/><StartImmediately state=\"False\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Video Camera ; Camera: Front; Resolution: Full; Flash: Auto ]",
+      "lineHides": []
+    },
+    {
+      "label": "bc-no-opts",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Barcode\"/><Text/><Field>$out</Field><DeviceOptions><ScanFrom type=\"Camera\"/><Camera choice=\"Front\"/><Resolution choice=\"Full\"/><LightMode choice=\"Auto\"/><Barcodes types=\"0\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Barcode ; Camera: Front; Resolution: Full ]",
+      "lineHides": [
+        "Barcodes",
+        "LightMode"
+      ]
+    },
+    {
+      "label": "sig-no-opts",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Signature\"/><Text/><Field>$out</Field><DeviceOptions><Title/><Message/><Prompt/><Presentation choice=\"Full Screen\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Signature ; Presentation: Full Screen ]",
+      "lineHides": []
+    },
+    {
+      "label": "bc-var-field-only-scanfrom",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Barcode\"/><Text/><Field>$out</Field><DeviceOptions><ScanFrom type=\"Field\"><Field table=\"Invoices\" id=\"31\" name=\"Description\"/></ScanFrom><Barcodes types=\"0\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Barcode ; Scan from: Invoices::Description ]",
+      "lineHides": [
+        "Barcodes"
+      ]
+    },
+    {
+      "label": "mic-var-md-only",
+      "xml": "<Step enable=\"True\" id=\"161\" name=\"Insert from Device\"><DisableStepCollapsed state=\"False\"/><InsertFrom value=\"Microphone\"/><Text/><Field>$out</Field><DeviceOptions><MaxDuration state=\"True\"><Calculation><![CDATA[5]]></Calculation></MaxDuration><StartImmediately state=\"False\"/></DeviceOptions></Step>",
+      "fmLine": "Insert from Device [ $out ; Type: Microphone ; Max duration: 5 ]",
+      "lineHides": []
+    }
+  ]
+}

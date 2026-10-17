@@ -10,8 +10,11 @@
  * catalog constant), so it byte-matches. Python has no HR→XML direction (the
  * agent writes fmxmlsnippet directly), so the reference converter is the oracle here.
  *
- * Excluded: the 3 FM26-AI grammar-gap steps (Fine-Tune Model, Generate Response
- * from Model, Install Menu Set) that are out of scope for the whole program.
+ * Excluded: the remaining FM26-AI grammar-gap steps (Fine-Tune Model, Install
+ * Menu Set) that are out of scope for the whole program. Generate Response from
+ * Model was such a gap; it is now closed by the typed-child (typeAttr/typeValue)
+ * grammar + the single-wrapper catalog ordering, live-verified byte-identical to
+ * FileMaker, so it is back in the gate.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -26,7 +29,6 @@ const FIXTURES_PATH = path.join(__dirname, 'fixtures', 'hr-to-xml.json');
 /** FM26-AI grammar-gap steps excluded from every converter gate (plan §gaps). */
 const EXCLUDED = new Set([
   'Fine-Tune Model',
-  'Generate Response from Model',
   'Install Menu Set',
 ]);
 

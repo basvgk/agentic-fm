@@ -382,10 +382,16 @@ def test_saxml_unsupported_fixtures_fail_loud():
             os.path.join(_SAXML_UNSUPPORTED_DIR, name), stats)
         assert stats["unsupported"] == 1, f"{name}: expected 1 unsupported, got {stats}"
         assert stats["unknown"] == 0, f"{name}: unexpected uncatalogued step"
-        # Fail loud means a marked placeholder, not silently-wrong XML.
+        # Fail loud means a marked placeholder, not silently-wrong XML. The
+        # refusal reason takes one of three genuine forms: an unclaimed boolean
+        # with no param to land on, a calc no address accounts for, or a param
+        # the catalog now models (e.g. Generate Response from Model's
+        # WebScriptParameters) whose SaXML shape the reader has no decoder for —
+        # all three refuse to place a value rather than guess one.
         assert "TODO: unsupported SaXML shape" in out, name
         assert ("unclaimed SaXML booleans" in out
-                or "no catalog param addresses" in out), \
+                or "no catalog param addresses" in out
+                or "no decoder for" in out), \
             f"{name}: not a refusal to place a value"
         ET.fromstring(out)  # still well-formed
 

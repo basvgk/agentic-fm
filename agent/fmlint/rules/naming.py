@@ -2,6 +2,7 @@
 
 import re
 from ..engine import rule, LintRule
+from ..literals import mask_string_literals
 from ..types import Diagnostic, Severity
 
 
@@ -9,7 +10,6 @@ from ..types import Diagnostic, Severity
 # Helpers
 # ---------------------------------------------------------------------------
 
-_STRIP_STRINGS_RE = re.compile(r'"[^"]*"')
 _ASCII_OPERATORS = [
     ("<>", "\u2260", 'Use "\u2260" instead of "<>"'),
     ("<=", "\u2264", 'Use "\u2264" instead of "<="'),
@@ -43,7 +43,7 @@ _BOOLEAN_PREFIXES = (
 
 def _strip_strings(text):
     """Remove quoted strings from text to avoid false positives."""
-    return _STRIP_STRINGS_RE.sub('""', text)
+    return mask_string_literals(text)
 
 
 def _get_calc_texts_from_steps(steps):
@@ -349,7 +349,7 @@ class N003BooleanVarNaming(LintRule):
             if len(line.params) < 2:
                 continue
             var_name = line.params[0].strip()
-            calc_text = line.params[-1].strip()
+            calc_text = next((p.strip() for p in reversed(line.params) if p.strip()), "")
             if calc_text not in ("True", "False"):
                 continue
             if not var_name:

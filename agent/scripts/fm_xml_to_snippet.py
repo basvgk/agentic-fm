@@ -61,12 +61,17 @@ L2 = '      '   # grandchildren of <Step>
 # ---------------------------------------------------------------------------
 
 def escape_xml(text: str) -> str:
-    """Escape &, <, > for XML text content."""
+    """Escape &, <, > for XML text content, and write a carriage return as ``&#13;``.
+
+    XML parsing turns a raw CR into LF, and FileMaker stores CR and LF as different
+    characters, so a multi-line comment written with a raw CR pastes back as LF.
+    """
     if not text:
         return ''
-    if '&' not in text and '<' not in text and '>' not in text:
+    if '&' not in text and '<' not in text and '>' not in text and '\r' not in text:
         return text
-    return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    return (text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            .replace('\r', '&#13;'))
 
 
 def cdata(text: str) -> str:
@@ -208,6 +213,11 @@ def tx_loop(step) -> str:
         lst = p.find('List')
         if lst is not None:
             flush = lst.get('name', 'Always')
+    # FileMaker writes the Minimum flush as the token "Min" in fmxmlsnippet while
+    # displaying "Minimum". If the SaXML source carries the display label,
+    # normalise it so the emitted snippet matches the catalog enum value.
+    if flush.lower() == 'minimum':
+        flush = 'Min'
     return (
         f'{S}<Step enable="{enable}" id="{sid}" name="Loop">\n'
         f'{L1}<Restore state="{restore}"/>\n'

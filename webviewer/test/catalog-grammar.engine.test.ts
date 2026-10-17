@@ -111,4 +111,25 @@ describe('catalog-grammar engine (TS port parity with Python)', () => {
     expect(nameParam).toBeTruthy();
     expect(paramKey(nameParam!)).toBe('Name');
   });
+
+  it('empty leading positional keeps its slot', () => {
+    // An empty bare param before a rendered positional token keeps an empty slot,
+    // so the value is not read back into the empty param's slot.
+    expect(render('Set Next Serial Value')).toBe('Set Next Serial Value [  ; 100 ]');
+    // A governed companion (revealed by a discriminator) is positional too.
+    expect(render('Replace Field Contents')).toBe(
+      'Replace Field Contents [ With dialog: Off ;  ; "value" ]',
+    );
+  });
+
+  it('trailing empty positional is dropped', () => {
+    const step = loadStep(
+      '<fmxmlsnippet type="FMObjectList"><Step enable="True" id="76" name="Set Field">' +
+        '<Calculation><![CDATA[]]></Calculation>' +
+        '<Field table="Invoices" id="1" name="ID"/></Step></fmxmlsnippet>',
+    );
+    expect(renderStepHr(getGrammarEntry('Set Field') as GrammarEntry, step)).toBe(
+      'Set Field [ Invoices::ID ]',
+    );
+  });
 });
