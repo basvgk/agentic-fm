@@ -131,6 +131,36 @@ JSONSetElement ( "{}" ;
 
 This applies to all multi-argument functions: `JSONSetElement`, `List`, `Case`, `Let`, etc.
 
+### JSONSetElement Syntax
+
+**Correct syntax for multiple elements:**
+```filemaker
+JSONSetElement ( json ; [ key1 ; value1 ; type1 ] ; [ key2 ; value2 ; type2 ] ; ... )
+```
+
+Each key-value-type triplet **must be wrapped in square brackets** when there is more than one element. The brackets are optional for a single element but recommended for consistency.
+
+**Examples:**
+```filemaker
+// Single element (brackets optional)
+JSONSetElement ( "{}" ; "key" ; "value" ; JSONString )
+
+// Multiple elements (brackets REQUIRED)
+JSONSetElement ( "{}" ; [ "key1" ; "value1" ; JSONString ] ; [ "key2" ; 123 ; JSONNumber ] )
+
+// Adding to existing JSON
+JSONSetElement ( $json ; [ "newKey" ; $value ; JSONString ] )
+```
+
+**Common mistake to avoid:**
+```filemaker
+// WRONG - missing brackets for multiple elements
+JSONSetElement ( $json ; "key1" ; "value1" ; JSONString ; "key2" ; 123 ; JSONNumber )
+
+// CORRECT
+JSONSetElement ( $json ; [ "key1" ; "value1" ; JSONString ] ; [ "key2" ; 123 ; JSONNumber ] )
+```
+
 ### Dynamic Field References
 
 When a field name is passed as a **string parameter** to a step or function (e.g., `Set Field By Name`, `GetField`), prefer wrapping it in `GetFieldName()` to make the reference rename-safe:
