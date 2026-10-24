@@ -78,6 +78,8 @@ See **[filemaker/README.md](filemaker/README.md)** for the full dependency list 
 
 Skills are opt-in workflows that extend an agent's default behavior. Invoke them naturally in conversation — no special syntax required.
 
+Shared skills live in `agent/skills/`, and shared agent instructions live in the root `AGENTS.md`. The `.claude/` and `.cursor/` entries are symlinks to those files so each editor can discover the same guidance.
+
 **Note:** Skill use is available only to CLI/IDE editors. They are not used by the webviewer feature.
 
 | Skill                     | What it does                                                                                                                                            | Example triggers                                                           |

@@ -344,9 +344,9 @@ This path is recommended for new solutions, complex UI interactions, or solution
 | `agent/context/{solution}/theme-classes.json` | Style classes in use across layouts |
 | `agent/context/{solution}/layouts/*.json` | Compact layout summaries |
 | `webviewer/src/ui/AgentOutputPanel.tsx` | Preview renderer with Shadow DOM style isolation |
-| `.claude/skills/layout-spec/SKILL.md` | Design conversation skill |
-| `.claude/skills/layout-design/SKILL.md` | Preview-first generation skill |
-| `.claude/skills/webviewer-build/SKILL.md` | Web Viewer app generation skill |
+| `agent/skills/layout-spec/SKILL.md` | Design conversation skill |
+| `agent/skills/layout-design/SKILL.md` | Preview-first generation skill |
+| `agent/skills/webviewer-build/SKILL.md` | Web Viewer app generation skill |
 
 ---
 

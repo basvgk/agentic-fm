@@ -233,7 +233,9 @@ Context ( "Create a script to add a new line item to the current invoice" )
 
 When extending this project, keep the following principles in mind:
 
-1. **Preserve the context hierarchy.** Any new data source should slot into the existing priority order (CONTEXT.json > index files > xml_parsed). If you add a new index file, document it in this file and in `.cursor/AGENTS.md`. New index files follow the same `agent/context/{solution}/` subfolder pattern.
+`AGENTS.md` and `agent/skills/` are the canonical shared agent sources. `.claude/` and `.cursor/` contain compatibility symlinks; edit the canonical files when changing agent guidance.
+
+1. **Preserve the context hierarchy.** Any new data source should slot into the existing priority order (CONTEXT.json > index files > xml_parsed). If you add a new index file, document it in this file and in `AGENTS.md`. New index files follow the same `agent/context/{solution}/` subfolder pattern.
 
 2. **Keep indexes lean.** Index files exist to reduce token consumption. Only extract signal -- names, IDs, types, and references. Discard UUIDs, hashes, timestamps, and visual positioning data.
 
@@ -241,7 +243,7 @@ When extending this project, keep the following principles in mind:
 
 4. **Update documentation together.** When adding a new artifact or changing the pipeline:
    - Update this file (`ARCHITECTURE.md`) with the new artifact and its role.
-   - Update `.cursor/AGENTS.md` so the AI knows how to use the new artifact.
+   - Update `AGENTS.md` so the AI knows how to use the new artifact.
    - Update `README.md` if the change affects end-user workflow or project structure.
 
 5. **The step catalog is the single source of truth for step structure.** `agent/catalogs/step-catalog-en.json` is the definitive reference for step XML structure, parameter definitions, enums, and behavioral notes. `snippet_examples/` is archival — it serves as a fallback only for complex steps with `"auto"`/`"unfinished"` catalog status or where the catalog entry remains insufficient. If you add support for a new script step type, add its catalog entry (including behavioral notes in the `notes` field) and a corresponding snippet_examples template for reference. All snippet files must follow the conventions in `agent/snippet_examples/steps/CONVENTIONS.md`.

@@ -492,7 +492,7 @@ section('Overview', function() {
   const skipped = safe(PROFILE, 'extensions.skipped', []);
   if (skipped.length > 0) {
     html += `<div style="margin-top:16px;padding:12px;background:rgba(108,140,255,0.05);border:1px solid rgba(108,140,255,0.15);border-radius:var(--radius);font-size:0.85rem;color:var(--text-muted);">
-      Optional extensions not installed: ${esc(skipped.join(', '))}. Install via <code>pip3 install -r .cursor/skills/solution-analysis/assets/requirements-analyze.txt</code> for deeper analysis.
+      Optional extensions not installed: ${esc(skipped.join(', '))}. Install via <code>pip3 install -r agent/skills/solution-analysis/assets/requirements-analyze.txt</code> for deeper analysis.
     </div>`;
   }
 

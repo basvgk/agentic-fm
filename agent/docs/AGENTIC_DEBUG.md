@@ -176,7 +176,7 @@ Then retrieve it from the Data Viewer (Tools > Data Viewer) and paste the JSON v
 
 When the agent needs runtime debug information:
 
-1. The agent uses the `fm-debug` skill (`.claude/skills/fm-debug/SKILL.md`)
+1. The agent uses the `fm-debug` skill (`agent/skills/fm-debug/SKILL.md`)
 2. The skill instructs the developer to run the appropriate script
 3. Once the developer confirms, the agent reads `agent/debug/output.json` directly
 4. The agent analyzes the output and proposes a fix

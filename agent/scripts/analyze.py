@@ -2680,7 +2680,7 @@ def format_markdown(profile):
     if ext.get("skipped"):
         lines.append(
             f"*Optional extensions not installed: {', '.join(ext['skipped'])}. "
-            f"Install via `pip3 install -r .cursor/skills/solution-analysis/assets/requirements-analyze.txt` "
+            f"Install via `pip3 install -r agent/skills/solution-analysis/assets/requirements-analyze.txt` "
             f"for deeper analysis.*"
         )
         lines.append("")

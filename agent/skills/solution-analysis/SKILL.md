@@ -129,7 +129,7 @@ If any are missing and the developer wants extended analysis, guide them through
 > ```bash
 > python3 -m venv agent/.venv
 > source agent/.venv/bin/activate
-> pip install -r .cursor/skills/solution-analysis/assets/requirements-analyze.txt
+> pip install -r agent/skills/solution-analysis/assets/requirements-analyze.txt
 > ```
 >
 > Once set up, run the analysis with the venv active, or prefix with `agent/.venv/bin/python3`:
