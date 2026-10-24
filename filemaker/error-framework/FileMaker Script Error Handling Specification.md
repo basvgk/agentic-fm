@@ -787,7 +787,7 @@ Wanneer een script wordt gemaakt of aangepast:
 10. Gebruik FMError alleen als technische onderliggende fout.
 11. Wis `$_FMError` met `FMError.Clear` zodra een FileMaker-fout bewust genegeerd wordt (geen eigen fout
     tot gevolg heeft), zodat een latere `Error.Make`-aanroep 'm niet per ongeluk overneemt.
-12. Log maximaal één keer per script, na de hoofdloop en cleanup, als de eigen fout bestaat. Log niet direct na iedere `Error.Make`.
+12. Log maximaal één keer per script, na de hoofdloop en eventuele cleanup, wanneer `$_error` bestaat.
 13. Geef `$_error` ongewijzigd mee als parameter aan het logging-script.
 14. Propagate geen geneste `cause`-objecten.
 15. Bouw een childparameter altijd met `Param.Make`, nooit handmatig met de keys `"payload"` of `"trace"`.
