@@ -114,7 +114,7 @@ appear between the risky step and `FMError.Set`:
 
 ```text
 <error-prone step>
-If [ FMError.Set ≠ 0 ]
+If [ FMError.Set ]
   # Build this script's own error with Error.Make.
 End If
 ```
@@ -125,6 +125,10 @@ deliberately disposable result variable. Do not set `$_FMError` from the
 function's return value. Framework scripts never call `Get ( LastError )`,
 `Get ( LastErrorDetail )`, or `Get ( LastErrorLocation )` directly; those
 calls are internal implementation details of `FMError.Set`.
+
+**FMError.Set Usage (General Rule):**
+- Use `If [ FMError.Set ]` directly — it evaluates to True when the captured error code is non-zero.
+- Do not use an intermediate `$r` variable solely to check `FMError.Set ≠ 0`.
 
 If a native error is deliberately handled without creating an application
 error, clear it before later work using `Set Variable [ $r ; FMError.Clear ]`.
@@ -164,6 +168,16 @@ If [ not IsEmpty ( Error.Get ) ]
 End If
 Exit Script [ Response.Make ( $data ) ]
 ```
+
+## $context Handling
+
+- Initialize `$context` as `"{}"`. Include all relevant instantiated variables or field values into the context when an error occurs.
+- The framework automatically includes the incoming parameter, trace, native error (from `FMError.Set`), environment, and record context in the error object created by `Error.Make`. **Do not** include these in the `$context`.
+
+## Error Codes
+
+- Use concise, stable codes without the script name as prefix (e.g., `INVALID_PARAMETER`, `WINDOW_ERROR`, `RECORD_LOCKED`).
+- Reserve prefixed codes (e.g., `PARENT.CHILD_ERROR`) for errors created **because a child script returned an error**.
 
 ## Child scripts and trace propagation
 
@@ -217,6 +231,29 @@ has non-empty data) the log-only `childResponseData` field.
 One root execution receives a UUID `traceID`; every child retains it and
 appends its current script name to `scriptPath`. `errorID` is unique per error
 and must not be reused as the trace identifier.
+
+## Incremental Migration of Existing Scripts
+
+When refactoring an **existing script** (not creating a new template) to use the error framework, follow these rules to maintain backward compatibility with parent scripts that have not yet been migrated:
+
+### Parameter Handling
+- Keep the original `Get ( ScriptParameter )` step **active** to read the incoming parameter.
+- Add `Param.Payload` as a **disabled** (commented-out) step for future migration.
+- Use the same variable name (`$payload`) for both so the rest of the script is unchanged.
+
+```text
+Set Variable [ $payload ; Get ( ScriptParameter ) ]
+# Set Variable [ $payload ; Param.Payload ]  // disabled — enable when parent migrates
+```
+
+### Response Format
+- Keep the original response format (e.g., `$return` JSON) **active** with the final `Exit Script`.
+- Add `Response.Make ( $data )` as a **disabled** step for future migration.
+- Add disabled `Set Variable` steps for `Response.GetData`, `Response.GetErrorCode`, `Response.GetErrorMessage`, `Response.GetErrorUserMessage` so parent scripts can extract values after they migrate.
+
+### Business Logic Steps
+- **Never remove** existing business logic steps (e.g., `Commit Records/Requests`, `Set Field`, navigation steps) during framework migration.
+- Only wrap them with framework error handling (`FMError.Set` + `Error.Make`).
 
 ## References
 

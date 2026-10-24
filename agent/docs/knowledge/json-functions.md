@@ -4,6 +4,38 @@ Practical guidance for using FileMaker's JSON functions in script calculations, 
 
 ---
 
+## JSONSetElement Syntax
+
+**Correct syntax for multiple elements:**
+```filemaker
+JSONSetElement ( json ; [ key1 ; value1 ; type1 ] ; [ key2 ; value2 ; type2 ] ; ... )
+```
+
+Each key-value-type triplet **must be wrapped in square brackets** when there is more than one element. The brackets are optional for a single element but recommended for consistency.
+
+**Examples:**
+```filemaker
+// Single element (brackets optional)
+JSONSetElement ( "{}" ; "key" ; "value" ; JSONString )
+
+// Multiple elements (brackets REQUIRED)
+JSONSetElement ( "{}" ; [ "key1" ; "value1" ; JSONString ] ; [ "key2" ; 123 ; JSONNumber ] )
+
+// Adding to existing JSON
+JSONSetElement ( $json ; [ "newKey" ; $value ; JSONString ] )
+```
+
+**Common mistake to avoid:**
+```filemaker
+// WRONG - missing brackets for multiple elements
+JSONSetElement ( $json ; "key1" ; "value1" ; JSONString ; "key2" ; 123 ; JSONNumber )
+
+// CORRECT
+JSONSetElement ( $json ; [ "key1" ; "value1" ; JSONString ] ; [ "key2" ; 123 ; JSONNumber ] )
+```
+
+---
+
 ## JSONGetElementType — valid return constants
 
 `JSONGetElementType ( json ; keyOrIndex )` returns an integer indicating the type of the referenced element:
@@ -16,11 +48,11 @@ Practical guidance for using FileMaker's JSON functions in script calculations, 
 | `JSONArray` | 4 | Array (`[]`) |
 | `JSONBoolean` | 5 | Boolean (`true`/`false`) |
 | `JSONNull` | 6 | Null (`null`) |
-| *(none)* | 0 | Key not found or JSON is invalid |
 
 **`JSONUndefined` and `JSONMissing` do not exist as FileMaker constants.** Do not use them.
 
-When a key is absent or the JSON is malformed, the function returns `0` — a bare integer with no named constant.
+When a key is absent the function returns returns "? Incorrect key, index, or path" as a string.
+When the JSON is malformed, the function returns `?`, followed by error text, as a string.
 
 ---
 
@@ -46,10 +78,7 @@ Use `not` on the return value, since `0` is falsy:
 ```
 // Exit with error if required key is absent
 If [ not JSONGetElementType ( $input ; "layout" ) ]
-  Exit Script [ JSONSetElement ( "{}" ;
-    [ "success" ; False ; JSONBoolean ] ;
-    [ "error" ; "Missing required key: layout" ; JSONString ]
-  ) ]
+  // ... perform error trapping or other logic ...
 End If
 ```
 

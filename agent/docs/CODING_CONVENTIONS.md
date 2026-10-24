@@ -212,25 +212,19 @@ This distinction matters when HR code is pasted into FileMaker or converted by t
 
 ### Script documentation structure
 
-Every script follows this documentation pattern at the top:
-
-**1. PURPOSE line** — always the very first step, a single `# (comment)` with `PURPOSE: ...`:
-```xml
-<Step enable="True" id="89" name="# (comment)">
-  <Text>PURPOSE: One-line description of what this script does.</Text>
-</Step>
-```
-
-**2. Doc block** (when additional detail is needed) — a disabled `Insert Text` step targeting `$README`. The variable is never set (step is disabled) but the name makes it self-documenting. Use `&#xD;` for line breaks:
+Start every script with a documentation block as its first step. Write the documentation in Dutch or English, depending on the script context. Use a disabled `Insert Text` step targeting `$README`; because the step is disabled, it documents the script without changing a variable at runtime. Use `&#13;` for line breaks and `&#9;` for each tab character in the XML text. Use tabs for all indentation: one tab for section contents and two tabs for nested items. Keep the field content plain text, with consistent section headings and separator lines to show hierarchy:
 ```xml
 <Step enable="False" id="61" name="Insert Text">
   <SelectAll state="False"/>
-  <Text>PARAMETERS: $param — JSON with keys ...&#xD;&#xD;RETURNS: ...</Text>
+  <DisableStepCollapsed state="False"/>
+  <Text>Purpose:&#13;	Describe what the script does in one or a few sentences.&#13;&#13;————————————————————————————————————&#13;&#13;Requires:&#13;	List prerequisites, such as a required plug-in (e.g. MBS Plugin).&#13;&#13;————————————————————————————————————&#13;&#13;Context:&#13;	Name the table occurrence from which the script is expected to run, or None for a context-independent script.&#13;&#13;————————————————————————————————————&#13;&#13;Parameters (JSON):&#13;	Required&#13;		parameterName[type]    Describe the parameter.&#13;	Optional&#13;		parameterName[type] (default=value)    Describe the parameter.&#13;&#13;————————————————————————————————————&#13;&#13;Returns (JSON):&#13;	Example structure:&#13;	{&#13;		"foundCount": 0,&#13;		"processedCount": 0,&#13;		"skippedCount": 0&#13;	}&#13;&#13;	Fields:&#13;		foundCount [JSONNumber]: Number of records found for processing.&#13;		processedCount [JSONNumber]: Number of records processed.&#13;		skippedCount [JSONNumber]: Number of records skipped, for example because of a record lock.&#13;&#13;Errors:&#13;	ERROR_CODE: Describe the error.&#13;&#13;	Example:&#13;	WINDOW_ERROR: The search window could not be opened.&#13;&#13;————————————————————————————————————&#13;&#13;Notes:&#13;	Add optional notes here.&#13;&#13;————————————————————————————————————&#13;&#13;History:&#13;	BGK YYYY-MM-DD - Created</Text>
   <Field>$README</Field>
 </Step>
 ```
 
-**3. Blank lines** — empty self-closing `# (comment)` steps used as visual separators between logical sections:
+Include all headings in the template. Replace the example text and error entries with details that apply to the script; use `None` or `N/A` where a section has no applicable content. In the Parameters section, list required and optional keys separately, including each key's type and the default for optional keys. In Returns, show the JSON shape and explain its keys and value types. List each documented error using its error code and a short description. Add history entries in `BGK YYYY-MM-DD - Change description` format, with the newest entry first. Keep the example author initials as a placeholder and replace them with the author's initials.
+
+The documentation block must be the first step in the script. Follow it with a blank `# (comment)` step before executable logic when a visual separator is useful:
 ```xml
 <Step enable="True" id="89" name="# (comment)"/>
 ```
@@ -299,6 +293,8 @@ User Interface/
 When `PROJECT.md` declares an error framework, its `error-framework.md` knowledge document supersedes generic error-capture patterns for every solution script. Do not bypass that framework with direct `Get ( LastError )`, `Get ( LastErrorDetail )`, `Get ( LastErrorLocation )`, or `Get ( ScriptResult )` calls.
 
 Namespaced framework custom functions such as `FMError.Set`, `Error.Make`, `Trace.Init`, and `Response.Make` are a permitted exception to the TitleCamelCase custom-function naming convention. Use their documented side-effect and getter contracts; do not pass framework state variables as explicit parameters to a function that owns a getter.
+
+**Incremental Migration Rule:** When refactoring an existing script to adopt the error framework, **never remove or alter existing business logic steps** (e.g., `Commit Records/Requests`, `Set Field`, navigation, window management, record creation/deletion). Only wrap them with framework error handling (`FMError.Set` + `Error.Make`). Preserve the original parameter capture (`Get ( ScriptParameter )`) and response format (`Exit Script [ $return ]`) as active steps; add new framework patterns (`Param.Payload`, `Response.Make`) as disabled steps for future migration. See `agent/docs/knowledge/error-framework.md` § "Incremental Migration of Existing Scripts" for details.
 
 ---
 
