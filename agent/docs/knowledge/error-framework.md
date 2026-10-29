@@ -1,19 +1,25 @@
 # Mandatory Error Framework and Call-Chain Tracing
 
 This solution uses a standard error, response, logging, and tracing framework.
+This is the minimum error-handling knowledge required before giving
+instructions or drafting any script creation, edit, or refactor in this
+project. Load it for every script change, independent of task keywords.
 The canonical human-readable design is
 [`FileMaker Script Error Handling Specification`](../../../filemaker/error-framework/FileMaker%20Script%20Error%20Handling%20Specification.md).
 This document is its concise, agent-executable interpretation.
-These rules supersede the archived generic error-handling and error-data-capture
-articles for every business script that is created, updated, or refactored.
-
-They also supersede direct native-error and direct script-result examples in
-other active knowledge articles. Those articles may still be used for their
-topic-specific behavior, such as record-lock retry decisions or single-pass
-loop structure.
+These rules are the single active source for native-error capture, error
+responses, and logging in every business script that is created, updated, or
+refactored. Other knowledge articles cover topic behavior such as record-lock
+retry decisions or single-pass loop structure; they do not define competing
+capture patterns.
 
 The generic `Get ( LastError )` capture pattern remains applicable only inside
 the implementation of `FMError.Set` itself.
+
+In the VanGenabeek solution, the logger is `(94000) Creeer foutmelding`,
+script ID `1330`. The calls below pass `Error.Get` and set Wait for completion
+to Off. Rebind the script reference when porting the templates to another
+solution.
 
 ## Required custom functions
 
@@ -96,7 +102,7 @@ Loop
 End Loop
 # Cleanup must not replace framework error state.
 If [ not IsEmpty ( Error.Get ) ]
-  Perform Script on Server [ "SYS_LogError" ; Parameter: Error.Get ]
+  Perform Script on Server [ "(94000) Creeer foutmelding" ; Parameter: Error.Get ; Wait for completion: Off ]
 End If
 Exit Script [ Response.Make ( $data ) ]
 ```
@@ -132,8 +138,36 @@ calls are internal implementation details of `FMError.Set`.
 
 If a native error is deliberately handled without creating an application
 error, clear it before later work using `Set Variable [ $r ; FMError.Clear ]`.
-Error 401 is also captured through `FMError.Set`; whether it becomes an
-application error in the response depends on the script's business context.
+Error 401 is also captured through `FMError.Set`, but no matching records can
+be an expected outcome. Do not create an application error with `Error.Make`
+or log solely because a find returned 401 when an empty found set is valid.
+Clear the captured native error before later work. Create an application error
+only when the requested behavior requires a match.
+
+### Common steps and likely errors
+
+Capture after each listed operation when its failure can change data, control
+flow, or the result promised to the caller. This table lists common codes, not
+an exhaustive mapping; consult the step catalog or Claris help for the specific
+step and its options.
+
+| Step or operation | Capture/check immediately after | Likely errors to consider |
+|---|---|---|
+| `Open Record/Request` before editing | `FMError.Set` immediately after; this is the preferred explicit lock check | 200 record access denied; 301 record is in use by another user |
+| First `Set Field` on the current record when it is not already open | `FMError.Set` immediately after; `Set Field` implicitly opens the record | 200–202 record/field access or privilege; 301 record is in use by another user |
+| Further `Set Field` steps on that successfully opened record | No repeated check solely for the same record lock. If field privileges, field-specific access, or another independent failure is relevant, call `FMError.Set` after each step | 201 field cannot be modified; 202 field access denied; other field-specific errors |
+| `Set Field` targeting a related record | `FMError.Set` immediately after each related-record update | 200–202 access or privilege; 301 related record is in use by another user |
+| `Commit Records/Requests` | `FMError.Set` after each commit | 301 lock; 306 or 512 concurrent modification; 500–507, 509–511, or 513 validation/value errors |
+| `Perform Find`, `Perform Quick Find` | `FMError.Set` immediately after, before another executable step | 400 empty find criteria; 401 no records match. If empty results are valid, do not call `Error.Make` just for 401; clear the native error and continue |
+| `Go to Layout`, record navigation, `Go to List of Records` | `FMError.Set` before relying on the destination or current record | 105 missing layout; 101 missing record; 401 no records match |
+| `Open Transaction`, `Commit Transaction` | `FMError.Set` after each transaction step, as well as after risky writes inside it | 307 transaction lock communication error; record conflicts such as 301, 306, or 512 |
+| Import/export, file, URL, or mail steps | `FMError.Set` immediately after each operation | Step-specific: 102 only for the legacy `Export Field Contents` file-clearing hack; 409/410 import/export order, 729 import failure, 800/802 file access, 1629–1631 URL, or 1501–1507 mail |
+| `Perform Script`, `Perform Script on Server` | Use `Response.Capture` immediately; do not use `FMError.Set` to inspect the child result | Check `Response.IsOK` and `Response.GetErrorCode`; the child error is in its response, not native error state |
+
+Use `Error.Make` only when the condition is an actual failure against the
+script's business contract. An expected outcome such as a valid empty found set
+needs neither an application error nor an error log. Avoid speculative capture
+and logging branches for outcomes that cannot affect the requested result.
 
 ## Application errors and logging
 
@@ -164,7 +198,7 @@ inside that script.
 
 ```text
 If [ not IsEmpty ( Error.Get ) ]
-  Perform Script on Server [ "SYS_LogError" ; Parameter: Error.Get ]
+Perform Script on Server [ "(94000) Creeer foutmelding" ; Parameter: Error.Get ; Wait for completion: Off ]
 End If
 Exit Script [ Response.Make ( $data ) ]
 ```
@@ -211,8 +245,8 @@ Never read `Get ( ScriptResult )` directly in a framework script.
 The [child script example](../../../filemaker/error-framework/examples/template-framework-child.xml)
 and [parent script example](../../../filemaker/error-framework/examples/template-framework-parent.xml)
 show the parent/child response flow as fmxmlsnippet files. Each example makes
-errors in its main flow and calls its logger once after the loop. Bind their
-script references to the target solution.
+errors in its main flow and calls its logger once after the loop. Their
+VanGenabeek logger reference is script ID `1330`; rebind it when porting.
 
 ## Response and trace contracts
 
@@ -253,7 +287,7 @@ Set Variable [ $payload ; Get ( ScriptParameter ) ]
 
 ### Business Logic Steps
 - **Never remove** existing business logic steps (e.g., `Commit Records/Requests`, `Set Field`, navigation steps) during framework migration.
-- Only wrap them with framework error handling (`FMError.Set` + `Error.Make`).
+- Add native-error capture only where a failure can affect the promised result, data, or control flow. Create an `Error.Make` application error only for an actual failure against the script's business contract; do not add speculative captures or logs for expected outcomes.
 
 ## References
 
@@ -265,3 +299,4 @@ Set Variable [ $payload ; Get ( ScriptParameter ) ]
 | Exit Script | step | [exit-script](https://help.claris.com/en/pro-help/content/exit-script.html) |
 | Get ( LastError ) | function | [get-lasterror](https://help.claris.com/en/pro-help/content/get-lasterror.html) |
 | Get ( ScriptResult ) | function | [get-scriptresult](https://help.claris.com/en/pro-help/content/get-scriptresult.html) |
+| FileMaker error codes | reference | [error-codes](https://help.claris.com/en/pro-help/content/error-codes.html) |

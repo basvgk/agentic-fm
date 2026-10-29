@@ -2,12 +2,11 @@
 
 ## Project error-framework override
 
-When `PROJECT.md` activates the project error framework, use this article only
-for its locking semantics, retry decisions, and transaction guidance. Do not
-use any direct `Get ( LastError )` examples below. Capture every relevant
-native error with `FMError.Set`, inspect its return value directly or use `FMError.GetCode`, and decide from the
-script's business context whether to create its own application error. The
-examples remain generic reference patterns for solutions without the framework.
+Use this article for locking semantics, retry decisions, and transaction
+guidance. The step-to-error table and immediate capture rules are centralized
+in [`error-framework.md`](error-framework.md); use that document for every
+script change when the project framework is active. This article does not
+define a separate error-capture pattern.
 
 **NOTE:** Items marked with **(step)** are script steps. Items marked with **(function)** are calculation functions used inside expressions.
 
@@ -40,93 +39,58 @@ The write lock is released when:
 | 301  | Record is in use by another user        | `Open Record/Request`, `Set Field` on a locked record                     |
 | 306  | Record modification ID does not match   | Record was modified by another process between open and commit            |
 | 307  | Transaction could not be locked (comms) | Communication error with host while acquiring a transaction lock          |
-| 512  | Record was already modified by another  | Validation-category error surfaced by concurrent modification of a record |
+| 512  | Record was already modified by another user | Concurrent modification of a record                                      |
 
-Error 301 is the classic locking error — another client holds the write lock. Error 306 is subtler: between opening and committing, another process modified and committed the same record, causing a modification ID mismatch. Error 307 can surface when using `Open Transaction` **(step)** over unreliable network connections. Error 512 is a validation-layer variant of the concurrent modification problem. All are silent when `Set Error Capture [ On ]` **(step)** is active and `Get ( LastError )` is not checked.
+Error 301 means another client holds the write lock. Error 306 means the
+record's modification ID changed between opening and committing. Error 307
+means a communication error prevented a transaction lock. Error 512 also
+indicates that another user modified the record.
 
 ## The Silent Failure Problem
 
-When `Set Error Capture [ On ]` suppresses dialogs and the script does not check `Get ( LastError )` after record-modifying steps, a locked record causes `Set Field` to fail silently. The script continues as though the write succeeded. The data is never written. This is particularly dangerous for financial transactions, inventory adjustments, and status changes that trigger downstream processes.
+When `Set Error Capture [ On ]` suppresses dialogs, a failed write may not
+show a native dialog. If the script continues without handling the failure,
+later steps can proceed as though the write succeeded. This is particularly
+dangerous for financial transactions, inventory adjustments, and status changes
+that trigger downstream processes. Capture placement is defined in
+`error-framework.md`.
 
-`Set Field` **(step)** implicitly opens the record if it is not already open. If another client holds the lock, `Set Field` fails with error 301. With error capture on, the failure is invisible. A related-table `Set Field` (`Set Field [ relatedTable::field ; value ]`) can also fail this way if the related record is locked.
+`Set Field` **(step)** implicitly opens the record if it is not already open.
+If another client holds the lock, the write can fail with error 301. A
+related-table `Set Field` (`Set Field [ relatedTable::field ; value ]`) can
+also fail this way if the related record is locked. Use the capture timing in
+`error-framework.md` for both cases.
+
+## Checking before a sequence of field changes
+
+When a script will modify the current record, prefer `Open Record/Request`
+**(step)** before the write sequence and check it immediately. If it succeeds,
+the record is open for editing. If the script does not explicitly open it, the
+first `Set Field` opens it implicitly and is the point to check for a lock
+failure.
+
+After that successful lock acquisition, additional `Set Field` steps on the
+same record do not need repeated checks solely to detect the same lock. Check
+every `Set Field` when field-level privileges, access rules, or another
+field-specific failure is relevant. A `Set Field` that modifies a related
+record needs its own check. Check `Commit Records/Requests` after the write
+sequence for commit, validation, and concurrent-modification failures.
 
 ## Record Modification Count
 
 If a `Set Field` succeeds and the record is subsequently committed, the record's internal modification counter increments. `Get ( RecordModificationCount )` **(function)** can be compared before and after a sequence of operations to determine whether the record was actually modified. This is useful as a secondary verification that a commit changed data.
 
-## Core Pattern: Check After Every Fallible Step
-
-This pattern uses a single-pass loop (see `single-pass-loop.md`) so that any failure exits cleanly to shared cleanup after `End Loop`.
-
-```
-Set Error Capture [ On ]
-#
-Loop
-    #
-    Open Record/Request
-    Set Variable [ $errData ; JSONSetElement ( "{}" ;
-        [ "lastError" ; Get ( LastError ) ; JSONNumber ] ;
-        [ "lastErrorDetail" ; Get ( LastErrorDetail ) ; JSONString ] ;
-        [ "lastErrorLocation" ; Get ( LastErrorLocation ) ; JSONString ]
-    ) ]
-    Exit Loop If [ JSONGetElement ( $errData ; "lastError" ) ≠ 0 ]
-    #
-    Set Field [ Table::field ; "value" ]
-    Set Variable [ $errData ; JSONSetElement ( "{}" ;
-        [ "lastError" ; Get ( LastError ) ; JSONNumber ] ;
-        [ "lastErrorDetail" ; Get ( LastErrorDetail ) ; JSONString ] ;
-        [ "lastErrorLocation" ; Get ( LastErrorLocation ) ; JSONString ]
-    ) ]
-    Exit Loop If [ JSONGetElement ( $errData ; "lastError" ) ≠ 0 ]
-    #
-    Commit Records/Requests [ With dialog: Off ]
-    Set Variable [ $errData ; JSONSetElement ( "{}" ;
-        [ "lastError" ; Get ( LastError ) ; JSONNumber ] ;
-        [ "lastErrorDetail" ; Get ( LastErrorDetail ) ; JSONString ] ;
-        [ "lastErrorLocation" ; Get ( LastErrorLocation ) ; JSONString ]
-    ) ]
-    Exit Loop If [ JSONGetElement ( $errData ; "lastError" ) ≠ 0 ]
-    #
-    Set Variable [ $isSuccess ; True ]
-    Exit Loop If [ True ]
-End Loop
-#
-If [ not $isSuccess ]
-    Revert Record/Request [ With dialog: Off ]
-    # Handle error — $errData contains the failure details
-End If
-```
-
-Error data must be captured in a **single `JSONSetElement` expression** immediately after the risky step — see `error-data-capture.md` for the rationale and the three-function timing constraint.
-
 ## Retry Logic for Transient Locks
 
-Error 301 is often transient — the other client releases the lock within moments. Automatic retry with backoff is appropriate for 301 but **not** for 306 (modification ID mismatch), which indicates a genuine data conflict requiring resolution logic.
+Error 301 may be transient, so a bounded retry can be appropriate when the
+failed operation is safe to repeat and no write has succeeded. A retry policy
+should account for contention and use a short backoff.
 
-```
-Set Variable [ $maxRetries ; 3 ]
-Set Variable [ $retryCount ; 0 ]
-Set Variable [ $isSuccess ; False ]
-#
-Loop
-    Exit Loop If [ $retryCount ≥ $maxRetries ]
-    #
-    Open Record/Request
-    Set Variable [ $err ; Get ( LastError ) ]
-    #
-    If [ $err = 0 ]
-        Set Variable [ $isSuccess ; True ]
-        Exit Loop If [ True ]
-    Else If [ $err = 301 ]
-        # Transient lock — wait and retry with exponential backoff
-        Set Variable [ $retryCount ; $retryCount + 1 ]
-        Pause/Resume Script [ Duration (seconds): .25 * ( 2 ^ $retryCount ) ]
-    Else
-        # Non-locking error — do not retry
-        Exit Loop If [ True ]
-    End If
-End Loop
-```
+Do not blindly retry 306 or 512. Re-read the current record and re-evaluate
+the intended change because the data changed after the script's earlier read.
+When a captured native error is deliberately handled without creating an
+application error, clear it through `FMError.Clear` before continuing, as
+specified in `error-framework.md`.
 
 ## Multi-Record Transactions
 
@@ -174,8 +138,6 @@ For full documentation, see the [Claris help for OnWindowTransaction](https://he
 | Open Transaction                | step     | `agent/docs/filemaker/script-steps/open-transaction.md`             | [open-transaction](https://help.claris.com/en/pro-help/content/open-transaction.html)                       |
 | Commit Transaction              | step     | `agent/docs/filemaker/script-steps/commit-transaction.md`           | [commit-transaction](https://help.claris.com/en/pro-help/content/commit-transaction.html)                   |
 | Pause/Resume Script             | step     | `agent/docs/filemaker/script-steps/pause-resume-script.md`          | [pause-resume-script](https://help.claris.com/en/pro-help/content/pause-resume-script.html)                 |
-| Get ( LastError )               | function | `agent/docs/filemaker/functions/get/get-lasterror.md`               | [get-lasterror](https://help.claris.com/en/pro-help/content/get-lasterror.html)                             |
-| Get ( LastErrorLocation )       | function | `agent/docs/filemaker/functions/get/get-lasterrorlocation.md`       | [get-lasterrorlocation](https://help.claris.com/en/pro-help/content/get-lasterrorlocation.html)             |
-| Get ( LastErrorDetail )         | function | `agent/docs/filemaker/functions/get/get-lasterrordetail.md`         | [get-lasterrordetail](https://help.claris.com/en/pro-help/content/get-lasterrordetail.html)                 |
+| FMError.Clear                   | custom function | `agent/docs/knowledge/error-framework.md`                            | —                                                                                                        |
 | Get ( RecordModificationCount ) | function | `agent/docs/filemaker/functions/get/get-recordmodificationcount.md` | [get-recordmodificationcount](https://help.claris.com/en/pro-help/content/get-recordmodificationcount.html) |
 | OnWindowTransaction             | trigger  | —                                                                   | [onwindowtransaction](https://help.claris.com/en/pro-help/content/onwindowtransaction.html)                 |

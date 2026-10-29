@@ -355,7 +355,7 @@ alleen in `environment`, niet nogmaals in `recordContext`.
 `environment` en `recordContext` worden vastgelegd op het moment dat `Error.Make` wordt aangeroepen, en
 beschrijven dus de execution context van de fout zelf — niet die van het latere logging-script.
 
-Loggen gebeurt door `$_error` ongewijzigd als parameter mee te geven aan het logging-script (zie sectie 13).
+Loggen gebeurt door het actuele error-object ongewijzigd via `Error.Get` als parameter mee te geven aan het logging-script (zie sectie 13).
 
 ---
 
@@ -571,6 +571,13 @@ hetzelfde script deze per ongeluk mee:
 Set Variable [ $r ; FMError.Clear ]
 ```
 
+Een vastgelegde native fout is niet automatisch een applicatiefout. Zo kan
+`Perform Find` fout 401 geven wanneer geen records voldoen. Als een lege found
+set een geldige uitkomst is, maak dan geen fout met `Error.Make` en log die
+uitkomst niet. Wis de vastgelegde native fout met `FMError.Clear` voordat het
+script verdergaat. Maak alleen een applicatiefout als de businessregel een
+match vereist.
+
 ---
 
 # 12. Child script
@@ -655,22 +662,24 @@ Set Variable [ $_child_data ;
 De complete fmxmlsnippet-voorbeelden staan naast deze specificatie:
 [child script](examples/template-framework-child.xml) en [parent script](examples/template-framework-parent.xml).
 De parent gebruikt de voorbeeldreferentie `Playground` (ID 920); pas die aan voor de doeloplossing.
-De loggerreferentie `(94000) Creeer foutmelding` heeft placeholder-ID 0 en moet daar worden gekoppeld.
+Voor de VanGenabeek-oplossing is de loggerreferentie `(94000) Creeer foutmelding`, script-ID 1330.
+Koppel bij gebruik in een andere oplossing de loggerreferentie opnieuw.
 
 ---
 
 # 13. Loggingregels
 
-Iedere scriptlaag logt zijn eigen error door `$_error` ongewijzigd als parameter mee te geven (`Error.Make`
-heeft het al log-ready gemaakt, sectie 6/8). Maak de fout op het punt waar deze ontstaat, maar roep de
+Iedere scriptlaag logt zijn eigen error door het actuele error-object via `Error.Get` ongewijzigd als
+parameter mee te geven (`Error.Make` heeft het al log-ready gemaakt, sectie 6/8). Maak de fout op het punt waar deze ontstaat, maar roep de
 logscript niet daar aan. Roep na de hoofdloop en eventuele cleanup, direct vóór de finale `Exit Script`,
 de logscript precies één keer aan wanneer deze scriptlaag een fout heeft:
 
 ```filemaker
-If [ not IsEmpty ( $_error ) ]
+If [ not IsEmpty ( Error.Get ) ]
 	Perform Script on Server [
-		"SYS_LogError" ;
-		Parameter: $_error
+		"(94000) Creeer foutmelding" ;
+		Parameter: Error.Get ;
+		Wait for completion: Off
 	]
 End If
 ```
@@ -759,8 +768,8 @@ End Loop
 # Cleanup here — mag $_error niet overschrijven
 
 # Log once for this script, after the loop and cleanup
-If [ not IsEmpty ( $_error ) ]
-	Perform Script on Server [ "SYS_LogError" ; Parameter: $_error ]
+If [ not IsEmpty ( Error.Get ) ]
+	Perform Script on Server [ "(94000) Creeer foutmelding" ; Parameter: Error.Get ; Wait for completion: Off ]
 End If
 
 Exit Script [ Response.Make ( $_data ) ]
@@ -788,7 +797,7 @@ Wanneer een script wordt gemaakt of aangepast:
 11. Wis `$_FMError` met `FMError.Clear` zodra een FileMaker-fout bewust genegeerd wordt (geen eigen fout
     tot gevolg heeft), zodat een latere `Error.Make`-aanroep 'm niet per ongeluk overneemt.
 12. Log maximaal één keer per script, na de hoofdloop en cleanup, als de eigen fout bestaat. Log niet direct na iedere `Error.Make`.
-13. Geef `$_error` ongewijzigd mee als parameter aan het logging-script.
+13. Geef `Error.Get` ongewijzigd mee als parameter aan het logging-script.
 14. Propagate geen geneste `cause`-objecten.
 15. Bouw een childparameter altijd met `Param.Make`, nooit handmatig met de keys `"payload"` of `"trace"`.
 16. Een parent maakt op basis van een child error zijn eigen fout.

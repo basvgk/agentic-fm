@@ -517,7 +517,7 @@
     <WaitForCompletion state="False"/>
     <DisableStepCollapsed state="False"/>
     <Calculation><![CDATA[Error.Get]]></Calculation>
-    <Script id="0" name="&lt;unknown&gt;"/>
+    <Script id="1330" name="(94000) Creeer foutmelding"/>
   </Step>
   <Step enable="True" id="70" name="End If">
     <DisableStepCollapsed state="False"/>

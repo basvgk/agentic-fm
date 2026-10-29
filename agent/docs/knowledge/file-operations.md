@@ -44,7 +44,7 @@ When encountering this pattern in existing scripts, treat it as intentional lega
 
 ### What to expect from the legacy pattern
 
-- **Error 102** is raised at runtime. This is expected — do not add error handling to suppress it, and do not interpret it as a failure.
+- **Error 102** is raised at runtime. This is expected and must not become an application error. In a project with an error framework, still capture it immediately after the step with `FMError.Set`, then clear the deliberately handled native error with `FMError.Clear` before later work. See `error-framework.md`.
 - The file at the path will be overwritten (emptied), not truly deleted.
 - `Create Data File` immediately after will succeed.
 
@@ -94,3 +94,15 @@ When `Show Custom Dialog` includes user-editable input fields, the `<InputFields
 - `UsePasswordCharacter="True"` masks input with asterisks (display only — does not encrypt the stored value).
 - Up to 3 `<InputField>` elements are supported.
 - Omitting `<InputFields>` entirely produces a buttons-only dialog — valid, but user input will not be captured.
+
+## References
+
+| Name | Type | Local doc | Claris help |
+|---|---|---|---|
+| Delete File | step | `agent/docs/filemaker/script-steps/delete-file.md` | [delete-file](https://help.claris.com/en/pro-help/content/delete-file.html) |
+| Get File Exists | step | `agent/docs/filemaker/script-steps/get-file-exists.md` | [get-file-exists](https://help.claris.com/en/pro-help/content/get-file-exists.html) |
+| Create Data File | step | `agent/docs/filemaker/script-steps/create-data-file.md` | [create-data-file](https://help.claris.com/en/pro-help/content/create-data-file.html) |
+| Export Field Contents | step | `agent/docs/filemaker/script-steps/export-field-contents.md` | [export-field-contents](https://help.claris.com/en/pro-help/content/export-field-contents.html) |
+| Show Custom Dialog | step | `agent/docs/filemaker/script-steps/show-custom-dialog.md` | [show-custom-dialog](https://help.claris.com/en/pro-help/content/show-custom-dialog.html) |
+| FMError.Set, FMError.Clear | custom functions | `agent/docs/knowledge/error-framework.md` | — |
+| FileMaker error codes | reference | — | [error-codes](https://help.claris.com/en/pro-help/content/error-codes.html) |

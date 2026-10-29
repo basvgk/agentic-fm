@@ -315,12 +315,12 @@ User Interface/
 
 - Use `Exit Script [ Result: ... ]` to return values, not global variables, wherever possible
 - Always `Commit Records/Requests` before navigating away from a record context if edits may have occurred
-- Error capture (`Set Error Capture [ On ]`) should be paired with explicit error checking immediately after the risky step
+- For projects without a declared error framework, pair `Set Error Capture [ On ]` with explicit error checking immediately after each relevant risky step. When `PROJECT.md` declares a framework, use its documented capture mechanism and timing instead.
 - Comment the expected script parameter format at the top of any script that accepts parameters
 
 ### Project Error Framework
 
-When `PROJECT.md` declares an error framework, its `error-framework.md` knowledge document supersedes generic error-capture patterns for every solution script. Do not bypass that framework with direct `Get ( LastError )`, `Get ( LastErrorDetail )`, `Get ( LastErrorLocation )`, or `Get ( ScriptResult )` calls.
+When `PROJECT.md` declares an error framework, read `agent/docs/knowledge/error-framework.md` before giving instructions or drafting any script modification. This is the minimum error-handling knowledge for every script change, independent of task keywords. The framework document supersedes generic capture patterns and defines which steps require an immediate check. Do not bypass it with direct `Get ( LastError )`, `Get ( LastErrorDetail )`, `Get ( LastErrorLocation )`, or `Get ( ScriptResult )` calls.
 
 Namespaced framework custom functions such as `FMError.Set`, `Error.Make`, `Trace.Init`, and `Response.Make` are a permitted exception to the TitleCamelCase custom-function naming convention. Use their documented side-effect and getter contracts; do not pass framework state variables as explicit parameters to a function that owns a getter.
 

@@ -17,7 +17,7 @@ FileMaker scripts accept exactly **one** parameter and return exactly **one** re
 
 ### `Get ( ScriptParameter )` **(function)**
 
-Returns the parameter passed to the currently executing script. It is available anywhere within the script — unlike `Get ( LastError )`, it does not reset between steps.
+Returns the parameter passed to the currently executing script. It is available anywhere within the script and remains fixed for the duration of that script call.
 
 The parameter is set by the calling step (`Perform Script`, `Perform Script on Server`, `New Window` with script, etc.) and is fixed for the duration of the script call. It cannot be changed mid-script.
 
@@ -80,7 +80,7 @@ A script that exits normally (falls off the end without an `Exit Script` step) r
 
 ### `Get ( ScriptResult )` **(function)**
 
-Returns the result from the most recently completed `Perform Script` **(step)** or `Perform Script on Server` **(step)** call. Like `Get ( LastError )`, this is cleared and replaced after every script call — including calls that return an empty result.
+Returns the result from the most recently completed `Perform Script` **(step)** or `Perform Script on Server` **(step)** call. It is cleared and replaced after every script call — including calls that return an empty result.
 
 **Capture it immediately after `Perform Script`:**
 

@@ -192,10 +192,17 @@ The developer always works in **human-readable (HR) script format**. The agent's
 
 **MANDATORY: Before writing ANY script or function:**
 
+**Error handling is a required baseline, not a keyword match.** Before giving
+instructions or drafting a change to create, edit, or refactor any script, read
+`agent/docs/knowledge/error-framework.md` when `PROJECT.md` declares an error
+framework. Do this for every script change, even when the requested change does
+not mention errors. This is the minimum error knowledge to load; then consult
+the manifest for additional topic-specific guidance. The framework document is
+the single source of truth for capture timing and native error handling.
+
 1. Read `agent/CONTEXT.json` for the task description and all reference IDs (when present)
 2. Read `agent/docs/CODING_CONVENTIONS.md` — all generated FileMaker code must follow these conventions
 3. Scan `agent/docs/knowledge/MANIFEST.md` for keyword matches against the current task — read and apply matching documents
-   - When `PROJECT.md` declares an error framework, always read its `error-framework.md` document for every script, independent of keyword matching.
 4. For scripts: grep the step catalog for each step type used (see **Step catalog** below)
 5. Substitute the specific IDs/names/values from CONTEXT.json
 

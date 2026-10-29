@@ -12,6 +12,16 @@
 - A zero-record found set based on `Perform Find` removes the previous sort order.
 - A `New Window` **(step)** will retain a copy of the same found set and sort order. The new window's found set is independent — constraining or extending in one window does not affect the other.
 
+## Empty finds and error 401
+
+`Perform Find` **(step)** can return error 401 when no records match, while
+leaving a valid empty found set. Treat that as a normal result when the
+business task allows zero matches. Under the project error framework, capture
+the native result immediately when it affects control flow, but do not create
+an application error with `Error.Make` or log solely because the set is empty.
+If a match is required, report an application error; if continuing after the
+expected 401, clear the captured native error before later work.
+
 ## Multi-user behavior
 
 The asymmetry between record creation and deletion in a multi-user environment is important to account for in scripts:
@@ -48,7 +58,7 @@ There are three common approaches, each with different trade-offs:
 
 A record loop collects field values into a `$variable` or field one record at a time.
 
-### 2. Summary field + GetSummary (no scripting required)
+### 2. Summary field + GetSummary (no scripting required) (preferred)
 
 If the table has a Summary field using the **List of** type, the `GetSummary ( summaryField ; breakField )` function returns the aggregated values. This evaluates without looping.
 
@@ -145,3 +155,5 @@ The snapshot link includes the record IDs as ranges within the `<Rows>` tag.
 | While                         | function | `agent/docs/filemaker/functions/logical/while.md`                          | [while](https://help.claris.com/en/pro-help/content/while.html)                                                 |
 | List                          | function | `agent/docs/filemaker/functions/aggregate/list.md`                         | [list](https://help.claris.com/en/pro-help/content/list.html)                                                   |
 | Get ( FoundCount )            | function | `agent/docs/filemaker/functions/get/get-foundcount.md`                     | [get-foundcount](https://help.claris.com/en/pro-help/content/get-foundcount.html)                               |
+| Error.Make | custom function | `agent/docs/knowledge/error-framework.md` | — |
+| FileMaker error 401 | reference | — | [error-codes](https://help.claris.com/en/pro-help/content/error-codes.html) |

@@ -208,6 +208,13 @@ All AI-generated FileMaker code (scripts and calculations) follows the conventio
 
 Each knowledge document captures what an experienced FileMaker developer knows intuitively but AI would otherwise miss. AI consults these documents before composing scripts, leading to higher-quality output that avoids common pitfalls.
 
+**Minimum error-handling knowledge for script changes:** When a project's
+`PROJECT.md` declares an error framework, AI must read
+`agent/docs/knowledge/error-framework.md` before giving instructions or
+drafting any script creation, edit, or refactor. This applies even when the
+request does not mention errors. It is the baseline; matching topic documents
+in the manifest add guidance but do not replace or override it.
+
 **Current topics:**
 
 | Document                    | Covers                                                                                                     |
@@ -215,7 +222,7 @@ Each knowledge document captures what an experienced FileMaker developer knows i
 | `found-sets.md`             | Found set attributes, actions on found sets, collecting field values, restoring found sets, snapshot links |
 | `single-pass-loop.md`       | Single-pass loop pattern for structured exit control                                                       |
 | `variables.md`              | Variable scoping, naming conventions, and lifetime considerations                                          |
-| `error-framework.md`        | Optional project-specific error, response, logging, and call-chain tracing framework                       |
+| `error-framework.md`        | Error capture timing, response, logging, and call-chain tracing; mandatory baseline when declared by `PROJECT.md` |
 | `script-parameters.md`      | Passing and parsing script parameters; JSON vs. positional patterns                                        |
 | `disambiguation.md`         | Commonly confused term pairs and non-negotiable structural rules                                           |
 | `dry-coding.md`             | DRY principle in FileMaker scripts — hoisting repeated values into variables                               |
@@ -230,7 +237,7 @@ Each knowledge document captures what an experienced FileMaker developer knows i
 | `script-ids.md`             | Script and object IDs are file-specific — not portable across FileMaker files                              |
 | `custom-menu-corruption.md` | Custom menu `<Unknown>` errors in Recover — configuration issue, not true corruption                       |
 
-A keyword-indexed manifest at `agent/docs/knowledge/MANIFEST.md` enables fast lookup. AI scans it for keyword matches against the current task and reads any matching documents before writing script steps.
+A keyword-indexed manifest at `agent/docs/knowledge/MANIFEST.md` enables fast lookup for topic-specific guidance. It supplements the mandatory error-framework reading described above; error handling is not loaded only when a task happens to match a keyword.
 
 **Contributing knowledge:** This is one of the most impactful ways to contribute. See `agent/docs/knowledge/CONTRIBUTING.md` for the article format, review criteria, and a list of 15 good topic ideas.
 
